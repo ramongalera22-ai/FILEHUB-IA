@@ -1,0 +1,18 @@
+{
+  "short_name": "FILEHUB",
+  "name": "FILEHUB - Gestión Inteligente con IA",
+  "description": "Tu centro de control financiero, laboral y personal con integración de IA.",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/ios-filled/512/4f46e5/lightning-bolt.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4f46e5",
+  "background_color": "#f8fafc",
+  "orientation": "portrait"
+}
