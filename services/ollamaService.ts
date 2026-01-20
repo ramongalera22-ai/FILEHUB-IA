@@ -79,16 +79,32 @@ export const chatWithOllama = async (
 
         let response;
         if (!isCloud) {
-            // NATIVE OLLAMA
-            response = await fetch(`${config.baseUrl}/api/generate`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    model: config.model,
-                    prompt: prompt,
-                    stream: false
-                })
-            });
+            // Check if it's Open WebUI or Native Ollama
+            const isOpenWebUI = config.baseUrl.includes(':3000') || config.baseUrl.includes(':8080');
+
+            if (isOpenWebUI) {
+                // OpenAI format for Open WebUI
+                response = await fetch(`${config.baseUrl}/api/v1/chat/completions`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({
+                        model: config.model || 'gemma2:2b',
+                        messages: [{ role: 'user', content: prompt }],
+                        stream: false
+                    })
+                });
+            } else {
+                // Native Ollama
+                response = await fetch(`${config.baseUrl}/api/generate`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({
+                        model: config.model,
+                        prompt: prompt,
+                        stream: false
+                    })
+                });
+            }
         } else {
             // CLOUD / ANTHROPIC PROTOCOL
             // Uses /v1/messages
@@ -113,10 +129,13 @@ export const chatWithOllama = async (
         const data = await response.json();
 
         if (!isCloud) {
-            return (data as OllamaResponse).response;
+            // Handle both Native Ollama and Open WebUI (OpenAI compatible) responses
+            if (data.choices && data.choices[0] && data.choices[0].message) {
+                return data.choices[0].message.content;
+            }
+            return (data as OllamaResponse).response || "";
         } else {
             // Handle Anthropic/Cloud Response format
-            // content: [{ type: 'text', text: '...' }]
             if (data.content && Array.isArray(data.content)) {
                 return data.content[0]?.text || "";
             }
