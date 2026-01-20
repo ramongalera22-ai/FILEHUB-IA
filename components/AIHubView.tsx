@@ -360,6 +360,30 @@ const AIHubView: React.FC<AIHubViewProps> = ({
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center p-12 space-y-8">
+                {/* Botones de Modo - Siempre Visibles */}
+                <div className="w-full max-w-4xl mb-4">
+                  <div className="flex bg-white dark:bg-slate-900 p-2 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-sm overflow-x-auto no-scrollbar gap-2 justify-center">
+                    <button
+                      onClick={() => setMode('cloud')}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${mode === 'cloud' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 dark:text-slate-500 hover:text-indigo-600'}`}
+                    >
+                      <Cloud size={14} /> Cloud
+                    </button>
+                    <button
+                      onClick={() => setMode('local')}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${mode === 'local' ? 'bg-cyan-500 text-white shadow-xl' : 'text-slate-400 dark:text-slate-500 hover:text-cyan-500'}`}
+                    >
+                      <Server size={14} /> Ollama
+                    </button>
+                    <button
+                      onClick={() => setMode('anything')}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${mode === 'anything' ? 'bg-purple-600 text-white shadow-xl' : 'text-slate-400 dark:text-slate-500 hover:text-purple-600'}`}
+                    >
+                      <Sparkles size={14} /> AnythingLLM
+                    </button>
+                  </div>
+                </div>
+
                 <div className="p-12 rounded-[3rem] bg-gradient-to-br from-emerald-50 to-cyan-50 dark:from-emerald-900/20 dark:to-cyan-900/20">
                   <Layout size={80} className="text-emerald-600 dark:text-emerald-400" />
                 </div>
