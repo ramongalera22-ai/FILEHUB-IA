@@ -204,9 +204,15 @@ const AIHubView: React.FC<AIHubViewProps> = ({
 
       setMessages(prev => [...prev, { role: 'ai', content: responseText, engine: mode, timestamp: Date.now() }]);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'error', content: `Error conectando con ${mode}. Verifique la configuración.`, engine: mode }]);
+      let errorMsg = `Error conectando con ${mode}. Verifique la configuración.`;
+
+      if (window.location.protocol === 'https:' && (ollamaConfig.baseUrl.startsWith('http:') || (openWebUIConfig?.baseUrl.startsWith('http:')))) {
+        errorMsg = "⚠️ BLOQUEO DE SEGURIDAD: Tu navegador bloquea la conexión HTTP desde HTTPS. Usa http://localhost:3000 o permite 'Contenido No Seguro' en los ajustes del sitio.";
+      }
+
+      setMessages(prev => [...prev, { role: 'error', content: errorMsg, engine: mode, timestamp: Date.now() }]);
     } finally {
       setIsProcessing(false);
     }
