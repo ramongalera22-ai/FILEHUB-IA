@@ -136,7 +136,7 @@ const App: React.FC = () => {
   const [openWebUIConfig, setOpenWebUIConfig] = useState<OpenWebUIConfig>(() => {
     const savedConfig = localStorage.getItem('filehub_openwebui_config');
     return savedConfig ? JSON.parse(savedConfig) : {
-      baseUrl: 'http://localhost:3000',
+      baseUrl: import.meta.env.VITE_OPEN_WEBUI_URL || 'http://localhost:3000',
       isActive: true
     };
   });
