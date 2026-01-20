@@ -135,10 +135,18 @@ const App: React.FC = () => {
 
   const [openWebUIConfig, setOpenWebUIConfig] = useState<OpenWebUIConfig>(() => {
     const savedConfig = localStorage.getItem('filehub_openwebui_config');
-    return savedConfig ? JSON.parse(savedConfig) : {
+    let config = savedConfig ? JSON.parse(savedConfig) : {
       baseUrl: import.meta.env.VITE_OPEN_WEBUI_URL || 'http://localhost:3000',
       isActive: true
     };
+
+    // AUTO-FIX: Si estamos en HTTPS y la config guardada es HTTP, forzar la URL segura del entorno
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && config.baseUrl.startsWith('http:') && import.meta.env.VITE_OPEN_WEBUI_URL?.startsWith('https:')) {
+      console.log("🔒 Auto-switching OpenWebUI to Secure URL");
+      config.baseUrl = import.meta.env.VITE_OPEN_WEBUI_URL;
+    }
+
+    return config;
   });
 
   const [localLlmConfig, setLocalLlmConfig] = useState<LocalLlmConfig>(() => {
