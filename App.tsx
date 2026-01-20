@@ -140,10 +140,15 @@ const App: React.FC = () => {
       isActive: true
     };
 
-    // AUTO-FIX: Si estamos en HTTPS y la config guardada es HTTP, forzar la URL segura del entorno
-    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && config.baseUrl.startsWith('http:') && import.meta.env.VITE_OPEN_WEBUI_URL?.startsWith('https:')) {
-      console.log("🔒 Auto-switching OpenWebUI to Secure URL");
-      config.baseUrl = import.meta.env.VITE_OPEN_WEBUI_URL;
+    // AUTO-FIX AGRESIVO: Si tenemos URL de Cloudflare (HTTPS), USARLA SIEMPRE. Ignorar localStorage si es necesario.
+    const envUrl = import.meta.env.VITE_OPEN_WEBUI_URL;
+    if (envUrl && envUrl.includes('trycloudflare')) {
+      console.log("🔒 Enforcing Cloudflare Secure Tunnel URL");
+      config.baseUrl = envUrl;
+    }
+    // Fallback: Si estamos en HTTPS y la config guardada es HTTP antigua
+    else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && config.baseUrl.startsWith('http:') && envUrl?.startsWith('https:')) {
+      config.baseUrl = envUrl;
     }
 
     return config;
