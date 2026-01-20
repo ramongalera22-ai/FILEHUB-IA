@@ -1,54 +1,52 @@
-import { OllamaConfig } from '../types';
+export interface OllamaConfig {
+    baseUrl: string;
+    model: string;
+    isActive: boolean;
+    apiKey?: string;
+}
 
 export interface OllamaResponse {
     model: string;
     created_at: string;
     response: string;
     done: boolean;
+    context?: number[];
+    total_duration?: number;
+    load_duration?: number;
+    prompt_eval_count?: number;
+    eval_count?: number;
+    eval_duration?: number;
 }
 
 export const checkOllamaStatus = async (config: OllamaConfig): Promise<boolean> => {
     try {
-        const isCloud = config.baseUrl.includes('ollama.com') || config.baseUrl.includes('anthropic');
+        // Intentamos conectar con timeout de 3 segundos
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+        const isOpenWebUI = config.baseUrl.includes(':3000') ||
+            config.baseUrl.includes(':8080') ||
+            config.baseUrl.includes('trycloudflare') ||
+            config.baseUrl.includes('open-webui');
+
+        let url = isOpenWebUI ? config.baseUrl : `${config.baseUrl}/api/tags`;
+        // OpenWebUI health check often just root or specific health endpoint
+        if (isOpenWebUI) url = config.baseUrl;
+
         const headers: any = {};
+        if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
 
-        if (config.apiKey) {
-            headers['Authorization'] = `Bearer ${config.apiKey}`;
-            // For Cloud specific headers if needed
-            if (isCloud) {
-                headers['x-api-key'] = config.apiKey;
-                delete headers['Authorization']; // Swap to x-api-key if strictly Anthropic
-            }
-        }
+        const response = await fetch(url, {
+            method: 'GET',
+            headers,
+            signal: controller.signal,
+            mode: 'cors'
+        });
 
-        // Native Ollama Check
-        if (!isCloud) {
-            const response = await fetch(`${config.baseUrl}/api/tags`, { headers });
-            return response.ok;
-        }
-
-        // Cloud/Anthropic Check (Simulated via models list if available, or just heuristic)
-        // Since /v1/messages is POST only usually, we check /v1/models or just assume OK if pingable
-        try {
-            // Try a lightweight request or just a HEAD/GET to root if API doesn't support tags
-            // Standard OpenAI/Anthropic often have /v1/models
-            const response = await fetch(`${config.baseUrl}/v1/models`, {
-                headers: { ...headers, 'x-api-key': config.apiKey }
-            });
-            if (response.ok) return true;
-
-            // Fallback: If 401/403, it means we connected but auth failed (so it is "online" but auth error)
-            // If 404, might be wrong endpoint.
-            if (response.status === 401 || response.status === 403) return true;
-
-            return false;
-        } catch (e) {
-            // Fallback for strict connection check
-            return false;
-        }
-
+        clearTimeout(timeoutId);
+        return response.ok;
     } catch (error) {
-        console.warn("Ollama connection failed", error);
+        //   console.error("Error checking Ollama status:", error);
         return false;
     }
 };
@@ -58,20 +56,23 @@ export const chatWithOllama = async (
     config: OllamaConfig,
     systemContext?: any
 ): Promise<string> => {
-    try {
-        const isCloud = config.baseUrl.includes('ollama.com') || config.baseUrl.includes('anthropic');
-        const headers: any = { 'Content-Type': 'application/json' };
+    if (!config.isActive) throw new Error("Ollama node is inactive");
 
-        if (config.apiKey) {
+    // Detectar si usamos la API de Cloud (Anthropic/Gemini Proxy) o Local/OpenWebUI
+    const isCloud = config.baseUrl.includes('googleapis.com') || config.baseUrl.includes('anthropic.com');
+
+    try {
+        const headers: any = {
+            'Content-Type': 'application/json',
+        };
+
+        if (isCloud) {
+            headers['x-api-key'] = config.apiKey;
+            headers['anthropic-version'] = '2023-06-01';
+        } else if (config.apiKey) {
             headers['Authorization'] = `Bearer ${config.apiKey}`;
-            if (isCloud) {
-                headers['x-api-key'] = config.apiKey;
-                headers['anthropic-version'] = '2023-06-01'; // Standard header likely required
-                delete headers['Authorization'];
-            }
         }
 
-        // Prepare prompt with context if available
         let prompt = message;
         if (systemContext) {
             prompt = `CONTEXTO DEL SISTEMA:\n${JSON.stringify(systemContext)}\n\nUSUARIO: ${message}\n\nASISTENTE:`;
@@ -79,22 +80,28 @@ export const chatWithOllama = async (
 
         let response;
         if (!isCloud) {
-            // Check if it's Open WebUI or Native Ollama
-            const isOpenWebUI = config.baseUrl.includes(':3000') || config.baseUrl.includes(':8080');
+            // DETECCIÓN INTELIGENTE DE OPEN WEBUI / CLOUDFLARE
+            // Si es puerto 3000, 8080 o usa un túnel de Cloudflare, asumimos que es OpenWebUI
+            const isOpenWebUI = config.baseUrl.includes(':3000') ||
+                config.baseUrl.includes(':8080') ||
+                config.baseUrl.includes('trycloudflare.com') ||
+                config.baseUrl.includes('open-webui'); // Keyword check
 
             if (isOpenWebUI) {
-                // OpenAI format for Open WebUI
+                // OPEN WEBUI usa formatos compatibles con OpenAI
+                console.log("Routing via OpenWebUI/OpenAI API (Cloudflare/Local)...");
                 response = await fetch(`${config.baseUrl}/api/v1/chat/completions`, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify({
-                        model: config.model || 'gemma2:2b',
+                        model: config.model || 'gemma2:2b', // Model por defecto si falla
                         messages: [{ role: 'user', content: prompt }],
                         stream: false
                     })
                 });
             } else {
-                // Native Ollama
+                // OLLAMA NATIVO (Puerto 11434 por defecto)
+                console.log("Routing via Native Ollama API...");
                 response = await fetch(`${config.baseUrl}/api/generate`, {
                     method: 'POST',
                     headers,
@@ -129,7 +136,7 @@ export const chatWithOllama = async (
         const data = await response.json();
 
         if (!isCloud) {
-            // Handle both Native Ollama and Open WebUI (OpenAI compatible) responses
+            // Manejar respuestas tanto de OpenWebUI (OpenAI style) como de Ollama nativo
             if (data.choices && data.choices[0] && data.choices[0].message) {
                 return data.choices[0].message.content;
             }
@@ -143,7 +150,7 @@ export const chatWithOllama = async (
         }
 
     } catch (error) {
-        console.error("Error asking AI:", error);
+        console.error("Ollama Service Error:", error);
         throw error;
     }
 };
