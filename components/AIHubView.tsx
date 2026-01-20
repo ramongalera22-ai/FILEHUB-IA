@@ -206,11 +206,11 @@ const AIHubView: React.FC<AIHubViewProps> = ({
 
     } catch (error: any) {
       console.error(error);
-      let errorMsg = `Error conectando con ${mode}. Verifique la configuración.`;
+      const isMixedContent = window.location.protocol === 'https:' && (ollamaConfig.baseUrl.startsWith('http:') || openWebUIConfig?.baseUrl.startsWith('http:'));
 
-      if (window.location.protocol === 'https:' && (ollamaConfig.baseUrl.startsWith('http:') || (openWebUIConfig?.baseUrl.startsWith('http:')))) {
-        errorMsg = "⚠️ BLOQUEO DE SEGURIDAD: Tu navegador bloquea la conexión HTTP desde HTTPS. Usa http://localhost:3000 o permite 'Contenido No Seguro' en los ajustes del sitio.";
-      }
+      let errorMsg = isMixedContent
+        ? "🔒 BLOQUEO DE SEGURIDAD NATIVO: Haz clic en el icono de AJUSTES (barra de URL) -> Configuración del sitio -> 'Contenido no seguro' -> CAMBIAR A 'PERMITIR'. Esto activará tu IA local permanentemente."
+        : `Error conectando con ${mode}. Verifique que el servidor en su Mac esté encendido y Tailscale activo.`;
 
       setMessages(prev => [...prev, { role: 'error', content: errorMsg, engine: mode, timestamp: Date.now() }]);
     } finally {
@@ -379,7 +379,7 @@ const AIHubView: React.FC<AIHubViewProps> = ({
               </div>
 
               <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Servidor Local</label>
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Ollama URL (Cyan)</label>
                 <div className="relative">
                   <Link className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
                   <input
@@ -390,11 +390,25 @@ const AIHubView: React.FC<AIHubViewProps> = ({
                 </div>
               </div>
 
+              {openWebUIConfig && onUpdateOpenWebUIConfig && (
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Open WebUI URL (Green)</label>
+                  <div className="relative">
+                    <Link className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                    <input
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-10 py-3 text-xs font-bold text-slate-700 dark:text-white focus:ring-4 focus:ring-emerald-500/5 focus:border-emerald-500 outline-none transition-all"
+                      value={openWebUIConfig.baseUrl}
+                      onChange={e => onUpdateOpenWebUIConfig({ ...openWebUIConfig, baseUrl: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="p-6 bg-indigo-50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
                 <div className="flex items-start gap-4">
                   <Sparkles size={18} className="text-indigo-600 mt-1" />
                   <p className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 leading-relaxed">
-                    Toda la inteligencia está optimizada para analizar tus archivos sin salir de tu red.
+                    Usa la URL de Cloudflare (HTTPS) en el cuadro verde para chatear sin errores de seguridad.
                   </p>
                 </div>
               </div>
