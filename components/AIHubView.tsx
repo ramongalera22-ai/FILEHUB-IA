@@ -57,7 +57,7 @@ const AIHubView: React.FC<AIHubViewProps> = ({
   onUpdateOpenWebUIConfig,
   globalContext
 }) => {
-  const [mode, setMode] = useState<'cloud' | 'local' | 'notebook' | 'anything' | 'openwebui' | 'local_llm'>('anything');
+  const [mode, setMode] = useState<'cloud' | 'local' | 'notebook' | 'anything' | 'openwebui' | 'local_llm'>('local');
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
