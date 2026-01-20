@@ -1,11 +1,17 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { Expense, Project, Task, CalendarEvent, ShoppingItem, Goal, Presentation, Slide, SharedExpense, SharedDebt, Idea, Meal, AIAnalysisResult } from "../types";
+import { Expense, Project, Task, CalendarEvent, ShoppingItem, Goal, Presentation, Slide, SharedExpense, SharedDebt, Idea, Meal, DayPlan, Trip, AIAnalysisResult } from "../types";
 
 /**
  * Crea una nueva instancia de GoogleGenAI asegurando que se usa la API KEY del entorno.
  */
-export const getAIInstance = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+export const getAIInstance = () => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn('⚠️ Gemini API Key not detected. AI features may not work.');
+  }
+  return new GoogleGenAI({ apiKey: apiKey || '' });
+};
 
 // Funciones de utilidad para audio PCM
 export function encodePCM(bytes: Uint8Array) {
@@ -56,7 +62,8 @@ export const analyzeFinancialDocument = async (base64Data: string, mimeType: str
     contents: {
       parts: [
         { inlineData: { mimeType, data: base64Data } },
-        { text: `Analiza este documento financiero. Extrae todas las transacciones y clasifícalas.
+        {
+          text: `Analiza este documento financiero. Extrae todas las transacciones y clasifícalas.
         Debes devolver un JSON con esta estructura exacta:
         {
           "transactions": [
@@ -120,8 +127,8 @@ export const processUniversalDocument = async (base64Data: string, mimeType: str
 // Updated chatWithGemini to properly extract search grounding URLs from groundingMetadata
 // Updated to support file attachments (images/PDFs) and specific models
 export const chatWithGemini = async (
-  message: string, 
-  context: any, 
+  message: string,
+  context: any,
   options: { useThinking?: boolean, useSearch?: boolean, useLite?: boolean, attachment?: { mimeType: string, data: string } } = {}
 ) => {
   const ai = getAIInstance();
@@ -129,7 +136,7 @@ export const chatWithGemini = async (
   // gemini pro (thinking): 'gemini-3-pro-preview'
   // basic text: 'gemini-3-flash-preview'
   const model = options.useLite ? 'gemini-flash-lite-latest' : (options.useThinking ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview');
-  
+
   const config: any = {};
   if (options.useThinking && model === 'gemini-3-pro-preview') {
     config.thinkingConfig = { thinkingBudget: 32768 };
@@ -139,7 +146,7 @@ export const chatWithGemini = async (
   }
 
   const parts: any[] = [];
-  
+
   if (options.attachment) {
     parts.push({ inlineData: { mimeType: options.attachment.mimeType, data: options.attachment.data } });
   }
@@ -151,7 +158,7 @@ export const chatWithGemini = async (
     contents: [{ role: 'user', parts: parts }],
     config: config,
   });
-  
+
   const urls = response.candidates?.[0]?.groundingMetadata?.groundingChunks
     ?.filter((chunk: any) => chunk.web)
     ?.map((chunk: any) => chunk.web.uri) || [];
@@ -253,28 +260,45 @@ export const analyzeGeneralFile = async (base64Data: string, mimeType: string, f
 
 export const analyzeFileDeeply = async (base64Data: string, mimeType: string, fileName: string): Promise<AIAnalysisResult> => {
   const ai = getAIInstance();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: {
-      parts: [
-        { inlineData: { mimeType, data: base64Data } },
-        { text: `Analiza profundamente este archivo (${fileName}).
-        
-        Devuelve un objeto JSON con la siguiente estructura:
-        {
-          "summary": "Resumen ejecutivo conciso del contenido (máx 3 frases).",
-          "keyPoints": ["Punto clave 1", "Punto clave 2", ...],
-          "suggestedActions": ["Acción sugerida 1 (ej: Pagar factura, Responder email, Archivar)", "Acción 2", ...],
-          "category": "Categoría sugerida (Finanzas, Legal, Personal, Trabajo, Salud)"
-        }
-        
-        Sé directo y accionable.` }
-      ]
-    },
-    config: { responseMimeType: "application/json" }
-  });
-  
-  return JSON.parse(response.text);
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: {
+        parts: [
+          { inlineData: { mimeType, data: base64Data } },
+          {
+            text: `Analiza profundamente este archivo (${fileName}).
+          
+          Devuelve un objeto JSON con la siguiente estructura:
+          {
+            "summary": "Resumen ejecutivo conciso del contenido (máx 3 frases).",
+            "keyPoints": ["Punto clave 1", "Punto clave 2", ...],
+            "suggestedActions": ["Acción sugerida 1 (ej: Pagar factura, Responder email, Archivar)", "Acción 2", ...],
+            "category": "Categoría sugerida (Finanzas, Legal, Personal, Trabajo, Salud)"
+          }
+          
+          Sé directo y accionable.` }
+        ]
+      },
+      config: { responseMimeType: "application/json" }
+    });
+
+    return JSON.parse(response.text);
+  } catch (error: any) {
+    console.error("Critical AI Analysis Error for", fileName, ":", error);
+
+    // Catch unsupported MIME type (common for Office docs like PPTX in inlineData)
+    if (error.message?.includes("Unsupported MIME type") || error.message?.includes("400")) {
+      return {
+        summary: `El formato de este archivo (${fileName.split('.').pop()?.toUpperCase()}) no es compatible directamente con el análisis profundo.`,
+        keyPoints: ["El sistema IA requiere que los archivos de Office se conviertan a PDF para un análisis completo de su contenido interno."],
+        suggestedActions: ["Convertir este archivo a PDF y volver a subirlo para análisis completo.", "Usar el Chat con IA para preguntas rápidas."],
+        category: "Doc. No Soportado"
+      };
+    }
+
+    throw new Error(error.message || "Fallo en el servicio de IA");
+  }
 };
 
 export const getFinancialOptimization = async (expenses: Expense[]) => {
@@ -348,22 +372,23 @@ export const extractTrainingPlanFromPDF = async (base64Data: string): Promise<an
   const ai = getAIInstance();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: { 
+    contents: {
       parts: [
-        { inlineData: { mimeType: 'application/pdf', data: base64Data } }, 
-        { text: "Extrae el plan de entrenamiento de este documento. Devuelve un JSON ARRAY de objetos con este formato exacto: { id: string, title: string (nombre del entreno), date: string (YYYY-MM-DD), type: 'cardio'|'strength'|'flexibility'|'sport', duration: number (minutos), intensity: 'low'|'medium'|'high' }. Si no hay fecha explicita, infiere las próximas fechas." }
-      ] 
+        { inlineData: { mimeType: 'application/pdf', data: base64Data } },
+        { text: "Extrae el plan de entrenamiento de este documento. Devuelve un JSON ARRAY de objetos con este formato exacto: { id: string, title: string (nombre del entreno), date: string (YYYY-MM-DD), type: 'cardio'|'strength'|'flexibility'|'sport', duration: number (minutos), intensity: 'low'|'medium'|'high', notes: string (lista detallada de ejercicios, series y repeticiones) }. Si no hay fecha explicita, infiere las próximas fechas empezando por mañana." }
+      ]
     },
     config: { responseMimeType: "application/json" }
   });
   return JSON.parse(response.text);
 };
 
-export const generateTrainingPlan = async (goal: string): Promise<any[]> => {
+export const generateTrainingPlan = async (goal: string, context?: string): Promise<any[]> => {
   const ai = getAIInstance();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Genera un plan de entrenamiento semanal para el objetivo: "${goal}".
+    ${context ? `Ten en cuenta este contexto/disponibilidad: ${context}` : ''}
     Devuelve un JSON ARRAY de objetos con este formato: { id: string, title: string, date: string (empieza mañana), type: 'cardio'|'strength'|'flexibility'|'sport', duration: number, intensity: 'low'|'medium'|'high', notes: string }.`,
     config: { responseMimeType: "application/json" }
   });
@@ -404,7 +429,7 @@ export const generateDailyBriefing = async (data: any, type: 'morning' | 'night'
   const prompt = type === 'morning'
     ? `Genera un briefing matutino motivador y estratégico para hoy basado en: ${JSON.stringify(data)}.`
     : `Genera un resumen nocturno reflexivo y preparativo para mañana basado en: ${JSON.stringify(data)}.`;
-  
+
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
@@ -419,7 +444,8 @@ export const extractWorkItemsFromDoc = async (base64Data: string, mimeType: stri
     contents: {
       parts: [
         { inlineData: { mimeType, data: base64Data } },
-        { text: `Analiza exhaustivamente este documento profesional. 
+        {
+          text: `Analiza exhaustivamente este documento profesional. 
         Tu objetivo es extraer elementos accionables y relevantes para un sistema de gestión.
         
         Devuelve UNICAMENTE un objeto JSON con las siguientes claves:
@@ -550,7 +576,7 @@ export const getIdeaInspiration = async (idea: any, allIdeas: any[]) => {
   const ai = getAIInstance();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Expande esta idea: "${idea.title}". Contexto de otras ideas: ${JSON.stringify(allIdeas.map(i=>i.title))}. Dame sugerencias, viabilidad y siguientes pasos.`,
+    contents: `Expande esta idea: "${idea.title}". Contexto de otras ideas: ${JSON.stringify(allIdeas.map(i => i.title))}. Dame sugerencias, viabilidad y siguientes pasos.`,
   });
   return response.text;
 };
@@ -568,7 +594,7 @@ export const getSharedFinancesInsight = async (expenses: any[], debts: any[]) =>
 export const smartScheduleTasks = async (tasks: Task[], existingEvents: CalendarEvent[]): Promise<CalendarEvent[]> => {
   const ai = getAIInstance();
   const today = new Date().toISOString();
-  
+
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Eres un asistente de planificación inteligente.
@@ -588,20 +614,36 @@ export const smartScheduleTasks = async (tasks: Task[], existingEvents: Calendar
     `,
     config: { responseMimeType: "application/json" }
   });
-  
+
   return JSON.parse(response.text);
 };
 
-export const analyzeNutritionScreenshot = async (base64Data: string, mimeType: string): Promise<Meal[]> => {
+export const analyzeNutritionDocument = async (base64Data: string, mimeType: string): Promise<DayPlan[]> => {
   const ai = getAIInstance();
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: {
       parts: [
         { inlineData: { mimeType, data: base64Data } },
-        { text: "Analiza esta imagen/captura de un plan nutricional o menú. Extrae las comidas y devuélvelas en un formato JSON array de objetos Meal: [{ type: 'breakfast'|'lunch'|'dinner'|'snack', title: string, ingredients: string[] }]." }
+        { text: "Analiza este documento/imagen de un plan nutricional o menú semanal. Extrae la planificación completa para toda la semana. Devuelve un JSON array de DayPlan: [{ day: string, meals: [{ type: 'breakfast'|'lunch'|'dinner'|'snack', title: string, ingredients: string[] }] }]. Asegúrate de mapear bien los días de la semana." }
       ]
     },
+    config: { responseMimeType: "application/json" }
+  });
+  return JSON.parse(response.text);
+};
+
+export const generateNutritionPlan = async (inventory: string, goals: string, dietType: string = 'balanced'): Promise<DayPlan[]> => {
+  const ai = getAIInstance();
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-pro-preview',
+    contents: `Actúa como un nutricionista experto. Genera un plan de alimentación seminal (7 días) basado en:
+    - Inventario actual: ${inventory}
+    - Objetivos: ${goals}
+    - Preferencia dieta: ${dietType}
+    
+    Sé creativo, usa el inventario prioritariamente pero sugiere compras mínimas si es necesario.
+    Devuelve un JSON array de DayPlan: [{ day: string, meals: [{ type: 'breakfast'|'lunch'|'dinner'|'snack', title: string, ingredients: string[] }] }].` ,
     config: { responseMimeType: "application/json" }
   });
   return JSON.parse(response.text);
@@ -620,9 +662,139 @@ export const analyzeCalendarIntelligence = async (events: any[]) => {
 };
 
 export const getSmartCalendarSuggestions = async (context: any) => {
-   return []; 
+  return [];
 };
 
 export const restructureSchedule = async (events: any[]) => {
-   return events;
+  return events;
 };
+
+/**
+ * Generate a personalized meal plan based on available inventory and goals
+ */
+export const generateMenuFromInventory = async (goal: string, inventory: string): Promise<Meal[]> => {
+  const ai = getAIInstance();
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Genera un plan de comidas diario (desayuno, comida, cena, snack) basado en:
+    Objetivo: ${goal}
+    Inventario disponible: ${inventory}
+    
+    Optimiza para usar lo que hay disponible.
+    Devuelve JSON Array de objetos { type: 'breakfast'|'lunch'|'dinner'|'snack', title: string, ingredients: string[] }.`,
+    config: { responseMimeType: "application/json" }
+  });
+  return JSON.parse(response.text);
+};
+
+/**
+ * Generate a visual roadmap/visualization from a goal description or document
+ */
+export const generateGoalVisualization = async (goalDescription: string, base64Data?: string, mimeType?: string): Promise<any> => {
+  const ai = getAIInstance();
+  const parts: any[] = [];
+  if (base64Data && mimeType) {
+    parts.push({ inlineData: { mimeType, data: base64Data } });
+  }
+  parts.push({
+    text: `Analiza este objetivo/documento: "${goalDescription}". 
+  Genera una visualización estructurada del camino para lograrlo.
+  Devuelve JSON: { 
+    nodes: [{ id: string, label: string, date?: string, status: 'pending'|'milestone'|'final' }],
+    edges: [{ source: string, target: string, label?: string }] 
+  }.` });
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: { parts },
+    config: { responseMimeType: "application/json" }
+  });
+  return JSON.parse(response.text);
+};
+
+/**
+ * Generate a detailed travel itinerary with budget transport, dining, and local tips
+ */
+export const generateDetailedItinerary = async (destination: string, dates: string, preferences: string, base64Data?: string, mimeType?: string): Promise<string> => {
+  const ai = getAIInstance();
+  const parts: any[] = [];
+  if (base64Data && mimeType) {
+    parts.push({ inlineData: { mimeType, data: base64Data } });
+  }
+  parts.push({
+    text: `Actúa como un experto agente de viajes. Crea un itinerario detallado para ${destination} (${dates}).
+  Preferencias: ${preferences}.
+  ${base64Data ? 'Usa la información de la reserva adjunta (PDF/Imagen) para estructurar el viaje.' : ''}
+  
+  Incluye SECCIONES CLARAS en Markdown:
+  - Resumen del Viaje
+  - Itinerario Día a Día (con horas estimadas)
+  - 💰 Transporte Económico (opciones específicas con precios estimados)
+  - 🍽️ Dónde Comer (restaurantes baratos, locales auténticos)
+  - 💡 Consejos Locales y Curiosidades
+  - Presupuesto Estimado Total` });
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-pro-preview',
+    contents: { parts }
+  });
+  return response.text;
+};
+
+/**
+ * Extract structured goals from natural language text
+ */
+export const extractGoalsFromText = async (text: string): Promise<Goal[]> => {
+  const ai = getAIInstance();
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Extract actionable goals from this text. 
+    Text: "${text}"
+    
+    Return a JSON ARRAY of objects matching this Goal interface:
+    {
+      "id": "generate unique string id",
+      "title": "Short concise title",
+      "targetDate": "YYYY-MM-DD (infer reasonable deadline if not specified, starting from tomorrow)",
+      "targetValue": number (numeric target, e.g. 10000),
+      "currentValue": number (usually 0 unless specified),
+      "unit": "string (e.g. €, kg, books, %)",
+      "category": "financial" | "career" | "personal" | "health",
+      "status": "active"
+    }`,
+    config: { responseMimeType: "application/json" }
+  });
+  return JSON.parse(response.text);
+};
+
+/**
+ * Extract structured goals from a file (PDF/Image/Text)
+ */
+export const extractGoalsFromFile = async (base64Data: string, mimeType: string): Promise<Goal[]> => {
+  const ai = getAIInstance();
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-pro-preview',
+    contents: {
+      parts: [
+        { inlineData: { mimeType, data: base64Data } },
+        {
+          text: `Analyze this document and extract specific, actionable goals.
+        Return a JSON ARRAY of objects matching this Goal interface:
+        {
+          "id": "generate unique string id",
+          "title": "Short concise title",
+          "targetDate": "YYYY-MM-DD (infer reasonable deadline if not specified)",
+          "targetValue": number (numeric target),
+          "currentValue": number (current progress if mentioned, else 0),
+          "unit": "string (e.g. €, kg, pages, %)",
+          "category": "financial" | "career" | "personal" | "health",
+          "status": "active"
+        }.
+        If the document contains a list of resolutions or plans, parse them all.` }
+      ]
+    },
+    config: { responseMimeType: "application/json" }
+  });
+  return JSON.parse(response.text);
+};
+

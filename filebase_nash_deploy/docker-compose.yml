@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  filebase-nash:
+    container_name: filebase-nash-2.0
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Map local NAS folders to container directories for persistence
+      - /volume1/docker/filebase_nash/data:/app/data
+      - /volume1/docker/filebase_nash/uploads:/app/uploads
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=change-this-secret-to-something-secure
+      - PORT=8080
+    networks:
+      - nas-network
+
+networks:
+  nas-network:
+    driver: bridge

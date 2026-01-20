@@ -1,0 +1,8 @@
+{
+  "name": "Copy of FILEHUB - Auditoría Inteligente 2",
+  "description": "Tu centro de control financiero, laboral y personal con integración de IA profunda para PDFs e imágenes.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

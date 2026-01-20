@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ViewType, Expense, Project, Trip, CalendarEvent, Goal, Task, ShoppingItem, ShoppingOrder, Idea, OllamaConfig, OpenNotebookConfig, Debt, Investment, Presentation, SharedExpense, SharedDebt, StoredFile, WeightEntry, NutritionPlan, TrainingSession, TrainingPlan } from './types';
+import { ViewType, Expense, Project, Trip, CalendarEvent, Goal, Task, ShoppingItem, ShoppingOrder, Idea, OllamaConfig, OpenNotebookConfig, AnythingLLMConfig, OpenWebUIConfig, LocalLlmConfig, Debt, Investment, Presentation, SharedExpense, SharedDebt, StoredFile, WeightEntry, NutritionPlan, TrainingSession, TrainingPlan, Partnership, WorkDocument } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import ExpenseTracker from './components/ExpenseTracker';
@@ -12,24 +12,27 @@ import WorkView from './components/WorkView';
 import TasksView from './components/TasksView';
 import LearningView from './components/LearningView';
 import GoalsView from './components/GoalsView';
+import IdeasView from './components/IdeasView';
+import PartnerHubView from './components/PartnerHubView';
+import AIHubView from './components/AIHubView';
 import CalendarView from './components/CalendarView';
 import OmniAssistant from './components/OmniAssistant';
 import EconomyView from './components/EconomyView';
 import TripsView from './components/TripsView';
 import ShoppingView from './components/ShoppingView';
 import QRView from './components/QRView';
-import IdeasView from './components/IdeasView';
-import AIHubView from './components/AIHubView';
 import SettingsView from './components/SettingsView';
 import SharedFinancesView from './components/SharedFinancesView';
 import AuthView from './components/AuthView';
 import FilesView from './components/FilesView';
+import NotebookView from './components/NotebookView';
 import FilePreviewModal from './components/FilePreviewModal';
 import { processUniversalDocument } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
-import { 
-  Search, 
-  Bell, 
+import { dbService } from './services/databaseService';
+import {
+  Search,
+  Bell,
   X,
   FileText,
   Sparkles,
@@ -52,16 +55,22 @@ const App: React.FC = () => {
 
   // App Data State
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
-  
+
   // Cloud Synced State
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([
+    { id: 'march-2-2026', title: 'Guardia', start: '2026-03-02', end: '2026-03-02', type: 'work', source: 'manual' },
+    { id: 'march-5-2026', title: 'Inferior', start: '2026-03-05', end: '2026-03-05', type: 'work', source: 'manual' },
+    { id: 'march-11-2026', title: 'Inferior', start: '2026-03-11', end: '2026-03-11', type: 'work', source: 'manual' },
+    { id: 'march-26-2026', title: 'Inferior', start: '2026-03-26', end: '2026-03-26', type: 'work', source: 'manual' },
+    { id: 'march-29-2026', title: 'Guardia', start: '2026-03-29', end: '2026-03-29', type: 'work', source: 'manual' }
+  ]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
-  
+
   // Fully Synced now
   const [debts, setDebts] = useState<Debt[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
@@ -73,29 +82,76 @@ const App: React.FC = () => {
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
   const [nutritionPlans, setNutritionPlans] = useState<NutritionPlan[]>([]);
   const [files, setFiles] = useState<StoredFile[]>([]);
-  
+
+  // Private Notebook State
+  const [privateNotes, setPrivateNotes] = useState<string>(`***
+
+### **HOJA DE RUTA: BARCELONA 2025 (Sanidad + Transporte + Vivienda)**
+
+#### **1. El Veredicto: Las 2 Mejores Opciones**
+* **La Opción Racional (Equilibrio Calidad/Precio): TERRASSA**
+    * **Transporte:** Excelente. Red **FGC S1** (funciona como un metro).
+    * **Vivienda:** Amplia y asequible (**200.000€ - 260.000€** por ~100m²).
+    * **Sanidad:** Hospital Mútua Terrassa (Digestivo con carga media-baja) y CAP Sant Llàtzer.`);
+  const [privateDocuments, setPrivateDocuments] = useState<WorkDocument[]>([]);
+
   // New Synced States for Fitness
   const [trainingSessions, setTrainingSessions] = useState<TrainingSession[]>([]);
   const [trainingPlans, setTrainingPlans] = useState<TrainingPlan[]>([]);
 
   const [isScanning, setIsScanning] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [scanResults, setScanResults] = useState<any>(null);
   const [isDBReady, setIsDBReady] = useState(false);
+  const [partnership, setPartnership] = useState<Partnership | null>(null);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
-  
-  const [ollamaConfig, setOllamaConfig] = useState<OllamaConfig>({
-    baseUrl: 'http://localhost:11434',
-    model: 'llama3',
-    isActive: false,
-    apiKey: '9910c6ebb8f744bb9f2db216e39c0b60.G9r3mMB-WnPbeVrUVAj14NKG'
+  const [hubTab, setHubTab] = useState<string>('dashboard');
+
+  const [ollamaConfig, setOllamaConfig] = useState<OllamaConfig>(() => {
+    const savedConfig = localStorage.getItem('filehub_ollama_config_v2');
+    return savedConfig ? JSON.parse(savedConfig) : {
+      baseUrl: import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434',
+      model: import.meta.env.VITE_OLLAMA_MODEL || 'llama3',
+      isActive: true,
+      apiKey: import.meta.env.VITE_OLLAMA_API_KEY || ''
+    };
   });
 
   const [openNotebookConfig, setOpenNotebookConfig] = useState<OpenNotebookConfig>({
     baseUrl: 'http://localhost:8000',
     collectionName: 'my-docs',
-    isActive: false
+    isActive: true,
+    apiKey: import.meta.env.VITE_OPEN_NOTEBOOK_API_KEY || ''
   });
-  
+
+  const [anythingLLMConfig, setAnythingLLMConfig] = useState<AnythingLLMConfig>(() => {
+    const savedConfig = localStorage.getItem('filehub_anything_config');
+    return savedConfig ? JSON.parse(savedConfig) : {
+      baseUrl: import.meta.env.VITE_ANYTHING_LLM_URL || 'https://nucbox-g10.tail3a7cac.ts.net:10000/api/v1',
+      apiKey: import.meta.env.VITE_ANYTHING_LLM_API_KEY || '',
+      workspaceSlug: 'filehub-ia'
+    };
+  });
+
+  const [openWebUIConfig, setOpenWebUIConfig] = useState<OpenWebUIConfig>(() => {
+    const savedConfig = localStorage.getItem('filehub_openwebui_config');
+    return savedConfig ? JSON.parse(savedConfig) : {
+      baseUrl: 'http://localhost:3000',
+      isActive: true
+    };
+  });
+
+  const [localLlmConfig, setLocalLlmConfig] = useState<LocalLlmConfig>(() => {
+    const savedConfig = localStorage.getItem('filehub_local_llm_config');
+    return savedConfig ? JSON.parse(savedConfig) : {
+      baseUrl: import.meta.env.VITE_LOCAL_LLM_URL || 'http://localhost:1234/v1',
+      model: import.meta.env.VITE_LOCAL_LLM_MODEL || 'local-model',
+      isActive: true,
+      apiKey: ''
+    };
+  });
+
+
   const scanInputRef = useRef<HTMLInputElement>(null);
 
   // Check Supabase Session
@@ -105,6 +161,7 @@ const App: React.FC = () => {
       if (session) {
         setIsAuthenticated(true);
         setCurrentUser(session.user.email);
+        syncProfile(session.user);
         loadCloudData(session.user.id);
       }
     });
@@ -116,6 +173,7 @@ const App: React.FC = () => {
       if (session) {
         setIsAuthenticated(true);
         setCurrentUser(session.user.email);
+        syncProfile(session.user);
         loadCloudData(session.user.id);
       } else {
         setIsAuthenticated(false);
@@ -125,6 +183,28 @@ const App: React.FC = () => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Persist Configs
+  useEffect(() => {
+    localStorage.setItem('filehub_ollama_config_v2', JSON.stringify(ollamaConfig));
+  }, [ollamaConfig]);
+
+  useEffect(() => {
+    localStorage.setItem('filehub_anything_config', JSON.stringify(anythingLLMConfig));
+  }, [anythingLLMConfig]);
+
+  useEffect(() => {
+    localStorage.setItem('filehub_openwebui_config', JSON.stringify(openWebUIConfig));
+  }, [openWebUIConfig]);
+
+  useEffect(() => {
+    localStorage.setItem('filehub_local_llm_config', JSON.stringify(localLlmConfig));
+  }, [localLlmConfig]);
+
+  useEffect(() => {
+    localStorage.setItem('filehub_local_llm_config', JSON.stringify(localLlmConfig));
+  }, [localLlmConfig]);
+
 
   // Theme Handling
   useEffect(() => {
@@ -142,110 +222,266 @@ const App: React.FC = () => {
     }
   }, [darkMode]);
 
+  // Load Offline Data (IndexedDB) on startup
+  useEffect(() => {
+    const initOffline = async () => {
+      console.log("Cargando datos locales (IndexedDB)...");
+      const savedState = await dbService.loadState();
+      if (savedState) {
+        if (savedState.expenses) setExpenses(savedState.expenses);
+        if (savedState.calendarEvents) setCalendarEvents(savedState.calendarEvents);
+        if (savedState.tasks) setTasks(savedState.tasks);
+        if (savedState.projects) setProjects(savedState.projects);
+        if (savedState.goals) setGoals(savedState.goals);
+        if (savedState.ideas) setIdeas(savedState.ideas);
+        if (savedState.shoppingItems) setShoppingItems(savedState.shoppingItems);
+        if (savedState.debts) setDebts(savedState.debts);
+        if (savedState.investments) setInvestments(savedState.investments);
+        if (savedState.presentations) setPresentations(savedState.presentations);
+        if (savedState.trips) setTrips(savedState.trips);
+        if (savedState.sharedExpenses) setSharedExpenses(savedState.sharedExpenses);
+        if (savedState.sharedDebts) setSharedDebts(savedState.sharedDebts);
+        if (savedState.weightEntries) setWeightEntries(savedState.weightEntries);
+        if (savedState.nutritionPlans) setNutritionPlans(savedState.nutritionPlans);
+        if (savedState.files) setFiles(savedState.files);
+        if (savedState.shoppingOrders) setShoppingOrders(savedState.shoppingOrders);
+        if (savedState.privateNotes) setPrivateNotes(savedState.privateNotes);
+        if (savedState.privateDocuments) setPrivateDocuments(savedState.privateDocuments);
+      }
+      setIsDBReady(true);
+    };
+    initOffline();
+  }, []);
+
+  // Auto-save to IndexedDB for safety
+  useEffect(() => {
+    const saveState = async () => {
+      if (!isDBReady) return;
+      try {
+        await dbService.saveFullState({
+          expenses, debts, investments, projects, presentations, tasks, goals,
+          shoppingItems, shoppingOrders, calendarEvents, ideas, sharedExpenses,
+          sharedDebts, weightEntries, nutritionPlans, files, trips,
+          privateNotes, privateDocuments
+        });
+      } catch (err) {
+        console.error("Error auto-saving to IndexedDB", err);
+      }
+    };
+    saveState();
+  }, [expenses, debts, investments, projects, presentations, tasks, goals, shoppingItems, shoppingOrders, calendarEvents, ideas, sharedExpenses, sharedDebts, weightEntries, nutritionPlans, files, trips, privateNotes, privateDocuments, isDBReady]);
+
   // Load Data from Supabase
   const loadCloudData = async (userId: string) => {
-    setIsDBReady(false);
-    
+    console.log("Sincronizando con Supabase...");
+    setIsSyncing(true);
+
     try {
-      const { data: expData } = await supabase.from('expenses').select('*').eq('user_id', userId);
-      if (expData) setExpenses(expData);
+      // 1. Fetch all data concurrently
+      const [
+        { data: expData },
+        { data: evtData },
+        { data: taskData },
+        { data: projData },
+        { data: goalData },
+        { data: ideaData },
+        { data: shopData },
+        { data: debtsData },
+        { data: investData },
+        { data: tripData },
+        { data: ordData },
+        { data: sharedExpData },
+        { data: sharedDebtData },
+        { data: weightData },
+        { data: nutPlanData },
+        { data: fileData },
+        { data: presData },
+        { data: trainingData },
+        { data: planData },
+        { data: pShipData }
+      ] = await Promise.all([
+        supabase.from('expenses').select('*').eq('user_id', userId),
+        supabase.from('calendar_events').select('*').eq('user_id', userId),
+        supabase.from('tasks').select('*').eq('user_id', userId),
+        supabase.from('projects').select('*').eq('user_id', userId),
+        supabase.from('goals').select('*').eq('user_id', userId),
+        supabase.from('ideas').select('*').eq('user_id', userId),
+        supabase.from('shopping_items').select('*').eq('user_id', userId),
+        supabase.from('debts').select('*').eq('user_id', userId),
+        supabase.from('investments').select('*').eq('user_id', userId),
+        supabase.from('trips').select('*').eq('user_id', userId),
+        supabase.from('shopping_orders').select('*').eq('user_id', userId),
+        supabase.from('shared_expenses').select('*').eq('user_id', userId),
+        supabase.from('shared_debts').select('*').eq('user_id', userId),
+        supabase.from('weight_entries').select('*').eq('user_id', userId),
+        supabase.from('nutrition_plans').select('*').eq('user_id', userId),
+        supabase.from('files').select('*').eq('user_id', userId),
+        supabase.from('presentations').select('*').eq('user_id', userId),
+        supabase.from('training_sessions').select('*').eq('user_id', userId),
+        supabase.from('training_plans').select('*').eq('user_id', userId),
+        supabase.from('partnerships').select('*').or(`user1_id.eq.${userId},user2_id.eq.${userId}`).maybeSingle()
+      ]);
 
-      const { data: evtData } = await supabase.from('calendar_events').select('*').eq('user_id', userId);
-      if (evtData) {
-        setCalendarEvents(evtData.map((e: any) => ({
-          id: e.id, title: e.title, start: e.start_date, end: e.end_date, type: e.type
-        })));
-      }
+      if (pShipData) setPartnership(pShipData);
 
-      const { data: taskData } = await supabase.from('tasks').select('*').eq('user_id', userId);
-      if (taskData) {
-        setTasks(taskData.map((t: any) => ({
-          id: t.id, title: t.title, completed: t.completed, category: t.category, priority: t.priority,
-          dueDate: t.due_date, isRecurring: t.is_recurring, frequency: t.frequency
-        })));
-      }
+      // 2. Map cloud data to local formats
+      const mappedTasks = (taskData || []).map((t: any) => ({
+        id: t.id, title: t.title, completed: t.completed, category: t.category, priority: t.priority,
+        dueDate: t.due_date, isRecurring: t.is_recurring, frequency: t.frequency
+      }));
 
-      const { data: projData } = await supabase.from('projects').select('*').eq('user_id', userId);
-      if (projData) setProjects(projData);
+      const mappedEvents = (evtData || []).map((e: any) => ({
+        id: e.id, title: e.title, start: e.start_date, end: e.end_date, type: e.type
+      }));
 
-      const { data: goalData } = await supabase.from('goals').select('*').eq('user_id', userId);
-      if (goalData) {
-        setGoals(goalData.map((g: any) => ({
-          ...g, targetDate: g.target_date, currentValue: g.current_value, targetValue: g.target_value
-        })));
-      }
+      const mappedGoals = (goalData || []).map((g: any) => ({
+        ...g, targetDate: g.target_date, currentValue: g.current_value, targetValue: g.target_value
+      }));
 
-      const { data: ideaData } = await supabase.from('ideas').select('*').eq('user_id', userId);
-      if (ideaData) {
-        setIdeas(ideaData.map((i: any) => ({
-          ...i, createdAt: i.created_at
-        })));
-      }
+      const mappedIdeas = (ideaData || []).map((i: any) => ({
+        ...i, createdAt: i.created_at
+      }));
 
-      const { data: shopData } = await supabase.from('shopping_items').select('*').eq('user_id', userId);
-      if (shopData) {
-        setShoppingItems(shopData.map((s: any) => ({
-          ...s, estimatedPrice: s.estimated_price
-        })));
-      }
+      const mappedShop = (shopData || []).map((s: any) => ({
+        ...s, estimatedPrice: s.estimated_price
+      }));
 
-      const { data: debtsData } = await supabase.from('debts').select('*').eq('user_id', userId);
-      if (debtsData) setDebts(debtsData.map((d: any) => ({
+      const mappedDebts = (debtsData || []).map((d: any) => ({
         ...d, totalAmount: d.total_amount, paidAmount: d.paid_amount, dueDate: d.due_date, interestRate: d.interest_rate
-      })));
+      }));
 
-      const { data: investData } = await supabase.from('investments').select('*').eq('user_id', userId);
-      if (investData) setInvestments(investData.map((i: any) => ({
+      const mappedInvestments = (investData || []).map((i: any) => ({
         ...i, expectedReturn: i.expected_return
-      })));
+      }));
 
-      const { data: tripData } = await supabase.from('trips').select('*').eq('user_id', userId);
-      if (tripData) setTrips(tripData.map((t: any) => ({
+      const mappedTrips = (tripData || []).map((t: any) => ({
         ...t, startDate: t.start_date, endDate: t.end_date, notebookUrl: t.notebook_url
-      })));
+      }));
 
-      const { data: ordData } = await supabase.from('shopping_orders').select('*').eq('user_id', userId);
-      if (ordData) setShoppingOrders(ordData.map((o: any) => ({
+      const mappedOrders = (ordData || []).map((o: any) => ({
         ...o, trackingNumber: o.tracking_number
-      })));
+      }));
 
-      const { data: sharedExpData } = await supabase.from('shared_expenses').select('*').eq('user_id', userId);
-      if (sharedExpData) setSharedExpenses(sharedExpData.map((e: any) => ({
+      const mappedSharedExp = (sharedExpData || []).map((e: any) => ({
         ...e, splitBetween: e.split_between, paidBy: e.paid_by
-      })));
+      }));
 
-      const { data: sharedDebtData } = await supabase.from('shared_debts').select('*').eq('user_id', userId);
-      if (sharedDebtData) setSharedDebts(sharedDebtData);
-
-      const { data: weightData } = await supabase.from('weight_entries').select('*').eq('user_id', userId);
-      if (weightData) setWeightEntries(weightData);
-
-      const { data: nutPlanData } = await supabase.from('nutrition_plans').select('*').eq('user_id', userId);
-      if (nutPlanData) setNutritionPlans(nutPlanData.map((p: any) => ({
+      const mappedNutPlans = (nutPlanData || []).map((p: any) => ({
         ...p, uploadDate: p.upload_date
-      })));
+      }));
 
-      const { data: fileData } = await supabase.from('files').select('*').eq('user_id', userId);
-      if (fileData) setFiles(fileData.map((f: any) => ({
+      const mappedFiles = (fileData || []).map((f: any) => ({
         ...f, aiSummary: f.ai_summary
-      })));
+      }));
 
-      const { data: presData } = await supabase.from('presentations').select('*').eq('user_id', userId);
-      if (presData) setPresentations(presData.map((p: any) => ({
+      const mappedPres = (presData || []).map((p: any) => ({
         ...p, dueDate: p.due_date
-      })));
+      }));
 
-      const { data: trainingData } = await supabase.from('training_sessions').select('*').eq('user_id', userId);
-      if (trainingData) setTrainingSessions(trainingData);
+      const mappedPlans = (planData || []).map((p: any) => ({ ...p, durationWeeks: p.duration_weeks }));
 
-      const { data: planData } = await supabase.from('training_plans').select('*').eq('user_id', userId);
-      if (planData) setTrainingPlans(planData.map((p: any) => ({
-        ...p, durationWeeks: p.duration_weeks
-      })));
+      // 3. Merging Logic (Keep local items not in cloud)
+      const mergeAndSync = async (tableName: string, localItems: any[], cloudMappedItems: any[], reverseMapper: (i: any) => any) => {
+        const localToPush = localItems.filter(l => !cloudMappedItems.find(c => c.id === l.id));
+        if (localToPush.length > 0) {
+          console.log(`Pushing ${localToPush.length} local items to ${tableName}`);
+          await supabase.from(tableName).insert(localToPush.map(reverseMapper));
+        }
+        const merged = [...cloudMappedItems];
+        localItems.forEach(l => {
+          if (!cloudMappedItems.find(c => c.id === l.id)) merged.push(l);
+        });
+        return merged;
+      };
 
+      // Since the logic above is more complex, just direct merge for now to be safe
+      const mergeLocal = (local: any[], cloud: any[]) => {
+        const cloudIds = new Set(cloud.map(c => c.id));
+        return [...cloud, ...local.filter(l => !cloudIds.has(l.id))];
+      };
+
+      setTasks(mergeLocal(tasks, mappedTasks));
+      setExpenses(mergeLocal(expenses, expData || []));
+      setCalendarEvents(mergeLocal(calendarEvents, mappedEvents));
+      setProjects(mergeLocal(projects, projData || []));
+      setGoals(mergeLocal(goals, mappedGoals));
+      setIdeas(mergeLocal(ideas, mappedIdeas));
+      setShoppingItems(mergeLocal(shoppingItems, mappedShop));
+      setDebts(mergeLocal(debts, mappedDebts));
+      setInvestments(mergeLocal(investments, mappedInvestments));
+      setTrips(mergeLocal(trips, mappedTrips));
+      setShoppingOrders(mergeLocal(shoppingOrders, mappedOrders));
+      setSharedExpenses(mergeLocal(sharedExpenses, mappedSharedExp));
+      setSharedDebts(mergeLocal(sharedDebts, sharedDebtData || []));
+      setWeightEntries(mergeLocal(weightEntries, weightData || []));
+      setNutritionPlans(mergeLocal(nutritionPlans, mappedNutPlans));
+      setFiles(mergeLocal(files, mappedFiles));
+      setPresentations(mergeLocal(presentations, mappedPres));
+      setTrainingSessions(mergeLocal(trainingSessions, trainingData || []));
+      setTrainingPlans(mergeLocal(trainingPlans, mappedPlans));
+
+      // 4. Background sync local-only items to Supabase (Crucial for "No Task Loss")
+      const pushMissingToCloud = async () => {
+        // Sync Tasks
+        const localTasksToPush = tasks.filter(lt => !mappedTasks.find(ct => ct.id === lt.id));
+        if (localTasksToPush.length > 0) {
+          console.log(`Sincronizando ${localTasksToPush.length} tareas locales al cloud...`);
+          await supabase.from('tasks').insert(localTasksToPush.map(t => ({
+            id: t.id, user_id: userId, title: t.title, completed: t.completed, category: t.category,
+            priority: t.priority, due_date: t.dueDate, is_recurring: t.isRecurring, frequency: t.frequency
+          })));
+        }
+
+        // Sync Expenses
+        const cloudExpIds = new Set((expData || []).map((e: any) => e.id));
+        const localExpsToPush = expenses.filter(le => !cloudExpIds.has(le.id));
+        if (localExpsToPush.length > 0) {
+          console.log(`Sincronizando ${localExpsToPush.length} gastos locales al cloud...`);
+          await supabase.from('expenses').insert(localExpsToPush.map(e => ({
+            id: e.id, user_id: userId, amount: e.amount, vendor: e.vendor, date: e.date,
+            category: e.category, description: e.description, priority: e.priority, is_recurring: e.isRecurring, frequency: e.frequency
+          })));
+        }
+
+        // Sync Projects
+        const cloudProjIds = new Set((projData || []).map((p: any) => p.id));
+        const localProjsToPush = projects.filter(lp => !cloudProjIds.has(lp.id));
+        if (localProjsToPush.length > 0) {
+          console.log(`Sincronizando ${localProjsToPush.length} proyectos locales al cloud...`);
+          await supabase.from('projects').insert(localProjsToPush.map(p => ({
+            id: p.id, user_id: userId, name: p.name, description: p.description, status: p.status,
+            progress: p.progress, deadline: p.deadline
+          })));
+        }
+
+        // Sync Goals
+        const cloudGoalIds = new Set((goalData || []).map((g: any) => g.id));
+        const localGoalsToPush = goals.filter(lg => !cloudGoalIds.has(lg.id));
+        if (localGoalsToPush.length > 0) {
+          console.log(`Sincronizando ${localGoalsToPush.length} metas locales al cloud...`);
+          await supabase.from('goals').insert(localGoalsToPush.map(g => ({
+            id: g.id, user_id: userId, title: g.title, target_date: g.targetDate,
+            current_value: g.currentValue, target_value: g.targetValue, category: g.category
+          })));
+        }
+
+        // Sync Events
+        const cloudEvtIds = new Set((evtData || []).map((ev: any) => ev.id));
+        const localEvtsToPush = calendarEvents.filter(le => !cloudEvtIds.has(le.id));
+        if (localEvtsToPush.length > 0) {
+          console.log(`Sincronizando ${localEvtsToPush.length} eventos locales al cloud...`);
+          await supabase.from('calendar_events').insert(localEvtsToPush.map(e => ({
+            id: e.id, user_id: userId, title: e.title, start_date: e.start, end_date: e.end, type: e.type
+          })));
+        }
+      };
+
+      pushMissingToCloud();
       setIsDBReady(true);
     } catch (e) {
       console.error("Error loading cloud data", e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -276,6 +512,93 @@ const App: React.FC = () => {
     setShoppingOrders([]);
     setTrainingSessions([]);
     setTrainingPlans([]);
+    setPartnership(null);
+  };
+
+  const syncProfile = async (user: any) => {
+    if (!user) return;
+    const settings = {
+      ollama_config: ollamaConfig,
+      anything_llm_config: anythingLLMConfig,
+      open_notebook_config: openNotebookConfig,
+      open_webui_config: openWebUIConfig,
+      local_llm_config: localLlmConfig,
+      theme: darkMode ? 'dark' : 'light'
+    };
+
+
+    const { error } = await supabase.from('profiles').upsert({
+      id: user.id,
+      email: user.email,
+    });
+
+    // Attempt to update settings column if it exists, unrelated to core upsert
+    // This is a simplified approach assuming a 'settings' jsonb column exists or ignoring if not
+    await supabase.from('profiles').update({ settings: settings }).eq('id', user.id);
+
+    if (error) console.error("Error syncing profile:", error);
+  };
+
+  // Persist Settings to Cloud on Change
+  useEffect(() => {
+    if (session?.user) {
+      const timeoutId = setTimeout(() => {
+        syncProfile(session.user);
+      }, 2000); // Debounce saves
+      return () => clearTimeout(timeoutId);
+    }
+  }, [ollamaConfig, anythingLLMConfig, openNotebookConfig, openWebUIConfig, localLlmConfig, darkMode, session]);
+
+
+  const handleInvitePartner = async (email: string) => {
+    if (!session?.user) return;
+    setIsSyncing(true);
+    try {
+      // 1. Find profile by email
+      const { data: targetProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      if (!targetProfile) {
+        alert(`No se encontró ningún usuario con el email ${email}. Asegúrate de que tu pareja se haya registrado primero en FileHub.`);
+        return;
+      }
+
+      if (targetProfile.id === session.user.id) {
+        alert("No puedes invitarte a ti mismo.");
+        return;
+      }
+
+      // 2. Create partnership
+      const { data: newPartnership, error: partnershipError } = await supabase
+        .from('partnerships')
+        .insert({
+          user1_id: session.user.id,
+          user2_id: targetProfile.id
+        })
+        .select()
+        .single();
+
+      if (partnershipError) {
+        if (partnershipError.code === '23505') {
+          alert("Ya existe una solicitud o vínculo con esta persona.");
+        } else {
+          throw partnershipError;
+        }
+      } else {
+        setPartnership(newPartnership);
+        alert("¡Vínculo de pareja creado con éxito!");
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Error al vincular: " + e.message);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const globalContext = { expenses, debts, investments, projects, goals, tasks, calendarEvents, trips, shoppingItems, shoppingOrders, ideas, presentations, sharedExpenses, sharedDebts, files, weightEntries, trainingSessions };
@@ -303,22 +626,22 @@ const App: React.FC = () => {
       try {
         const results = await processUniversalDocument(base64, mimeType);
         if (results.expenses && results.expenses.length > 0) {
-           const newExps = results.expenses.map((e: any) => ({
-             ...e,
-             id: `ai-exp-${Date.now()}-${Math.random()}`,
-             user_id: session?.user.id
-           }));
-           setExpenses(prev => [...newExps, ...prev]);
-           if (session) {
-             const { error } = await supabase.from('expenses').insert(newExps);
-             if (error) console.error("Error saving AI expenses", error);
-           }
+          const newExps = results.expenses.map((e: any) => ({
+            ...e,
+            id: `ai-exp-${Date.now()}-${Math.random()}`,
+            user_id: session?.user.id
+          }));
+          setExpenses(prev => [...newExps, ...prev]);
+          if (session) {
+            const { error } = await supabase.from('expenses').insert(newExps);
+            if (error) console.error("Error saving AI expenses", error);
+          }
         }
         setScanResults(results);
-      } catch (error) { 
+      } catch (error) {
         console.error(error);
-      } finally { 
-        setIsScanning(false); 
+      } finally {
+        setIsScanning(false);
       }
     };
     reader.readAsDataURL(fileToProcess);
@@ -345,7 +668,7 @@ const App: React.FC = () => {
   const handleUpdateExpense = async (e: Expense) => {
     setExpenses(prev => prev.map(ex => ex.id === e.id ? e : ex));
     if (session) await supabase.from('expenses').update({
-        amount: e.amount, vendor: e.vendor, date: e.date, category: e.category, description: e.description
+      amount: e.amount, vendor: e.vendor, date: e.date, category: e.category, description: e.description
     }).eq('id', e.id);
   };
 
@@ -354,8 +677,22 @@ const App: React.FC = () => {
     setDebts([...debts, d]);
     if (session) await supabase.from('debts').insert({
       id: d.id, user_id: session.user.id, name: d.name, total_amount: d.totalAmount, paid_amount: d.paidAmount,
-      due_date: d.dueDate, category: d.category, interest_rate: d.interestRate
+      due_date: d.dueDate, category: d.category, interest_rate: d.interestRate, creditor: d.creditor, status: d.status, notes: d.notes
     });
+  };
+
+  const handleDeleteDebt = async (id: string) => {
+    setDebts(prev => prev.filter(d => d.id !== id));
+    if (session) await supabase.from('debts').delete().eq('id', id);
+  };
+
+  const handleUpdateDebt = async (updated: Debt) => {
+    setDebts(prev => prev.map(d => d.id === updated.id ? updated : d));
+    if (session) await supabase.from('debts').update({
+      name: updated.name, total_amount: updated.totalAmount, paid_amount: updated.paidAmount,
+      due_date: updated.dueDate, category: updated.category, interest_rate: updated.interestRate,
+      creditor: updated.creditor, status: updated.status, notes: updated.notes
+    }).eq('id', updated.id);
   };
 
   // INVESTMENTS
@@ -363,15 +700,31 @@ const App: React.FC = () => {
     setInvestments([...investments, i]);
     if (session) await supabase.from('investments').insert({
       id: i.id, user_id: session.user.id, name: i.name, amount: i.amount, date: i.date,
-      status: i.status, category: i.category, expected_return: i.expectedReturn
+      status: i.status, category: i.category, expected_return: i.expectedReturn,
+      current_value: i.currentValue, purchase_price: i.purchasePrice, quantity: i.quantity, notes: i.notes
     });
   };
+
+  const handleDeleteInvestment = async (id: string) => {
+    setInvestments(prev => prev.filter(i => i.id !== id));
+    if (session) await supabase.from('investments').delete().eq('id', id);
+  };
+
+  const handleUpdateInvestment = async (updated: Investment) => {
+    setInvestments(prev => prev.map(i => i.id === updated.id ? updated : i));
+    if (session) await supabase.from('investments').update({
+      name: updated.name, amount: updated.amount, date: updated.date,
+      status: updated.status, category: updated.category, expected_return: updated.expectedReturn,
+      current_value: updated.currentValue, purchase_price: updated.purchasePrice, quantity: updated.quantity, notes: updated.notes
+    }).eq('id', updated.id);
+  };
+
 
   // EVENTS
   const handleAddEvent = async (e: CalendarEvent) => {
     setCalendarEvents([...calendarEvents, e]);
     if (session) await supabase.from('calendar_events').insert({
-        id: e.id, user_id: session.user.id, title: e.title, start_date: e.start, end_date: e.end, type: e.type
+      id: e.id, user_id: session.user.id, title: e.title, start_date: e.start, end_date: e.end, type: e.type
     });
   };
   const handleDeleteEvent = async (id: string) => {
@@ -405,7 +758,7 @@ const App: React.FC = () => {
   const handleAddProject = async (p: Project) => {
     setProjects([p, ...projects]);
     if (session) await supabase.from('projects').insert({
-      id: p.id, user_id: session.user.id, name: p.name, budget: p.budget, spent: p.spent, 
+      id: p.id, user_id: session.user.id, name: p.name, budget: p.budget, spent: p.spent,
       deadline: p.deadline, status: p.status, notebook_url: p.notebookUrl
     });
   };
@@ -414,6 +767,11 @@ const App: React.FC = () => {
     if (session) await supabase.from('projects').update({
       name: p.name, budget: p.budget, deadline: p.deadline, notebook_url: p.notebookUrl, spent: p.spent
     }).eq('id', p.id);
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    setProjects(prev => prev.filter(p => p.id !== id));
+    if (session) await supabase.from('projects').delete().eq('id', id);
   };
 
   // GOALS
@@ -439,7 +797,7 @@ const App: React.FC = () => {
   const handleAddIdea = async (i: Idea) => {
     setIdeas([i, ...ideas]);
     if (session) await supabase.from('ideas').insert({
-      id: i.id, user_id: session.user.id, title: i.title, description: i.description, 
+      id: i.id, user_id: session.user.id, title: i.title, description: i.description,
       category: i.category, priority: i.priority, status: i.status, created_at: i.createdAt
     });
   };
@@ -448,8 +806,10 @@ const App: React.FC = () => {
     if (session) await supabase.from('ideas').delete().eq('id', id);
   };
   const handleUpdateIdea = async (i: Idea) => {
-    setIdeas(prev => prev.map(id => id.id === i.id ? i : id));
-    // Implementation for update if needed in future
+    setIdeas(prev => prev.map(ide => ide.id === i.id ? i : ide));
+    if (session) await supabase.from('ideas').update({
+      title: i.title, description: i.description, category: i.category, priority: i.priority, status: i.status
+    }).eq('id', i.id);
   };
 
   // SHOPPING
@@ -464,7 +824,7 @@ const App: React.FC = () => {
     const item = shoppingItems.find(i => i.id === id);
     if (!item) return;
     const newPurchased = !item.purchased;
-    setShoppingItems(prev => prev.map(i => i.id === id ? {...i, purchased: newPurchased} : i));
+    setShoppingItems(prev => prev.map(i => i.id === id ? { ...i, purchased: newPurchased } : i));
     if (session) await supabase.from('shopping_items').update({ purchased: newPurchased }).eq('id', id);
   };
   const handleDeleteItem = async (id: string) => {
@@ -476,6 +836,11 @@ const App: React.FC = () => {
     if (session) await supabase.from('shopping_orders').insert({
       id: o.id, user_id: session.user.id, store: o.store, date: o.date, total: o.total, status: o.status
     });
+  };
+
+  const handleDeleteOrder = async (id: string) => {
+    setShoppingOrders(prev => prev.filter(o => o.id !== id));
+    if (session) await supabase.from('shopping_orders').delete().eq('id', id);
   };
 
   // SHARED FINANCES
@@ -496,12 +861,20 @@ const App: React.FC = () => {
     setSharedDebts(prev => prev.map(d => d.id === id ? { ...d, status: 'settled' } : d));
     if (session) await supabase.from('shared_debts').update({ status: 'settled' }).eq('id', id);
   };
+  const handleDeleteSharedExpense = async (id: string) => {
+    setSharedExpenses(prev => prev.filter(e => e.id !== id));
+    if (session) await supabase.from('shared_expenses').delete().eq('id', id);
+  };
+  const handleDeleteSharedDebt = async (id: string) => {
+    setSharedDebts(prev => prev.filter(d => d.id !== id));
+    if (session) await supabase.from('shared_debts').delete().eq('id', id);
+  };
 
   // FILES
   const handleAddFile = async (f: StoredFile) => {
     setFiles([...files, f]);
     if (session) await supabase.from('files').insert({
-      id: f.id, user_id: session.user.id, name: f.name, type: f.type, size: f.size, 
+      id: f.id, user_id: session.user.id, name: f.name, type: f.type, size: f.size,
       date: f.date, category: f.category, tags: f.tags, url: f.url, ai_summary: f.aiSummary
     });
   };
@@ -512,8 +885,26 @@ const App: React.FC = () => {
     }).eq('id', f.id);
   };
   const handleDeleteFile = async (id: string) => {
+    const fileToDelete = files.find(f => f.id === id);
     setFiles(prev => prev.filter(f => f.id !== id));
-    if (session) await supabase.from('files').delete().eq('id', id);
+
+    if (session) {
+      // Delete from database
+      await supabase.from('files').delete().eq('id', id);
+
+      // Delete from storage if it has a URL
+      if (fileToDelete?.url) {
+        try {
+          // Extract filename from public URL
+          // URL format: https://[project].supabase.co/storage/v1/object/public/files/[filename]
+          const urlParts = fileToDelete.url.split('/');
+          const fileName = urlParts[urlParts.length - 1];
+          await supabase.storage.from('files').remove([fileName]);
+        } catch (error) {
+          console.error('Error deleting file from storage:', error);
+        }
+      }
+    }
   };
 
   // NUTRITION & WEIGHT
@@ -523,6 +914,10 @@ const App: React.FC = () => {
       id: w.id, user_id: session.user.id, date: w.date, weight: w.weight, note: w.note
     });
   };
+  const handleDeleteWeight = async (id: string) => {
+    setWeightEntries(prev => prev.filter(w => w.id !== id));
+    if (session) await supabase.from('weight_entries').delete().eq('id', id);
+  };
   const handleAddNutritionPlan = async (p: NutritionPlan) => {
     setNutritionPlans([...nutritionPlans, p]);
     if (session) await supabase.from('nutrition_plans').insert({
@@ -530,8 +925,29 @@ const App: React.FC = () => {
     });
   };
   const handleDeletePlan = async (id: string) => {
+    const planToDelete = nutritionPlans.find(p => p.id === id);
     setNutritionPlans(prev => prev.filter(p => p.id !== id));
-    if (session) await supabase.from('nutrition_plans').delete().eq('id', id);
+
+    if (session) {
+      await supabase.from('nutrition_plans').delete().eq('id', id);
+
+      if (planToDelete?.url) {
+        try {
+          const urlParts = planToDelete.url.split('/');
+          const fileName = urlParts[urlParts.length - 1];
+          await supabase.storage.from('nutrition_plans').remove([fileName]);
+        } catch (error) {
+          console.error('Error deleting nutrition plan from storage:', error);
+        }
+      }
+    }
+  };
+
+  const handleUpdateNutritionPlan = async (p: NutritionPlan) => {
+    setNutritionPlans(prev => prev.map(plan => plan.id === p.id ? p : plan));
+    if (session) await supabase.from('nutrition_plans').update({
+      name: p.name, type: p.type, url: p.url, upload_date: p.uploadDate
+    }).eq('id', p.id);
   };
 
   // PRESENTATIONS
@@ -543,6 +959,13 @@ const App: React.FC = () => {
   };
 
   // TRIPS
+  const handleDeletePresentation = async (id: string) => {
+    if (confirm("¿Eliminar esta presentación?")) {
+      setPresentations(prev => prev.filter(p => p.id !== id));
+      if (session) await supabase.from('presentations').delete().eq('id', id);
+    }
+  };
+
   const handleAddTrip = async (t: Trip) => {
     setTrips([...trips, t]);
     if (session) await supabase.from('trips').insert({
@@ -565,6 +988,12 @@ const App: React.FC = () => {
     setTrainingSessions(prev => prev.filter(s => s.id !== id));
     if (session) await supabase.from('training_sessions').delete().eq('id', id);
   };
+  const handleUpdateTrainingSession = async (s: TrainingSession) => {
+    setTrainingSessions(prev => prev.map(session => session.id === s.id ? s : session));
+    if (session) await supabase.from('training_sessions').update({
+      title: s.title, date: s.date, type: s.type, duration: s.duration, intensity: s.intensity, status: s.status, notes: s.notes
+    }).eq('id', s.id);
+  };
   const handleAddTrainingPlan = async (p: TrainingPlan) => {
     setTrainingPlans([...trainingPlans, p]);
     if (session) await supabase.from('training_plans').insert({
@@ -583,9 +1012,9 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard': return (
-        <Dashboard 
-          expenses={expenses} 
-          globalContext={globalContext} 
+        <Dashboard
+          expenses={expenses}
+          globalContext={globalContext}
           tasks={tasks}
           events={calendarEvents}
           onAddTask={handleAddTask}
@@ -593,10 +1022,15 @@ const App: React.FC = () => {
           onToggleTask={handleToggleTask}
           onAddExpense={handleAddExpense}
           onDeleteExpense={handleDeleteExpense}
+          currentUser={session?.user?.id || null}
+          partnership={partnership}
+          onAddGoal={handleAddGoal}
+          onAddIdea={handleAddIdea}
+          onAddEvent={handleAddEvent}
         />
       );
       case 'files': return (
-        <FilesView 
+        <FilesView
           files={files}
           ollamaConfig={ollamaConfig}
           onAddFile={handleAddFile}
@@ -605,57 +1039,78 @@ const App: React.FC = () => {
         />
       );
       case 'expenses': return (
-        <ExpenseTracker 
-          expenses={expenses} 
+        <ExpenseTracker
+          expenses={expenses}
           debts={debts}
           investments={investments}
-          onAddExpense={handleAddExpense} 
-          onUpdateExpense={handleUpdateExpense} 
+          onAddExpense={handleAddExpense}
+          onUpdateExpense={handleUpdateExpense}
           onDeleteExpense={handleDeleteExpense}
           onAddDebt={handleAddDebt}
           onAddInvestment={handleAddInvestment}
         />
       );
       case 'shared-finances': return (
-        <SharedFinancesView 
+        <SharedFinancesView
           sharedExpenses={sharedExpenses}
           sharedDebts={sharedDebts}
           onAddExpense={handleAddSharedExpense}
           onSettleDebt={handleSettleSharedDebt}
           onAddDebt={handleAddSharedDebt}
+          onDeleteExpense={handleDeleteSharedExpense}
+          onDeleteDebt={handleDeleteSharedDebt}
         />
       );
       case 'economy': return (
-        <EconomyView 
-          expenses={expenses} 
-          onClearAll={() => setExpenses([])} 
+        <EconomyView
+          expenses={expenses}
+          debts={debts}
+          investments={investments}
+          onClearAll={() => setExpenses([])}
           onAddExpenses={(exps) => exps.forEach(e => handleAddExpense(e))}
+          onAddDebt={handleAddDebt}
+          onDeleteDebt={handleDeleteDebt}
+          onUpdateDebt={handleUpdateDebt}
+          onAddInvestment={handleAddInvestment}
+          onDeleteInvestment={handleDeleteInvestment}
+          onUpdateInvestment={handleUpdateInvestment}
         />
       );
       case 'work': return (
-        <WorkView 
+        <WorkView
           initialProjects={projects}
           initialPresentations={presentations}
           initialTasks={tasks}
-          ollamaConfig={ollamaConfig} 
+          ollamaConfig={ollamaConfig}
           onAddProject={handleAddProject}
           onAddTask={handleAddTask}
           onAddPresentation={handleAddPresentation}
-          onUpdateProject={handleUpdateProject} 
+          onUpdateProject={handleUpdateProject}
+          onDeleteProject={handleDeleteProject}
+          onDeletePresentation={handleDeletePresentation}
         />
       );
       case 'tasks': return (
-        <TasksView 
-          tasks={tasks} 
-          calendarEvents={calendarEvents} 
+        <TasksView
+          tasks={tasks}
+          calendarEvents={calendarEvents}
           expenses={expenses}
           onAddTask={handleAddTask}
           onToggleTask={handleToggleTask}
           onDeleteTask={handleDeleteTask}
         />
       );
+      case 'notebook': return (
+        <NotebookView
+          notes={privateNotes}
+          documents={privateDocuments}
+          onNotesChange={(notes) => setPrivateNotes(notes)}
+          onSaveDocument={(doc) => setPrivateDocuments([...privateDocuments, doc])}
+          onLoadDocument={(content) => setPrivateNotes(content)}
+        />
+      );
       case 'goals': return (
-        <GoalsView 
+        <GoalsView
           goals={goals}
           onAddGoal={handleAddGoal}
           onUpdateGoal={handleUpdateGoal}
@@ -663,26 +1118,26 @@ const App: React.FC = () => {
         />
       );
       case 'calendar': return (
-        <CalendarView 
-          expenses={expenses} 
-          projects={projects} 
-          calendarEvents={calendarEvents} 
-          tasks={tasks} 
-          goals={goals} 
-          onAddEvent={handleAddEvent} 
+        <CalendarView
+          expenses={expenses}
+          projects={projects}
+          calendarEvents={calendarEvents}
+          tasks={tasks}
+          goals={goals}
+          onAddEvent={handleAddEvent}
           onDeleteEvent={handleDeleteEvent}
         />
       );
       case 'trips': return (
-        <TripsView 
+        <TripsView
           trips={trips}
           onAddTrip={handleAddTrip}
           onDeleteTrip={handleDeleteTrip}
         />
       );
       case 'shopping': return (
-        <ShoppingView 
-          items={shoppingItems} 
+        <ShoppingView
+          items={shoppingItems}
           orders={shoppingOrders}
           onAddItem={handleAddItem}
           onToggleItem={handleToggleItem}
@@ -697,118 +1152,220 @@ const App: React.FC = () => {
           onAddWeightEntry={handleAddWeight}
           onAddPlan={handleAddNutritionPlan}
           onDeletePlan={handleDeletePlan}
+          onUpdatePlan={handleUpdateNutritionPlan}
         />
       );
       case 'ideas': return (
-        <IdeasView 
-          ideas={ideas} 
-          onAddIdea={handleAddIdea} 
-          onDeleteIdea={handleDeleteIdea} 
-          onUpdateIdea={handleUpdateIdea} 
+        <IdeasView
+          ideas={ideas}
+          onAddIdea={handleAddIdea}
+          onDeleteIdea={handleDeleteIdea}
+          onUpdateIdea={handleUpdateIdea}
         />
       );
       case 'ai-hub': return (
-        <AIHubView 
+        <AIHubView
           ollamaConfig={ollamaConfig}
           openNotebookConfig={openNotebookConfig}
-          onUpdateConfig={setOllamaConfig} 
+          anythingLLMConfig={anythingLLMConfig}
+          onUpdateConfig={setOllamaConfig}
           onUpdateNotebookConfig={setOpenNotebookConfig}
-          globalContext={globalContext} 
+          onUpdateAnythingConfig={setAnythingLLMConfig}
+          globalContext={globalContext}
+          openWebUIConfig={openWebUIConfig}
+          onUpdateOpenWebUIConfig={setOpenWebUIConfig}
+          localLlmConfig={localLlmConfig}
+          onUpdateLocalLlmConfig={setLocalLlmConfig}
         />
+
       );
       case 'qr': return <QRView />;
-      case 'settings': return (
-        <SettingsView 
-          currentUser={currentUser || 'Invitado'}
-          ollamaConfig={ollamaConfig}
-          isDarkMode={darkMode}
-          toggleDarkMode={() => setDarkMode(!darkMode)}
-        />
-      );
+      case 'settings':
+        return (
+          <SettingsView
+            currentUser={currentUser || 'Usuario'}
+            ollamaConfig={ollamaConfig}
+            setOllamaConfig={setOllamaConfig}
+            isDarkMode={darkMode}
+            toggleDarkMode={() => setDarkMode(!darkMode)}
+            onNavigate={setCurrentView}
+          />
+        );
       case 'fitness': return (
-        <FitnessView 
+        <FitnessView
           sessions={trainingSessions}
           plans={trainingPlans}
           onAddSession={handleAddTrainingSession}
           onDeleteSession={handleDeleteTrainingSession}
+          onUpdateSession={handleUpdateTrainingSession}
           onAddPlan={handleAddTrainingPlan}
           onDeletePlan={handleDeleteTrainingPlan}
           onSyncPlan={(events) => {
-             events.forEach(ev => handleAddEvent(ev));
-          }} 
+            events.forEach(ev => handleAddEvent(ev));
+          }}
+        />
+      );
+      case 'shared-hub': return (
+        <PartnerHubView
+          partnership={partnership}
+          sharedExpenses={sharedExpenses}
+          currentUser={session?.user?.id || null}
+          onInvitePartner={handleInvitePartner}
+          activeTab={hubTab}
+          onTabChange={setHubTab}
+          onAddSharedTask={(title) => {
+            // Internal task handling in component for now
+          }}
         />
       );
       case 'courses': return <LearningView />;
       default: return (
-        <Dashboard 
-          expenses={expenses} 
-          tasks={tasks} 
-          events={calendarEvents} 
-          onAddTask={handleAddTask} 
-          onDeleteTask={handleDeleteTask} 
-          onToggleTask={handleToggleTask} 
+        <Dashboard
+          expenses={expenses}
+          tasks={tasks}
+          events={calendarEvents}
+          onAddTask={handleAddTask}
+          onDeleteTask={handleDeleteTask}
+          onToggleTask={handleToggleTask}
         />
       );
     }
   };
 
   return (
-    <div className={`min-h-screen flex flex-col md:flex-row bg-[#f8fafc] dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-x-hidden ${darkMode ? 'dark' : ''}`}>
-      <div className={`fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm transition-opacity md:hidden ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsSidebarOpen(false)} />
-      <div className={`fixed left-0 top-0 h-full z-50 transition-transform duration-300 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:flex`}>
-        <Sidebar currentView={currentView} onViewChange={(v) => { setCurrentView(v); setIsSidebarOpen(false); }} onScanClick={handleScanClick} onLogout={handleLogout} />
+    <div className={`min-h-screen flex bg-[#f8fafc] dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-x-hidden ${darkMode ? 'dark' : ''}`}>
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm lg:hidden animate-in fade-in"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Responsive Drawer on Mobile, Static on Desktop */}
+      <div className={`fixed inset-y-0 left-0 z-[70] transition-transform duration-300 transform lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <Sidebar
+          currentView={currentView === 'shared-hub' ? hubTab : currentView}
+          onViewChange={(v) => {
+            if (['piso', 'activities', 'shopping', 'shared-hub', 'whiteboard'].includes(v)) {
+              if (v !== 'shared-hub') setHubTab(v as any);
+              setCurrentView('shared-hub');
+            } else if (v === 'trips') {
+              // Direct to shared-hub EXPEDICIONES (calendar tab)
+              setHubTab('calendar');
+              setCurrentView('shared-hub');
+            } else {
+              setCurrentView(v);
+            }
+            setIsSidebarOpen(false);
+          }}
+          onLogout={handleLogout}
+          isOpen={isSidebarOpen}
+          toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          currentUser={currentUser}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+        />
       </div>
 
       <input type="file" accept="image/*,application/pdf" className="hidden" ref={scanInputRef} onChange={handleFileSelection} />
-      
-      <main className="flex-1 w-full p-4 md:p-12 relative min-h-screen flex flex-col">
-        <header className="flex flex-col md:flex-row justify-between items-center mb-8 md:mb-16 gap-6">
-          <div className="flex items-center w-full md:w-auto gap-4">
-            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-3 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-               <Menu size={24} className="text-slate-700 dark:text-slate-200" />
-            </button>
-            <div className="relative flex-1 md:w-[400px] group">
-              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-              <input type="text" placeholder="Buscar en FILEHUB..." className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl py-4 pl-16 pr-8 shadow-sm focus:ring-4 focus:ring-indigo-500/5 transition-all font-bold text-slate-700 dark:text-slate-200 placeholder-slate-400" />
+
+      <main className="flex-1 w-full relative min-h-screen flex flex-col">
+        {/* Universal Header (Sticky on Mobile) */}
+        <header className="sticky top-0 z-50 bg-[#f8fafc]/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 lg:border-none lg:bg-transparent lg:static p-4 lg:px-12 lg:pt-12 lg:pb-0">
+          <div className="flex items-center justify-between gap-4 max-w-[1500px] mx-auto w-full">
+            <div className="flex items-center gap-4 flex-1">
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="lg:hidden p-2.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+              >
+                <Menu size={20} />
+              </button>
+
+              <div className="relative flex-1 max-w-[400px] lg:flex hidden group">
+                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl py-3 pl-14 pr-6 shadow-sm focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500/50 transition-all font-medium text-sm text-slate-700 dark:text-slate-200"
+                />
+              </div>
+
+              {/* Mobile Title */}
+              <div className="lg:hidden font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent truncate">
+                {currentView.charAt(0).toUpperCase() + currentView.slice(1).replace('-', ' ')}
+              </div>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-4 md:gap-8 w-full md:w-auto justify-end">
-            <button 
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-3 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-            >
-              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-            <div className="hidden lg:flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl px-5 py-3 shadow-sm">
-               <Database size={16} className={isDBReady ? 'text-emerald-500' : 'text-amber-500 animate-pulse'} />
-               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{isDBReady ? 'CLOUD SYNC' : 'CONNECTING...'}</span>
-            </div>
-            <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 pr-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors" onClick={() => setCurrentView('settings')}>
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black"><User size={20} /></div>
-              <div className="hidden sm:block">
-                <p className="text-xs font-black text-slate-900 dark:text-white truncate max-w-[150px]">{currentUser || 'Usuario'}</p>
-                <div className="flex items-center gap-1">
-                   <Wifi size={8} className="text-emerald-500" />
-                   <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Conectado</p>
+
+            <div className="flex items-center gap-2 lg:gap-6">
+              {/* Sync Status - desktop and mobile */}
+              <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl px-3 lg:px-4 py-2 shadow-sm transition-all">
+                {isSyncing ? (
+                  <>
+                    <Wifi size={14} className="text-indigo-500 animate-pulse" />
+                    <span className="text-[9px] lg:text-[10px] font-black uppercase tracking-widest text-indigo-500">SYNCING</span>
+                  </>
+                ) : (
+                  <>
+                    <Database size={14} className={isDBReady ? 'text-emerald-500' : 'text-amber-500 animate-pulse'} />
+                    <span className="text-[9px] lg:text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      {isDBReady ? 'CLOUD READY' : 'CONNECTING'}
+                    </span>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="hidden sm:flex p-2.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-indigo-600 transition-colors"
+                title="Cambiar Tema"
+              >
+                {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+
+              <div
+                className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 lg:pr-4 lg:pl-1.5 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
+                onClick={() => setCurrentView('settings')}
+              >
+                <div className="w-8 h-8 lg:w-9 lg:h-9 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg shadow-indigo-200 dark:shadow-none">
+                  <User size={16} />
+                </div>
+                <div className="hidden lg:block">
+                  <p className="text-xs font-bold text-slate-700 dark:text-white truncate max-w-[120px]">{currentUser || 'Usuario'}</p>
                 </div>
               </div>
             </div>
           </div>
         </header>
 
-        <div className="max-w-[1500px] mx-auto w-full flex-1 overflow-hidden">{renderContent()}</div>
-        
-        <OmniAssistant 
-          globalContext={globalContext} 
+        {/* Content Area */}
+        <div className="max-w-[1500px] mx-auto w-full flex-1 p-4 lg:p-12 lg:pt-8 overflow-x-hidden">
+          <div className="mb-8 lg:mb-12 lg:block hidden">
+            <h1 className="text-3xl font-black tracking-tight bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400 bg-clip-text text-transparent">
+              {currentView.charAt(0).toUpperCase() + currentView.slice(1).replace('-', ' ')}
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">
+              Controla y gestiona tu auditoría inteligente
+            </p>
+          </div>
+
+          <div className="animate-in slide-in-from-bottom-2 duration-500 fill-mode-both">
+            {renderContent()}
+          </div>
+        </div>
+
+        <OmniAssistant
+          globalContext={globalContext}
+          ollamaConfig={ollamaConfig}
+          anythingLLMConfig={anythingLLMConfig}
           onAddExpenses={(newExpenses) => {
-             newExpenses.forEach(e => handleAddExpense(e));
+            newExpenses.forEach(e => handleAddExpense(e));
           }}
         />
       </main>
 
       {previewFile && (
-        <FilePreviewModal 
+        <FilePreviewModal
           file={previewFile}
           onClose={() => setPreviewFile(null)}
           onProcess={processFileWithAI}
@@ -817,13 +1374,13 @@ const App: React.FC = () => {
       )}
 
       {isScanning && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[600] flex flex-col items-center justify-center text-white animate-in fade-in">
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[100] flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
           <div className="relative">
-            <div className="w-32 h-32 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-            <FileText className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-400" size={40} />
+            <div className="w-24 h-24 border-4 border-indigo-500/10 border-t-indigo-500 rounded-full animate-spin"></div>
+            <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-400" size={32} />
           </div>
-          <h2 className="text-2xl font-black mt-8 tracking-widest uppercase">Analizando con IA</h2>
-          <p className="text-indigo-300 mt-2 font-bold text-xs">Extrayendo transacciones y flujos...</p>
+          <h2 className="text-xl font-black mt-8 tracking-[0.2em] uppercase">Auditoría IA</h2>
+          <p className="text-indigo-300/60 mt-2 font-bold text-[10px] uppercase tracking-widest">Extrayendo flujo de datos...</p>
         </div>
       )}
     </div>

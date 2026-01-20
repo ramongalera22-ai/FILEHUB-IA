@@ -1,12 +1,9 @@
 
 import React from 'react';
 import { ViewType } from '../types';
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  Briefcase, 
-  Sparkles,
-  Camera,
+import {
+  LayoutDashboard,
+  Calendar,
   Monitor,
   CheckSquare,
   LibraryBig,
@@ -14,11 +11,10 @@ import {
   Cpu,
   LogOut,
   Users,
+  Heart,
   X,
   Lightbulb,
-  Smartphone,
   Zap,
-  TrendingUp,
   Target,
   Plane,
   BarChart3,
@@ -26,63 +22,92 @@ import {
   Settings,
   FolderOpen,
   Dumbbell,
-  Utensils
+  Utensils,
+  Sun,
+  Moon,
+  Home,
+  Activity,
+  Edit3,
+  BookOpen
 } from 'lucide-react';
 
 interface SidebarProps {
   currentView: ViewType;
   onViewChange: (view: ViewType) => void;
-  onScanClick: () => void;
   onLogout: () => void;
+  isOpen?: boolean;
+  toggleSidebar?: () => void;
+  currentUser?: string | null;
+  darkMode?: boolean;
+  setDarkMode?: (dark: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onScanClick, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({
+  currentView,
+  onViewChange,
+  onLogout,
+  isOpen,
+  toggleSidebar,
+  currentUser,
+  darkMode,
+  setDarkMode
+}) => {
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, type: 'nav' },
-    { id: 'files', label: 'Archivos', icon: FolderOpen, type: 'nav' },
-    { id: 'expenses', label: 'Gastos y Deuda', icon: LibraryBig, type: 'nav' },
-    { id: 'shared-finances', label: 'Cuentas Compartidas', icon: Users, type: 'nav' },
-    { id: 'economy', label: 'Análisis Mensual', icon: BarChart3, type: 'nav' },
-    { id: 'work', label: 'Work Hub', icon: Monitor, type: 'nav' },
-    { id: 'tasks', label: 'Tareas y Brain', icon: CheckSquare, type: 'nav' },
-    { id: 'goals', label: 'Visiómetro Metas', icon: Target, type: 'nav' },
-    { id: 'fitness', label: 'Entrenamiento', icon: Dumbbell, type: 'nav' },
-    { id: 'nutrition', label: 'Nutrición', icon: Utensils, type: 'nav' },
-    { id: 'calendar', label: 'Calendario IA', icon: Calendar, type: 'nav' },
-    { id: 'trips', label: 'Expediciones', icon: Plane, type: 'nav' },
-    { id: 'shopping', label: 'Compras', icon: ShoppingBag, type: 'nav' },
-    { id: 'ideas', label: 'Ideas Lab', icon: Lightbulb, type: 'nav' },
-    { id: 'ai-hub', label: 'Centro IA Híbrida', icon: Cpu, type: 'nav' },
-    { id: 'qr', label: 'Acceso Móvil', icon: QrCode, type: 'nav' },
-    { id: 'settings', label: 'Configuración', icon: Settings, type: 'nav' },
-    { id: 'scan', label: 'Escanear Documento', icon: Camera, type: 'action' },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'files', label: 'Archivos', icon: FolderOpen },
+    { id: 'expenses', label: 'Gastos y Deuda', icon: LibraryBig },
+    { id: 'shared-hub', label: 'Dashboard Hub', icon: Heart },
+    { id: 'piso', label: 'Piso BCN', icon: Home },
+    { id: 'activities', label: 'Actividades', icon: Activity },
+    { id: 'economy', label: 'Análisis Mensual', icon: BarChart3 },
+    { id: 'work', label: 'Work Hub', icon: Monitor },
+    { id: 'notebook', label: 'Cuaderno Privado', icon: BookOpen },
+    { id: 'tasks', label: 'Tareas y Brain', icon: CheckSquare },
+    { id: 'whiteboard', label: 'Pizarra Brainstorm', icon: Edit3 },
+    { id: 'goals', label: 'Visiómetro Metas', icon: Target },
+    { id: 'fitness', label: 'Entrenamiento', icon: Dumbbell },
+    { id: 'nutrition', label: 'Nutrición', icon: Utensils },
+    { id: 'calendar', label: 'Calendario IA', icon: Calendar },
+    { id: 'trips', label: 'Expediciones', icon: Plane },
+    { id: 'shopping', label: 'Compras', icon: ShoppingBag },
+    { id: 'ideas', label: 'Ideas Lab', icon: Lightbulb },
+    { id: 'ai-hub', label: 'Centro IA Híbrida', icon: Cpu },
+    { id: 'qr', label: 'Acceso Móvil', icon: QrCode },
+    { id: 'settings', label: 'Configuración', icon: Settings }
   ];
 
   return (
     <div className="w-72 bg-slate-900 h-screen text-slate-300 flex flex-col shadow-2xl overflow-hidden dark:bg-slate-950 dark:border-r dark:border-slate-800">
-      <div className="p-8 flex items-center justify-between border-b border-white/5 shrink-0">
-        <h1 className="text-2xl font-black text-white flex items-center gap-3">
+      <div className="p-6 flex items-center justify-between border-b border-white/5 shrink-0">
+        <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/50">
             <Zap size={22} className="text-white fill-white" />
           </div>
-          FILEHUB
-        </h1>
+          <h1 className="text-xl font-black text-white tracking-widest">FILEHUB</h1>
+        </div>
+
+        {/* Mobile Close Button */}
+        <button
+          onClick={toggleSidebar}
+          className="lg:hidden p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+        >
+          <X size={20} />
+        </button>
       </div>
-      
-      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
+
+      <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = currentView === item.id && item.type === 'nav';
-          
+          const isActive = currentView === item.id;
+
           return (
             <button
               key={item.id}
-              onClick={() => item.type === 'action' ? onScanClick() : onViewChange(item.id as ViewType)}
-              className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all group ${
-                isActive 
-                ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-900/20' 
+              onClick={() => onViewChange(item.id as ViewType)}
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${isActive
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20'
                 : 'hover:bg-slate-800/50 hover:text-white'
-              }`}
+                }`}
             >
               <Icon size={18} className={isActive ? 'text-white' : 'text-slate-500 group-hover:text-indigo-400'} />
               <span className={`text-[13px] font-bold tracking-tight ${isActive ? 'font-black' : ''}`}>{item.label}</span>
@@ -91,22 +116,24 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onScanClic
         })}
       </nav>
 
-      <div className="p-6 border-t border-white/5 space-y-4 shrink-0 bg-slate-900 dark:bg-slate-950">
-        <button 
-          onClick={onLogout}
-          className="w-full flex items-center gap-4 px-5 py-4 text-red-400 hover:bg-red-500/10 rounded-2xl transition-all group"
-        >
-          <LogOut size={20} />
-          <span className="text-sm font-black uppercase tracking-widest">Cerrar Sesión</span>
-        </button>
-        
-        <div className="bg-slate-800/40 rounded-2xl p-4 border border-white/5">
-           <div className="flex items-center gap-3 mb-1.5">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-              <span className="text-[9px] font-black uppercase text-slate-500">Nodo Seguro Activo</span>
-           </div>
-           <p className="text-[9px] text-slate-500 font-medium leading-tight">FILEHUB Protocol v2.0.4 • Datos Encriptados</p>
+      <div className="p-4 border-t border-white/5 space-y-3 shrink-0 bg-slate-900 dark:bg-slate-950">
+        <div className="flex items-center justify-between px-4 py-2 bg-slate-800/30 rounded-xl border border-white/5">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Tema Oscuro</span>
+          <button
+            onClick={() => setDarkMode?.(!darkMode)}
+            className={`w-10 h-5 rounded-full relative transition-colors ${darkMode ? 'bg-indigo-600' : 'bg-slate-700'}`}
+          >
+            <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${darkMode ? 'left-6' : 'left-1'}`} />
+          </button>
         </div>
+
+        <button
+          onClick={onLogout}
+          className="w-full flex items-center gap-4 px-4 py-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all group"
+        >
+          <LogOut size={18} />
+          <span className="text-xs font-black uppercase tracking-widest">Cerrar Sesión</span>
+        </button>
       </div>
     </div>
   );

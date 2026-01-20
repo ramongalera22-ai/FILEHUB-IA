@@ -1,5 +1,5 @@
 
-import { Expense, Project, Task, Goal, ShoppingItem, ShoppingOrder, CalendarEvent, Idea, OllamaConfig, OpenNotebookConfig, Debt, Investment, Presentation, SharedExpense, SharedDebt, WeightEntry, NutritionPlan } from '../types';
+import { Expense, Project, Task, Goal, ShoppingItem, ShoppingOrder, CalendarEvent, Idea, OllamaConfig, OpenNotebookConfig, Debt, Investment, Presentation, SharedExpense, SharedDebt, WeightEntry, NutritionPlan, Trip, StoredFile, WorkDocument } from '../types';
 
 const DB_NAME = 'FileHubDB';
 const DB_VERSION = 2; // Incremented version
@@ -20,6 +20,10 @@ export interface AppDatabase {
   sharedDebts: SharedDebt[];
   weightEntries: WeightEntry[];
   nutritionPlans: NutritionPlan[];
+  trips: Trip[];
+  files: StoredFile[];
+  privateNotes?: string; // Current notebook content
+  privateDocuments?: WorkDocument[]; // Saved notebook documents
   ollamaConfig?: OllamaConfig;
   openNotebookConfig?: OpenNotebookConfig; // Added
 }

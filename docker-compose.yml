@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  filehub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: filehub-app
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - VITE_OLLAMA_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - filehub-network
+
+networks:
+  filehub-network:
+    driver: bridge

@@ -36,16 +36,23 @@ export interface Debt {
   dueDate: string;
   category: string;
   interestRate?: number;
+  creditor?: string; // Person or entity owed
+  status: 'pending' | 'paid' | 'overdue';
+  notes?: string;
 }
 
 export interface Investment {
   id: string;
   name: string;
-  amount: number;
-  date: string;
-  status: 'current' | 'future';
-  category: string;
+  amount: number; // Purchase Amount
+  date: string; // Purchase Date
+  status: 'active' | 'sold' | 'watched';
+  category: 'stock' | 'crypto' | 'real_estate' | 'bond' | 'other';
   expectedReturn?: number;
+  currentValue?: number;
+  purchasePrice?: number; // per unit if applicable
+  quantity?: number; // units held
+  notes?: string;
 }
 
 export interface Project {
@@ -81,12 +88,32 @@ export interface OpenNotebookConfig {
   baseUrl: string;
   collectionName: string;
   isActive: boolean;
+  apiKey?: string;
+}
+
+export interface AnythingLLMConfig {
+  baseUrl: string;
+  apiKey: string;
+  workspaceSlug?: string;
+}
+
+export interface OpenWebUIConfig {
+  baseUrl: string;
+  isActive: boolean;
+}
+
+export interface LocalLlmConfig {
+  baseUrl: string;
+  model: string;
+  isActive: boolean;
+  apiKey?: string;
 }
 
 export interface ChatMessage {
   role: 'user' | 'ai';
   content: string;
   timestamp: number;
+  engine?: string;
 }
 
 export interface WorkDocument {
@@ -116,6 +143,7 @@ export interface Task {
   dependsOn?: string;
   isRecurring?: boolean;
   frequency?: 'daily' | 'weekly' | 'monthly';
+  partnership_id?: string;
 }
 
 export interface Course {
@@ -138,6 +166,8 @@ export interface Goal {
   unit: string;
   category: 'financial' | 'personal' | 'career' | 'health';
   status: 'active' | 'achieved' | 'paused';
+  milestones?: { date: string; value: number; note: string }[];
+  aiVisualizationUrl?: string; // URL to a generated chart/roadmap image or PDF
 }
 
 export interface Presentation {
@@ -159,6 +189,22 @@ export interface Trip {
   budget: number;
   expenses: Expense[];
   notebookUrl?: string;
+  aiItinerary?: string; // Markdown generated itinerary
+  whiteboardData?: string;
+  bookings?: { type: 'flight' | 'hotel' | 'train'; ref: string; fileUrl?: string }[];
+  notes?: string;
+  partnership_id?: string;
+}
+
+export interface SharedDocument {
+  id: string;
+  partnership_id: string;
+  user_id: string;
+  name: string;
+  url: string;
+  type: string;
+  size: number;
+  created_at: string;
 }
 
 export interface Workout {
@@ -212,7 +258,7 @@ export interface ShoppingOrder {
 export interface Meal {
   type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
   title: string;
-  ingredients: string[]; 
+  ingredients: string[];
 }
 
 export interface DayPlan {
@@ -251,7 +297,7 @@ export interface StoredFile {
   type: string;
   size: number;
   date: string;
-  category: 'document' | 'image' | 'video' | 'audio' | 'other';
+  category: 'document' | 'image' | 'video' | 'audio' | 'spreadsheet' | 'presentation' | 'other';
   tags: string[];
   url?: string;
   aiSummary?: string; // Legacy simple summary
@@ -274,10 +320,41 @@ export interface NutritionPlan {
   id: string;
   name: string;
   uploadDate: string;
-  type: 'pdf' | 'image';
-  url: string;
+  type: 'pdf' | 'image' | 'ai-generated'; // Added ai-generated
+  url?: string;
   description?: string;
   meals?: Meal[];
+  inventoryContext?: string; // User provided inventory for generation
 }
 
-export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files';
+export interface Partnership {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  partner_email?: string;
+}
+
+export interface SharedHubActivity {
+  id: string;
+  partnership_id: string;
+  user_id: string;
+  type: 'task' | 'note' | 'calendar' | 'expense';
+  action: 'created' | 'updated' | 'deleted';
+  content: any;
+  created_at: string;
+}
+
+export interface HubSection {
+  id: string;
+  partnership_id: string;
+  name: 'PISO BARCELONA' | 'ACTIVIDADES' | 'COMPRAS' | 'WORKHUB';
+  notebookUrl?: string;
+  openNotebookUrl?: string;
+  boardContent?: string; // Synchronized writing board content
+  whiteboardData?: string;
+  documents?: SharedDocument[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files' | 'shared-hub' | 'piso' | 'activities' | 'whiteboard' | 'notebook';
