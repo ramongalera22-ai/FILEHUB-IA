@@ -159,7 +159,18 @@ const PartnerHubView: React.FC<PartnerHubViewProps> = ({
                 })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `partnership_id=eq.${partnership.id}` },
                 (payload) => {
-                    // Handle task updates
+                    if (payload.eventType === 'INSERT') {
+                        const newTask = payload.new as Task;
+                        setSharedTasks(prev => {
+                            if (prev.find(t => t.id === newTask.id)) return prev;
+                            return [newTask, ...prev];
+                        });
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updatedTask = payload.new as Task;
+                        setSharedTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+                    } else if (payload.eventType === 'DELETE') {
+                        setSharedTasks(prev => prev.filter(t => t.id !== payload.old.id));
+                    }
                 })
             .subscribe();
 
@@ -190,7 +201,8 @@ const PartnerHubView: React.FC<PartnerHubViewProps> = ({
 
         const { error } = await supabase.from('tasks').insert(newTask);
         if (!error) {
-            setSharedTasks([newTask as any, ...sharedTasks]);
+            // Optimistic update
+            setSharedTasks(prev => [newTask as any, ...prev]);
             setNewTaskTitle('');
 
             // Log activity
@@ -201,6 +213,28 @@ const PartnerHubView: React.FC<PartnerHubViewProps> = ({
                 action: 'created',
                 content: { title: newTaskTitle }
             });
+        }
+    };
+
+    const handleDeleteTask = async (id: string) => {
+        if (!confirm('¿Eliminar esta tarea?')) return;
+
+        // Optimistic update
+        setSharedTasks(prev => prev.filter(t => t.id !== id));
+
+        const { error } = await supabase.from('tasks').delete().eq('id', id);
+
+        if (!error) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user && partnership) {
+                await supabase.from('shared_hub_activities').insert({
+                    partnership_id: partnership.id,
+                    user_id: user.id,
+                    type: 'task',
+                    action: 'deleted',
+                    content: { title: 'Tarea eliminada' }
+                });
+            }
         }
     };
 
@@ -546,7 +580,13 @@ const PartnerHubView: React.FC<PartnerHubViewProps> = ({
         const { data: { user } } = await supabase.auth.getUser();
 
         try {
-            const fileName = `Nota_${sectionName}_${new Date().toISOString().split('T')[0]}.txt`;
+            // Extract first phrase/line for title
+            const firstLine = content.split('\n')[0].trim();
+            // Sanitize: take first 50 chars, remove special file chars for filename
+            const safeTitle = firstLine.slice(0, 50).replace(/[^a-zA-Z0-9\s-_áéíóúÁÉÍÓÚñÑ]/g, '').trim();
+            const cleanTitle = safeTitle || `Nota_${sectionName}`;
+
+            const fileName = `${cleanTitle.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.txt`;
             const blob = new Blob([content], { type: 'text/plain' });
 
             const storagePath = `partnerships/${partnership.id}/${Math.random()}_${fileName}`;
@@ -561,7 +601,7 @@ const PartnerHubView: React.FC<PartnerHubViewProps> = ({
                 .from('files')
                 .getPublicUrl(storagePath);
 
-            const documentName = `[${sectionName}] ${fileName}`;
+            const documentName = `[${sectionName}] ${safeTitle || 'Nota sin título'}`;
 
             const { data, error: dbError } = await supabase
                 .from('shared_documents')
@@ -1168,8 +1208,8 @@ const PartnerHubView: React.FC<PartnerHubViewProps> = ({
                                                 ).map(activity => (
                                                     <div key={activity.id} className="py-6 flex items-start gap-4 group">
                                                         <div className={`p-3 rounded-xl shrink-0 ${activity.type === 'task' ? 'bg-blue-50 text-blue-600' :
-                                                                activity.type === 'file' ? 'bg-emerald-50 text-emerald-600' :
-                                                                    'bg-amber-50 text-amber-600'
+                                                            activity.type === 'file' ? 'bg-emerald-50 text-emerald-600' :
+                                                                'bg-amber-50 text-amber-600'
                                                             }`}>
                                                             {activity.type === 'task' ? <CheckSquare size={16} /> :
                                                                 activity.type === 'file' ? <FileText size={16} /> :
@@ -1231,7 +1271,7 @@ const PartnerHubView: React.FC<PartnerHubViewProps> = ({
                                                     </button>
                                                     <h4 className={`text-xl font-black text-slate-900 dark:text-white ${task.completed ? 'line-through opacity-40' : ''}`}>{task.title}</h4>
                                                 </div>
-                                                <button className="text-slate-200 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={20} /></button>
+                                                <button onClick={() => handleDeleteTask(task.id)} className="text-slate-200 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={20} /></button>
                                             </div>
                                         ))}
                                         {sharedTasks.length === 0 && (
@@ -1819,14 +1859,14 @@ const PartnerHubView: React.FC<PartnerHubViewProps> = ({
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0"><CheckSquare size={20} /></div>
                                 <div>
-                                    <p className="text-3xl font-black">12</p>
+                                    <p className="text-3xl font-black">{sharedTasks.filter(t => t.completed).length}</p>
                                     <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Tareas Completadas</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0"><Plane size={20} /></div>
                                 <div>
-                                    <p className="text-3xl font-black">1</p>
+                                    <p className="text-3xl font-black">{trips.length}</p>
                                     <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Viaje Planeado</p>
                                 </div>
                             </div>

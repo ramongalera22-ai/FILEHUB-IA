@@ -357,4 +357,4 @@ export interface HubSection {
   updated_at?: string;
 }
 
-export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files' | 'shared-hub' | 'piso' | 'activities' | 'whiteboard' | 'notebook';
+export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files' | 'shared-hub' | 'piso' | 'activities' | 'whiteboard' | 'notebook' | 'openwebui';
