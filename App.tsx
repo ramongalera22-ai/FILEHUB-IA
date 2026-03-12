@@ -27,6 +27,16 @@ import AuthView from './components/AuthView';
 import FilesView from './components/FilesView';
 import NotebookView from './components/NotebookView';
 import FilePreviewModal from './components/FilePreviewModal';
+import WhatsAppBotView from './components/WhatsAppBotView';
+import JobsView from './components/JobsView';
+import RealEstateView from './components/RealEstateView';
+import WhatsAppPisosView from './components/WhatsAppPisosView';
+import CarPlayView from './components/CarPlayView';
+import NewsView from './components/NewsView';
+import SupermarketsView from './components/SupermarketsView';
+import OpenWebUIView from './components/OpenWebUIView';
+import MonthlyAnalysisView from './components/MonthlyAnalysisView';
+import NotebookAIView from './components/NotebookAIView';
 import { processUniversalDocument } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 import { dbService } from './services/databaseService';
@@ -1232,6 +1242,15 @@ const App: React.FC = () => {
         />
       );
       case 'courses': return <LearningView />;
+      case 'piso': return <RealEstateView />;
+      case 'whatsapp-pisos': return <WhatsAppPisosView />;
+      case 'jobs': return <JobsView />;
+      case 'whatsapp-bot': return <WhatsAppBotView />;
+      case 'car-mode': return <CarPlayView />;
+      case 'news': return <NewsView />;
+      case 'supermarkets': return <SupermarketsView />;
+      case 'openwebui': return <OpenWebUIView url={openWebUIConfig.baseUrl} />;
+      case 'notebook-ai': return <NotebookAIView />;
       default: return (
         <Dashboard
           expenses={expenses}

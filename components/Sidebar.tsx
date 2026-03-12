@@ -28,7 +28,13 @@ import {
   Home,
   Activity,
   Edit3,
-  BookOpen
+  BookOpen,
+  Briefcase,
+  Phone,
+  Car,
+  Newspaper,
+  ShoppingCart,
+  MessageSquare
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -57,7 +63,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'files', label: 'Archivos', icon: FolderOpen },
     { id: 'expenses', label: 'Gastos y Deuda', icon: LibraryBig },
     { id: 'shared-hub', label: 'Dashboard Hub', icon: Heart },
-    { id: 'piso', label: 'Piso BCN', icon: Home },
+    { id: 'piso', label: 'Pisos', icon: Home },
+    { id: 'whatsapp-pisos', label: 'Pisos Bot WA', icon: Home },
+    { id: 'jobs', label: 'Ofertas Empleo', icon: Briefcase },
     { id: 'activities', label: 'Actividades', icon: Activity },
     { id: 'economy', label: 'Análisis Mensual', icon: BarChart3 },
     { id: 'work', label: 'Work Hub', icon: Monitor },
@@ -68,12 +76,17 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'fitness', label: 'Entrenamiento', icon: Dumbbell },
     { id: 'nutrition', label: 'Nutrición', icon: Utensils },
     { id: 'calendar', label: 'Calendario IA', icon: Calendar },
+    { id: 'news', label: 'Kiosco Digital', icon: Newspaper },
     { id: 'trips', label: 'Expediciones', icon: Plane },
     { id: 'shopping', label: 'Compras', icon: ShoppingBag },
+    { id: 'supermarkets', label: 'Supermercados', icon: ShoppingCart },
     { id: 'ideas', label: 'Ideas Lab', icon: Lightbulb },
     { id: 'ai-hub', label: 'Centro IA Híbrida', icon: Cpu },
+    { id: 'openwebui', label: 'Open WebUI', icon: MessageSquare },
+    { id: 'whatsapp-bot', label: 'WhatsApp Bot', icon: Phone },
     { id: 'qr', label: 'Acceso Móvil', icon: QrCode },
-    { id: 'settings', label: 'Configuración', icon: Settings }
+    { id: 'settings', label: 'Configuración', icon: Settings },
+    { id: 'car-mode', label: 'Modo Coche', icon: Car }
   ];
 
   return (
