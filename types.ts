@@ -357,7 +357,26 @@ export interface HubSection {
   updated_at?: string;
 }
 
-export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files' | 'shared-hub' | 'piso' | 'jobs' | 'activities' | 'whiteboard' | 'notebook' | 'openwebui' | 'car-mode' | 'news' | 'supermarkets' | 'whatsapp-bot' | 'whatsapp-pisos' | 'vip-tasks' | 'shifts';
+export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files' | 'shared-hub' | 'piso' | 'jobs' | 'activities' | 'whiteboard' | 'notebook' | 'openwebui' | 'car-mode' | 'news' | 'supermarkets' | 'whatsapp-bot' | 'whatsapp-pisos' | 'vip-tasks' | 'shifts' | 'work-planner' | 'habits' | 'budget-alerts';
+
+export interface BudgetAlert {
+  id: string;
+  category: string;
+  limit: number;
+  period: 'weekly' | 'monthly';
+  notify: boolean;
+}
+
+export interface Habit {
+  id: string;
+  title: string;
+  emoji: string;
+  color: string;
+  goal: number;
+  created_at: string;
+  completions: string[];
+  user_id?: string;
+}
 
 export interface VipTask {
   id: string;

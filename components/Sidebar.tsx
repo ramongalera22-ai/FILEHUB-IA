@@ -1,42 +1,12 @@
-
 import React from 'react';
 import { ViewType } from '../types';
 import {
-  LayoutDashboard,
-  Calendar,
-  Monitor,
-  CheckSquare,
-  LibraryBig,
-  ShoppingBag,
-  Cpu,
-  LogOut,
-  Users,
-  Heart,
-  X,
-  Lightbulb,
-  Zap,
-  Target,
-  Plane,
-  BarChart3,
-  QrCode,
-  Settings,
-  FolderOpen,
-  Dumbbell,
-  Utensils,
-  Sun,
-  Moon,
-  Home,
-  Activity,
-  Edit3,
-  BookOpen,
-  Briefcase,
-  Phone,
-  Car,
-  Newspaper,
-  ShoppingCart,
-  MessageSquare,
-  Star,
-  Shield
+  LayoutDashboard, Calendar, Monitor, CheckSquare, LibraryBig,
+  ShoppingBag, Cpu, LogOut, Heart, X, Lightbulb, Zap, Target,
+  Plane, BarChart3, QrCode, Settings, FolderOpen, Dumbbell,
+  Utensils, Home, Activity, Edit3, BookOpen, Briefcase, Phone,
+  Car, Newspaper, ShoppingCart, MessageSquare, Star, Shield,
+  Brain, Flame
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -51,46 +21,42 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
-  currentView,
-  onViewChange,
-  onLogout,
-  isOpen,
-  toggleSidebar,
-  currentUser,
-  darkMode,
-  setDarkMode
+  currentView, onViewChange, onLogout, isOpen, toggleSidebar, currentUser, darkMode, setDarkMode
 }) => {
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'vip-tasks', label: '⭐ Tareas VIP', icon: Star },
-    { id: 'shifts', label: '🛡️ Guardias', icon: Shield },
-    { id: 'files', label: 'Archivos', icon: FolderOpen },
-    { id: 'expenses', label: 'Gastos y Deuda', icon: LibraryBig },
-    { id: 'shared-hub', label: 'Dashboard Hub', icon: Heart },
-    { id: 'piso', label: 'Pisos', icon: Home },
-    { id: 'whatsapp-pisos', label: 'Pisos Bot WA', icon: Home },
-    { id: 'jobs', label: 'Ofertas Empleo', icon: Briefcase },
-    { id: 'activities', label: 'Actividades', icon: Activity },
-    { id: 'economy', label: 'Análisis Mensual', icon: BarChart3 },
-    { id: 'work', label: 'Work Hub', icon: Monitor },
-    { id: 'notebook', label: 'Cuaderno Privado', icon: BookOpen },
-    { id: 'tasks', label: 'Tareas y Brain', icon: CheckSquare },
-    { id: 'whiteboard', label: 'Pizarra Brainstorm', icon: Edit3 },
-    { id: 'goals', label: 'Visiómetro Metas', icon: Target },
-    { id: 'fitness', label: 'Entrenamiento', icon: Dumbbell },
-    { id: 'nutrition', label: 'Nutrición', icon: Utensils },
-    { id: 'calendar', label: 'Calendario IA', icon: Calendar },
-    { id: 'news', label: 'Kiosco Digital', icon: Newspaper },
-    { id: 'trips', label: 'Expediciones', icon: Plane },
-    { id: 'shopping', label: 'Compras', icon: ShoppingBag },
-    { id: 'supermarkets', label: 'Supermercados', icon: ShoppingCart },
-    { id: 'ideas', label: 'Ideas Lab', icon: Lightbulb },
-    { id: 'ai-hub', label: 'Centro IA Híbrida', icon: Cpu },
-    { id: 'openwebui', label: 'Open WebUI', icon: MessageSquare },
-    { id: 'whatsapp-bot', label: 'WhatsApp Bot', icon: Phone },
-    { id: 'qr', label: 'Acceso Móvil', icon: QrCode },
-    { id: 'settings', label: 'Configuración', icon: Settings },
-    { id: 'car-mode', label: 'Modo Coche', icon: Car }
+    { id: 'dashboard',      label: 'Dashboard',            icon: LayoutDashboard },
+    { id: 'vip-tasks',      label: '⭐ Tareas VIP',         icon: Star },
+    { id: 'work-planner',   label: '🧠 Planificador IA',    icon: Brain },
+    { id: 'habits',         label: '🔥 Hábitos',            icon: Flame },
+    { id: 'shifts',         label: '🛡️ Guardias',           icon: Shield },
+    { id: 'budget-alerts',  label: '💰 Alertas Presupuesto',icon: Target },
+    { id: 'files',          label: 'Archivos',              icon: FolderOpen },
+    { id: 'expenses',       label: 'Gastos y Deuda',        icon: LibraryBig },
+    { id: 'shared-hub',     label: 'Dashboard Hub',         icon: Heart },
+    { id: 'piso',           label: 'Pisos',                 icon: Home },
+    { id: 'whatsapp-pisos', label: 'Pisos Bot WA',          icon: Home },
+    { id: 'jobs',           label: 'Ofertas Empleo',        icon: Briefcase },
+    { id: 'activities',     label: 'Actividades',           icon: Activity },
+    { id: 'economy',        label: 'Análisis Mensual',      icon: BarChart3 },
+    { id: 'work',           label: 'Work Hub',              icon: Monitor },
+    { id: 'notebook',       label: 'Cuaderno Privado',      icon: BookOpen },
+    { id: 'tasks',          label: 'Tareas y Brain',        icon: CheckSquare },
+    { id: 'whiteboard',     label: 'Pizarra Brainstorm',    icon: Edit3 },
+    { id: 'goals',          label: 'Visiómetro Metas',      icon: Target },
+    { id: 'fitness',        label: 'Entrenamiento',         icon: Dumbbell },
+    { id: 'nutrition',      label: 'Nutrición',             icon: Utensils },
+    { id: 'calendar',       label: 'Calendario IA',         icon: Calendar },
+    { id: 'news',           label: 'Kiosco Digital',        icon: Newspaper },
+    { id: 'trips',          label: 'Expediciones',          icon: Plane },
+    { id: 'shopping',       label: 'Compras',               icon: ShoppingBag },
+    { id: 'supermarkets',   label: 'Supermercados',         icon: ShoppingCart },
+    { id: 'ideas',          label: 'Ideas Lab',             icon: Lightbulb },
+    { id: 'ai-hub',         label: 'Centro IA Híbrida',     icon: Cpu },
+    { id: 'openwebui',      label: 'Open WebUI',            icon: MessageSquare },
+    { id: 'whatsapp-bot',   label: 'WhatsApp Bot',          icon: Phone },
+    { id: 'qr',             label: 'Acceso Móvil',          icon: QrCode },
+    { id: 'settings',       label: 'Configuración',         icon: Settings },
+    { id: 'car-mode',       label: 'Modo Coche',            icon: Car },
   ];
 
   return (
@@ -102,12 +68,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <h1 className="text-xl font-black text-white tracking-widest">FILEHUB</h1>
         </div>
-
-        {/* Mobile Close Button */}
-        <button
-          onClick={toggleSidebar}
-          className="lg:hidden p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-        >
+        <button onClick={toggleSidebar} className="lg:hidden p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
           <X size={20} />
         </button>
       </div>
@@ -116,15 +77,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
-
           return (
             <button
               key={item.id}
               onClick={() => onViewChange(item.id as ViewType)}
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${isActive
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20'
-                : 'hover:bg-slate-800/50 hover:text-white'
-                }`}
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${
+                isActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800/50 hover:text-white'
+              }`}
             >
               <Icon size={18} className={isActive ? 'text-white' : 'text-slate-500 group-hover:text-indigo-400'} />
               <span className={`text-[13px] font-bold tracking-tight ${isActive ? 'font-black' : ''}`}>{item.label}</span>
@@ -143,7 +102,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${darkMode ? 'left-6' : 'left-1'}`} />
           </button>
         </div>
-
         <button
           onClick={onLogout}
           className="w-full flex items-center gap-4 px-4 py-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all group"

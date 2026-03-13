@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, Trash2, Shield,
-  Clock, Sun, Moon, Sunrise, AlertCircle, Download
+  Clock, Sun, Moon, Sunrise, AlertCircle, Download, Euro, BarChart3
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { CalendarEvent } from '../types';
+import { exportShiftsToICal } from '../services/notificationService';
 
 interface ShiftsCalendarViewProps {
   events: CalendarEvent[];
@@ -33,6 +34,16 @@ const ShiftsCalendarView: React.FC<ShiftsCalendarViewProps> = ({ events, onAddEv
   const [selectedShiftType, setSelectedShiftType] = useState('guardia');
   const [shiftNote, setShiftNote] = useState('');
   const [showStats, setShowStats] = useState(false);
+
+  // Pay rates per shift type (configurable in state)
+  const [payRates] = useState<Record<string, number>>({
+    guardia: 320,   // €/shift 24h
+    mañana: 85,
+    tarde: 95,
+    noche: 120,
+    inferior: 65,
+    libre: 0,
+  });
 
   // Only show work/shift events (guardia, mañana, tarde, noche, inferior, libre, + type=work)
   const shiftKeywords = SHIFT_TYPES.map(s => s.id.toLowerCase());
@@ -117,6 +128,10 @@ const ShiftsCalendarView: React.FC<ShiftsCalendarViewProps> = ({ events, onAddEv
           className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:border-red-400/50 transition-all">
           <Clock size={14} /> {showStats ? 'Ver calendario' : 'Ver estadísticas'}
         </button>
+        <button onClick={() => exportShiftsToICal(events)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:border-red-400/50 transition-all">
+          <Download size={14} /> Exportar .ics
+        </button>
       </div>
 
       {/* Legend */}
@@ -143,7 +158,25 @@ const ShiftsCalendarView: React.FC<ShiftsCalendarViewProps> = ({ events, onAddEv
           ))}
           <div className="col-span-2 sm:col-span-3 bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-500/5 dark:to-rose-500/5 rounded-2xl border border-red-200 dark:border-red-800 p-5">
             <p className="font-black text-red-700 dark:text-red-400 mb-2">Total {MONTHS_ES[month]}</p>
-            <p className="text-4xl font-black text-slate-800 dark:text-white">{monthEvents.length} <span className="text-lg text-slate-400 font-medium">turnos registrados</span></p>
+            <div className="flex flex-wrap gap-6">
+              <div>
+                <p className="text-4xl font-black text-slate-800 dark:text-white">{monthEvents.length} <span className="text-lg text-slate-400 font-medium">turnos</span></p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1"><Euro size={11} /> Retribución estimada</p>
+                <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
+                  €{SHIFT_TYPES.reduce((total, s) => total + (statsMap[s.id] || 0) * (payRates[s.id] || 0), 0).toLocaleString()}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">Basado en tarifas configuradas · {MONTHS_ES[month]}</p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {SHIFT_TYPES.filter(s => statsMap[s.id] > 0 && payRates[s.id] > 0).map(s => (
+                <span key={s.id} className={`text-xs font-bold px-2.5 py-1 rounded-xl ${s.bg} ${s.textColor}`}>
+                  {s.emoji} {statsMap[s.id]}× €{payRates[s.id]} = €{(statsMap[s.id] * payRates[s.id]).toLocaleString()}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       ) : (

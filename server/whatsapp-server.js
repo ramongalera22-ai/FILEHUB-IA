@@ -139,6 +139,73 @@ wss.on('connection', (ws, req) => {
                 addToHistory(outMsg);
                 broadcast({ type: 'message', message: outMsg });
             }
+            // ── SCRAPING COMMANDS ─────────────────────────────────────────
+            if (msg.type === 'scrape_pisos') {
+                const { city = 'murcia', maxItems = 15, propertyType = 'alquiler', maxPrice } = msg;
+                ws.send(JSON.stringify({ type: 'scrape_status', target: 'pisos', status: 'searching', message: `🔍 Buscando pisos en ${city}...` }));
+                try {
+                    let url = `https://www.idealista.com/${propertyType}-viviendas/${city.toLowerCase()}-${city.toLowerCase()}/`;
+                    if (maxPrice) url += `hasta-${maxPrice}-euros/`;
+                    // Try direct fetch first (no Apify needed for basic search)
+                    const resp = await fetch(url, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept-Language': 'es-ES,es;q=0.9' }
+                    });
+                    const html = await resp.text();
+                    // Basic extraction
+                    const items = [];
+                    const titleReg = /class="item-link"[^>]*href="([^"]+)"[^>]*>([^<]+)</g;
+                    const priceReg = /class="item-price[^"]*"[^>]*>([^<]+)</g;
+                    let tm, pm;
+                    while ((tm = titleReg.exec(html)) !== null && items.length < maxItems) {
+                        pm = priceReg.exec(html);
+                        items.push({
+                            id: `scrape_piso_${Date.now()}_${items.length}`,
+                            title: tm[2].trim(),
+                            url: 'https://www.idealista.com' + tm[1],
+                            price: pm ? pm[1].trim() : '—',
+                            location: city,
+                            description: '',
+                            source: 'idealista',
+                            timestamp: Date.now()
+                        });
+                    }
+                    ws.send(JSON.stringify({ type: 'scrape_results', target: 'pisos', items, count: items.length }));
+                } catch (err) {
+                    ws.send(JSON.stringify({ type: 'scrape_status', target: 'pisos', status: 'error', message: `Error: ${err.message}` }));
+                }
+            }
+            if (msg.type === 'scrape_jobs') {
+                const { query = 'enfermero', city = 'murcia', maxItems = 15 } = msg;
+                ws.send(JSON.stringify({ type: 'scrape_status', target: 'jobs', status: 'searching', message: `🔍 Buscando "${query}" en ${city}...` }));
+                try {
+                    const url = `https://www.infojobs.net/jobsearch/search-results/list.xhtml?keyword=${encodeURIComponent(query)}&province=${encodeURIComponent(city)}`;
+                    const resp = await fetch(url, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept-Language': 'es-ES,es;q=0.9' }
+                    });
+                    const html = await resp.text();
+                    const items = [];
+                    const offerReg = /href="(https:\/\/www\.infojobs\.net\/[^"]+\/oferta-trabajo[^"]+)"[^>]*>([^<]+)</g;
+                    const salaryReg = /salary[^>]*>([^<]+)</g;
+                    let om, sm;
+                    while ((om = offerReg.exec(html)) !== null && items.length < maxItems) {
+                        sm = salaryReg.exec(html);
+                        items.push({
+                            id: `scrape_job_${Date.now()}_${items.length}`,
+                            title: om[2].trim(),
+                            url: om[1],
+                            company: '—',
+                            location: city,
+                            salary: sm ? sm[1].trim() : 'A consultar',
+                            description: '',
+                            source: 'infojobs',
+                            timestamp: Date.now()
+                        });
+                    }
+                    ws.send(JSON.stringify({ type: 'scrape_results', target: 'jobs', items, count: items.length }));
+                } catch (err) {
+                    ws.send(JSON.stringify({ type: 'scrape_status', target: 'jobs', status: 'error', message: `Error: ${err.message}` }));
+                }
+            }
         } catch (err) { console.error('WS msg error:', err.message); }
     });
 });

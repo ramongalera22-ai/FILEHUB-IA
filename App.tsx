@@ -30,6 +30,9 @@ import FilePreviewModal from './components/FilePreviewModal';
 import WhatsAppBotView from './components/WhatsAppBotView';
 import VipTasksView from './components/VipTasksView';
 import ShiftsCalendarView from './components/ShiftsCalendarView';
+import WorkPlannerView from './components/WorkPlannerView';
+import HabitsView from './components/HabitsView';
+import BudgetAlertsView from './components/BudgetAlertsView';
 import JobsView from './components/JobsView';
 import RealEstateView from './components/RealEstateView';
 import WhatsAppPisosView from './components/WhatsAppPisosView';
@@ -1262,6 +1265,18 @@ const App: React.FC = () => {
           session={session}
         />
       );
+      case 'work-planner': return (
+        <WorkPlannerView
+          tasks={tasks}
+          events={calendarEvents}
+          onAddTask={handleAddTask}
+          onToggleTask={handleToggleTask}
+          onDeleteTask={handleDeleteTask}
+          session={session}
+        />
+      );
+      case 'habits': return <HabitsView session={session} />;
+      case 'budget-alerts': return <BudgetAlertsView expenses={expenses} session={session} />;
       default: return (
         <Dashboard
           expenses={expenses}
