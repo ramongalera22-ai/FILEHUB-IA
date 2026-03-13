@@ -4,7 +4,7 @@ import {
     Briefcase, MapPin, Building2, Euro, Clock, Send,
     RefreshCw, Mail, Trash2, Wifi, WifiOff, Sparkles,
     CheckCircle2, AlertTriangle, Settings, Eye, Users, GraduationCap,
-    Search, Globe
+    Search, Globe, ExternalLink, MessageSquare
 } from 'lucide-react';
 
 // ============ TYPES ============
@@ -20,6 +20,9 @@ interface JobOffer {
     timestamp: number;
     source: 'whatsapp' | 'manual';
     sent: boolean;
+    url?: string;          // enlace directo a la oferta
+    senderPhone?: string;  // para responder por WA
+    senderName?: string;
 }
 
 interface EmailConfig {
@@ -34,7 +37,7 @@ const STORAGE_KEY = 'filehub_jobs_data';
 const EMAIL_CONFIG_KEY = 'filehub_email_config';
 
 // ============ HELPER: Parse job from text ============
-function parseJobFromText(text: string, msgId: string, timestamp: number): JobOffer | null {
+function parseJobFromText(text: string, msgId: string, timestamp: number, senderPhone?: string, senderName?: string): JobOffer | null {
     const t = text.toLowerCase();
 
     const hasJobKeyword = ['oferta', 'puesto', 'empleo', 'trabajo', 'vacante', 'contrato', 'selección', 'candidat'].some(k => t.includes(k));
@@ -47,6 +50,10 @@ function parseJobFromText(text: string, msgId: string, timestamp: number): JobOf
         const match = text.match(regex);
         return match ? match[1].trim().replace(/\*+/g, '').trim() : '';
     };
+
+    // Extract URL/link
+    const urlMatch = text.match(/https?:\/\/[^\s\)>\"]+/);
+    const url = urlMatch ? urlMatch[0] : undefined;
 
     // Extract salary
     const salaryMatch = text.match(/(\d[\d.,]*)\s*€/);
@@ -81,7 +88,10 @@ function parseJobFromText(text: string, msgId: string, timestamp: number): JobOf
         rawText: text,
         timestamp,
         source: 'whatsapp',
-        sent: false
+        sent: false,
+        url,
+        senderPhone,
+        senderName
     };
 }
 
@@ -101,6 +111,7 @@ const JobsView: React.FC = () => {
     const [sendingAll, setSendingAll] = useState(false);
     const [selectedJob, setSelectedJob] = useState<JobOffer | null>(null);
     const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+    const [sendingWaId, setSendingWaId] = useState<string | null>(null);
 
     // Scraping state
     const [isScraping, setIsScraping] = useState(false);
@@ -133,7 +144,7 @@ const JobsView: React.FC = () => {
     // ======== WEBSOCKET ========
     const processMessage = useCallback((msg: any) => {
         if (!msg.body) return;
-        const parsed = parseJobFromText(msg.body, msg.id, msg.timestamp);
+        const parsed = parseJobFromText(msg.body, msg.id, msg.timestamp, msg.from, msg.fromName);
         if (parsed) {
             setJobs(prev => {
                 if (prev.some(j => j.id === parsed.id)) return prev;
@@ -295,6 +306,32 @@ const JobsView: React.FC = () => {
             } else { notify(`Error: ${result.error}`, 'error'); }
         } catch { notify('Error de conexión', 'error'); }
         finally { setSendingAll(false); }
+    };
+
+    const sendWaMessage = async (job: JobOffer) => {
+        if (!job.senderPhone) {
+            notify('No hay número de WhatsApp para esta oferta', 'error');
+            return;
+        }
+        setSendingWaId(job.id);
+        const msg = `Hola, he visto la oferta de trabajo "${job.title}" en ${job.company}. Me gustaría recibir más información. Gracias.`;
+        try {
+            const res = await fetch(`${WA_SERVER}/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: job.senderPhone, message: msg })
+            });
+            const result = await res.json();
+            if (result.success) {
+                notify('✅ Mensaje WhatsApp enviado', 'success');
+            } else {
+                notify(`Error: ${result.error || 'No se pudo enviar'}`, 'error');
+            }
+        } catch {
+            notify('Error de conexión con el servidor WhatsApp', 'error');
+        } finally {
+            setSendingWaId(null);
+        }
     };
 
     const deleteJob = (id: string) => { setJobs(prev => prev.filter(j => j.id !== id)); if (selectedJob?.id === id) setSelectedJob(null); };
@@ -484,6 +521,16 @@ const JobsView: React.FC = () => {
 
                                     <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-3 flex-1 leading-relaxed mb-4">{job.description}</p>
 
+                                    {/* URL visible si existe */}
+                                    {job.url && (
+                                        <a href={job.url} target="_blank" rel="noopener noreferrer"
+                                            className="flex items-center gap-1.5 text-xs font-bold text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 underline underline-offset-2 truncate mb-3 transition-colors"
+                                            onClick={e => e.stopPropagation()}>
+                                            <ExternalLink size={12} className="shrink-0" />
+                                            Ver oferta completa
+                                        </a>
+                                    )}
+
                                     <div className="text-[10px] text-slate-400 flex items-center gap-1 mb-3">
                                         <Clock size={10} />
                                         {new Date(job.timestamp).toLocaleString('es-ES')}
@@ -491,13 +538,41 @@ const JobsView: React.FC = () => {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="px-5 pb-5 flex gap-2">
-                                    <button onClick={() => sendEmail(job)} disabled={sendingEmailId === job.id}
-                                        className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-red-500/10 disabled:opacity-50">
-                                        {sendingEmailId === job.id
-                                            ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                            : <><Mail size={14} /> Gmail</>}
-                                    </button>
+                                <div className="px-5 pb-5 flex gap-2 flex-wrap">
+                                    {/* Botón Aplicar (link externo) */}
+                                    {job.url ? (
+                                        <a href={job.url} target="_blank" rel="noopener noreferrer"
+                                            className="flex-1 min-w-0 flex items-center justify-center gap-1.5 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-indigo-500/20">
+                                            <ExternalLink size={13} /> Aplicar
+                                        </a>
+                                    ) : (
+                                        <button onClick={() => sendEmail(job)} disabled={sendingEmailId === job.id}
+                                            className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-red-500/10 disabled:opacity-50">
+                                            {sendingEmailId === job.id
+                                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                : <><Mail size={14} /> Gmail</>}
+                                        </button>
+                                    )}
+                                    {/* Botón WhatsApp respuesta rápida */}
+                                    {job.senderPhone && (
+                                        <button onClick={() => sendWaMessage(job)} disabled={sendingWaId === job.id}
+                                            title="Responder por WhatsApp"
+                                            className="px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-colors disabled:opacity-50">
+                                            {sendingWaId === job.id
+                                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                : <MessageSquare size={14} className="text-white" />}
+                                        </button>
+                                    )}
+                                    {/* Email si ya hay link (ambas opciones) */}
+                                    {job.url && (
+                                        <button onClick={() => sendEmail(job)} disabled={sendingEmailId === job.id}
+                                            title="Enviar por Gmail"
+                                            className="px-3 py-2.5 bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors disabled:opacity-50">
+                                            {sendingEmailId === job.id
+                                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                : <Mail size={14} className="text-white" />}
+                                        </button>
+                                    )}
                                     <button onClick={() => setSelectedJob(job)}
                                         className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors">
                                         <Eye size={14} className="text-slate-500" />
@@ -521,13 +596,57 @@ const JobsView: React.FC = () => {
                             <h2 className="text-lg font-black text-slate-900 dark:text-white">{selectedJob.title}</h2>
                             <button onClick={() => setSelectedJob(null)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
                         </div>
-                        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl">
+
+                        {/* Meta info */}
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            {selectedJob.company !== 'No especificada' && (
+                                <span className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-lg font-semibold">🏢 {selectedJob.company}</span>
+                            )}
+                            {selectedJob.salary !== 'A consultar' && (
+                                <span className="text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-lg font-semibold">💶 {selectedJob.salary}</span>
+                            )}
+                            {selectedJob.location !== 'No especificada' && (
+                                <span className="text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-lg font-semibold">📍 {selectedJob.location}</span>
+                            )}
+                        </div>
+
+                        {/* URL link */}
+                        {selectedJob.url && (
+                            <a href={selectedJob.url} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-2 text-sm font-bold text-indigo-500 hover:text-indigo-700 underline underline-offset-2 mb-3 transition-colors break-all">
+                                <ExternalLink size={14} className="shrink-0" />
+                                {selectedJob.url}
+                            </a>
+                        )}
+
+                        {/* Raw text */}
+                        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl mb-4">
                             {selectedJob.rawText}
                         </div>
-                        <div className="mt-4 flex gap-2">
+
+                        {/* Sender info */}
+                        {selectedJob.senderPhone && (
+                            <p className="text-xs text-slate-400 mb-3">
+                                📱 Enviado por: <span className="font-semibold text-slate-600 dark:text-slate-300">{selectedJob.senderName || selectedJob.senderPhone}</span>
+                            </p>
+                        )}
+
+                        <div className="flex gap-2 flex-wrap">
+                            {selectedJob.url && (
+                                <a href={selectedJob.url} target="_blank" rel="noopener noreferrer"
+                                    className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 text-white font-bold py-3 rounded-xl transition-colors">
+                                    <ExternalLink size={16} /> Ver oferta
+                                </a>
+                            )}
+                            {selectedJob.senderPhone && (
+                                <button onClick={() => { sendWaMessage(selectedJob); setSelectedJob(null); }}
+                                    className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition-colors">
+                                    <MessageSquare size={16} /> Responder WA
+                                </button>
+                            )}
                             <button onClick={() => { sendEmail(selectedJob); setSelectedJob(null); }}
                                 className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 text-white font-bold py-3 rounded-xl transition-colors">
-                                <Mail size={16} /> Enviar a Gmail
+                                <Mail size={16} /> Gmail
                             </button>
                         </div>
                     </div>

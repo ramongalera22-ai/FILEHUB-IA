@@ -98,6 +98,10 @@ Si te preguntan algo que no sabes, sugiere usar la webapp de FileHub.`
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectDelayRef = useRef<number>(3000);
+    const reconnectAttemptsRef = useRef<number>(0);
+    // Ref so WS onmessage always has fresh handler (avoids stale closure)
+    const handleIncomingMessageRef = useRef<(msg: WAMessage, silent?: boolean) => void>(() => {});
 
     // ========== PERSIST ==========
     useEffect(() => {
@@ -121,24 +125,69 @@ Si te preguntan algo que no sabes, sugiere usar la webapp de FileHub.`
         setConnectionLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev.slice(0, 199)]);
     }, []);
 
+    // ========== HANDLE INCOMING MESSAGE ==========
+    const handleIncomingMessage = useCallback((msg: WAMessage, silent = false) => {
+        setConversations(prev => {
+            const contactNumber = msg.type === 'incoming' ? msg.from : msg.to;
+            const contactName = msg.fromName || contactNumber;
+            const existing = prev.find(c => c.contactNumber === contactNumber);
+            if (existing) {
+                return prev.map(c => {
+                    if (c.contactNumber !== contactNumber) return c;
+                    if (c.messages.some(m => m.id === msg.id)) return c;
+                    return {
+                        ...c,
+                        messages: [...c.messages, msg],
+                        lastMessage: msg.body,
+                        lastTimestamp: msg.timestamp,
+                        unreadCount: msg.type === 'incoming' && !silent ? c.unreadCount + 1 : c.unreadCount
+                    };
+                });
+            } else {
+                return [{
+                    contactNumber, contactName,
+                    lastMessage: msg.body, lastTimestamp: msg.timestamp,
+                    unreadCount: msg.type === 'incoming' && !silent ? 1 : 0,
+                    messages: [msg]
+                }, ...prev];
+            }
+        });
+        if (!silent && msg.type === 'incoming') {
+            addLog(`📩 Mensaje de ${msg.fromName || msg.from}: ${msg.body.substring(0, 50)}...`);
+        }
+    }, [addLog]);
+
+    // Keep ref always up to date (avoids stale closure in WS onmessage)
+    useEffect(() => { handleIncomingMessageRef.current = handleIncomingMessage; }, [handleIncomingMessage]);
+
     // ========== WEBSOCKET CONNECTION ==========
     const connectWebSocket = useCallback(() => {
         if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
         try {
             const ws = new WebSocket(WA_WS_URL);
+            let pingInterval: NodeJS.Timeout | null = null;
 
             ws.onopen = () => {
-                console.log('WS conectado al servidor WhatsApp');
                 setServerOnline(true);
                 addLog('🔌 Conectado al servidor WhatsApp');
+                reconnectDelayRef.current = 3000;
+                reconnectAttemptsRef.current = 0;
+                // Send ping every 15s to keep Railway WS alive
+                pingInterval = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'ping' }));
+                    }
+                }, 15000);
             };
 
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-
                     switch (data.type) {
+                        case 'pong':
+                            break; // keepalive ack
+
                         case 'status':
                             setConnectionStatus(data.status);
                             if (data.qr) setQrCode(data.qr);
@@ -152,27 +201,36 @@ Si te preguntan algo que no sabes, sugiere usar la webapp de FileHub.`
                         case 'qr':
                             setQrCode(data.qr);
                             setConnectionStatus('qr_ready');
-                            addLog('📱 Nuevo código QR disponible - escanéalo con WhatsApp');
+                            addLog('📱 Nuevo código QR disponible — escanéalo con WhatsApp');
+                            break;
+
+                        case 'qr_expired':
+                            setQrCode(null);
+                            setConnectionStatus('disconnected');
+                            addLog('⏰ El QR ha expirado. Pulsa "Regenerar QR".');
                             break;
 
                         case 'message':
-                            handleIncomingMessage(data.message);
+                            handleIncomingMessageRef.current(data.message);
                             break;
 
                         case 'history':
                             if (data.messages) {
-                                data.messages.forEach((msg: WAMessage) => handleIncomingMessage(msg, true));
+                                data.messages.forEach((msg: WAMessage) => handleIncomingMessageRef.current(msg, true));
                             }
                             break;
 
                         case 'message_status':
-                            // Update message status
                             setConversations(prev => prev.map(conv => ({
                                 ...conv,
                                 messages: conv.messages.map(m =>
                                     m.id === data.id ? { ...m, status: data.status } : m
                                 )
                             })));
+                            break;
+
+                        case 'error':
+                            addLog(`❌ Error servidor: ${data.message}`);
                             break;
                     }
                 } catch (err) {
@@ -183,20 +241,31 @@ Si te preguntan algo que no sabes, sugiere usar la webapp de FileHub.`
             ws.onclose = () => {
                 setServerOnline(false);
                 wsRef.current = null;
-                // Reconnect after 3s
+                if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
                 if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-                reconnectTimerRef.current = setTimeout(connectWebSocket, 3000);
+                const jitter = Math.random() * 1000;
+                const delay = Math.min(reconnectDelayRef.current + jitter, 60000);
+                reconnectAttemptsRef.current += 1;
+                addLog(`🔄 Desconectado del servidor. Reconectando en ${Math.round(delay / 1000)}s (intento ${reconnectAttemptsRef.current})...`);
+                reconnectTimerRef.current = setTimeout(connectWebSocket, delay);
+                reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 2, 60000);
             };
 
             ws.onerror = () => {
                 setServerOnline(false);
+                if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
             };
 
             wsRef.current = ws;
         } catch (err) {
             setServerOnline(false);
             if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-            reconnectTimerRef.current = setTimeout(connectWebSocket, 5000);
+            const jitter = Math.random() * 1000;
+            const delay = Math.min(reconnectDelayRef.current + jitter, 60000);
+            reconnectAttemptsRef.current += 1;
+            addLog(`⚠️ Error al conectar. Reintentando en ${Math.round(delay / 1000)}s...`);
+            reconnectTimerRef.current = setTimeout(connectWebSocket, delay);
+            reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 2, 60000);
         }
     }, [addLog]);
 
@@ -208,45 +277,6 @@ Si te preguntan algo que no sabes, sugiere usar la webapp de FileHub.`
             if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
         };
     }, [connectWebSocket]);
-
-    // ========== HANDLE INCOMING MESSAGE ==========
-    const handleIncomingMessage = useCallback((msg: WAMessage, silent = false) => {
-        setConversations(prev => {
-            const contactNumber = msg.type === 'incoming' ? msg.from : msg.to;
-            const contactName = msg.fromName || contactNumber;
-            const existing = prev.find(c => c.contactNumber === contactNumber);
-
-            if (existing) {
-                return prev.map(c => {
-                    if (c.contactNumber === contactNumber) {
-                        const alreadyExists = c.messages.some(m => m.id === msg.id);
-                        if (alreadyExists) return c;
-                        return {
-                            ...c,
-                            messages: [...c.messages, msg],
-                            lastMessage: msg.body,
-                            lastTimestamp: msg.timestamp,
-                            unreadCount: msg.type === 'incoming' && !silent ? c.unreadCount + 1 : c.unreadCount
-                        };
-                    }
-                    return c;
-                });
-            } else {
-                return [{
-                    contactNumber,
-                    contactName,
-                    lastMessage: msg.body,
-                    lastTimestamp: msg.timestamp,
-                    unreadCount: msg.type === 'incoming' && !silent ? 1 : 0,
-                    messages: [msg]
-                }, ...prev];
-            }
-        });
-
-        if (!silent && msg.type === 'incoming') {
-            addLog(`📩 Mensaje de ${msg.fromName || msg.from}: ${msg.body.substring(0, 50)}...`);
-        }
-    }, [addLog]);
 
     // ========== AUTO-REPLY WITH AI ==========
     useEffect(() => {

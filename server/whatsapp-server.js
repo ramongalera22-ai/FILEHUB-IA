@@ -1,12 +1,27 @@
 /**
- * FILEHUB - WhatsApp Bot Server v4 (baileys package + fetchLatestWaWebVersion)
- * Servidor WebSocket + REST para conexión de WhatsApp vía QR
+ * FILEHUB - WhatsApp Bot Server v5
+ * Fixes v5:
+ *  - CORS restringido a dominios conocidos
+ *  - WS ping/pong cada 20s (Railway corta conexiones inactivas a los 30s)
+ *  - Baileys keepAliveIntervalMs: 20000 (evita que Railway mate la sesión WA)
+ *  - Reconexión con exponential backoff (3s→6s→12s→24s→60s)
+ *  - Persistencia de mensajes en JSON en disco
+ *  - QR expiry broadcast a los ~115s (QR caduca en 2min)
+ *  - Manejo correcto de sesión corrupta / bad session / loggedOut / connectionReplaced
+ *  - extractBody separado para limpieza
+ *  - Limite de historial en memoria (500 msgs) + guardado periódico
  */
 
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestWaWebVersion } = require('baileys');
+const {
+    makeWASocket,
+    useMultiFileAuthState,
+    DisconnectReason,
+    makeCacheableSignalKeyStore,
+    fetchLatestWaWebVersion
+} = require('baileys');
 const express = require('express');
 const cors = require('cors');
 const { WebSocketServer } = require('ws');
@@ -17,72 +32,157 @@ const fs = require('fs');
 
 // ============ CONFIG ============
 const PORT = process.env.PORT || 3001;
-const AUTH_DIR = process.env.NODE_ENV === 'production' 
-  ? path.join(__dirname, '.whatsapp-auth') 
-  : path.join(__dirname, '..', '.whatsapp-auth');
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+const AUTH_DIR = IS_PROD
+    ? path.join(__dirname, '.whatsapp-auth')
+    : path.join(__dirname, '..', '.whatsapp-auth');
+
+const HISTORY_FILE = IS_PROD
+    ? path.join(__dirname, '.whatsapp-history.json')
+    : path.join(__dirname, '..', '.whatsapp-history.json');
+
+const MAX_HISTORY = 500;
+
+const ALLOWED_ORIGINS = [
+    'https://filehub-ia-pi.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+];
 
 // ============ STATE ============
 let sock = null;
 let qrCodeData = null;
+let qrExpiryTimer = null;
 let connectionStatus = 'disconnected';
 let wsClients = new Set();
 let messageHistory = [];
 let isStarting = false;
 let reconnectAttempts = 0;
-const MAX_RECONNECT = 5;
+let reconnectTimer = null;
+const MAX_RECONNECT = 8;
+
+// ============ LOAD HISTORY ============
+try {
+    if (fs.existsSync(HISTORY_FILE)) {
+        const raw = fs.readFileSync(HISTORY_FILE, 'utf-8');
+        messageHistory = JSON.parse(raw).slice(-MAX_HISTORY);
+        console.log(`📂 Historial cargado: ${messageHistory.length} mensajes`);
+    }
+} catch (e) {
+    console.log('⚠️ No se pudo cargar historial:', e.message);
+    messageHistory = [];
+}
+
+function saveHistory() {
+    try { fs.writeFileSync(HISTORY_FILE, JSON.stringify(messageHistory.slice(-MAX_HISTORY))); }
+    catch (e) { console.error('Error guardando historial:', e.message); }
+}
+setInterval(saveHistory, 30000);
 
 // ============ APP ============
 const app = express();
-app.use(cors());
-app.use(express.json());
+
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (ALLOWED_ORIGINS.some(o => origin.startsWith(o))) return callback(null, true);
+        console.warn(`⚠️ CORS bloqueado: ${origin}`);
+        return callback(new Error('CORS no permitido'), false);
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+}));
+app.use(express.json({ limit: '2mb' }));
+
 const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: '/ws' });
+wss.setMaxListeners(50);
 
 // ============ WEBSOCKET ============
-const wss = new WebSocketServer({ server, path: '/ws' });
-
-wss.on('connection', (ws) => {
-    console.log('📡 Cliente WebSocket conectado');
+wss.on('connection', (ws, req) => {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    console.log(`📡 WS conectado desde ${ip}`);
     wsClients.add(ws);
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
+
     ws.send(JSON.stringify({ type: 'status', status: connectionStatus, qr: qrCodeData }));
     if (messageHistory.length > 0) {
         ws.send(JSON.stringify({ type: 'history', messages: messageHistory.slice(-100) }));
     }
+
     ws.on('close', () => { wsClients.delete(ws); });
+    ws.on('error', () => { wsClients.delete(ws); });
+
     ws.on('message', async (data) => {
         try {
             const msg = JSON.parse(data.toString());
-            if (msg.type === 'send_message' && sock && connectionStatus === 'connected') {
+            if (msg.type === 'ping') {
+                ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+                return;
+            }
+            if (msg.type === 'send_message') {
+                if (!sock || connectionStatus !== 'connected') {
+                    ws.send(JSON.stringify({ type: 'error', message: 'WhatsApp no conectado' }));
+                    return;
+                }
                 const jid = msg.phone.includes('@') ? msg.phone : `${msg.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
                 await sock.sendMessage(jid, { text: msg.text });
                 const outMsg = {
-                    id: `out_${Date.now()}`,
-                    from: 'me', to: msg.phone, body: msg.text,
+                    id: `out_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+                    from: 'me', to: msg.phone.replace(/[^0-9]/g, ''), body: msg.text,
                     timestamp: Date.now(), type: 'outgoing', status: 'sent'
                 };
-                messageHistory.push(outMsg);
+                addToHistory(outMsg);
                 broadcast({ type: 'message', message: outMsg });
             }
-        } catch (err) {
-            console.error('Error WS:', err.message);
-        }
+        } catch (err) { console.error('WS msg error:', err.message); }
     });
 });
+
+// Ping every 20s to keep Railway WS alive (Railway kills idle connections after 30s)
+const wsPingInterval = setInterval(() => {
+    wsClients.forEach(ws => {
+        if (!ws.isAlive) { wsClients.delete(ws); return ws.terminate(); }
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 20000);
+wss.on('close', () => clearInterval(wsPingInterval));
+
+function addToHistory(msg) {
+    if (messageHistory.some(m => m.id === msg.id)) return;
+    messageHistory.push(msg);
+    if (messageHistory.length > MAX_HISTORY) messageHistory = messageHistory.slice(-MAX_HISTORY);
+}
 
 function broadcast(data) {
     const json = JSON.stringify(data);
     wsClients.forEach(ws => {
-        if (ws.readyState === ws.OPEN) ws.send(json);
+        if (ws.readyState === ws.OPEN) {
+            try { ws.send(json); } catch (e) { wsClients.delete(ws); }
+        }
     });
 }
 
 // ============ REST ============
-app.get('/status', (req, res) => {
-    res.json({ status: connectionStatus, hasQR: !!qrCodeData, connected: connectionStatus === 'connected' });
-});
+app.get('/', (req, res) => res.json({
+    service: 'FileHub WA Bot v5', status: connectionStatus,
+    connected: connectionStatus === 'connected',
+    clients: wsClients.size, messages: messageHistory.length,
+    uptime: Math.round(process.uptime()) + 's'
+}));
 
-app.get('/qr', (req, res) => {
-    res.json({ qr: qrCodeData, status: connectionStatus });
-});
+app.get('/status', (req, res) => res.json({
+    status: connectionStatus, hasQR: !!qrCodeData,
+    connected: connectionStatus === 'connected',
+    clients: wsClients.size, messages: messageHistory.length
+}));
+
+app.get('/qr', (req, res) => res.json({ qr: qrCodeData, status: connectionStatus }));
 
 app.post('/connect', async (req, res) => {
     if (connectionStatus === 'connected') return res.json({ success: true, message: 'Ya conectado' });
@@ -91,282 +191,166 @@ app.post('/connect', async (req, res) => {
         reconnectAttempts = 0;
         await startWhatsApp();
         res.json({ success: true, message: 'Iniciando conexión...' });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 app.post('/disconnect', async (req, res) => {
     try {
+        stopReconnect();
         isStarting = false;
-        reconnectAttempts = MAX_RECONNECT;
-        if (sock) {
-            try { await sock.logout(); } catch (e) { }
-            sock = null;
-        }
+        reconnectAttempts = MAX_RECONNECT + 1;
+        if (qrExpiryTimer) { clearTimeout(qrExpiryTimer); qrExpiryTimer = null; }
+        if (sock) { try { await sock.logout(); } catch (e) {} sock = null; }
         connectionStatus = 'disconnected';
         qrCodeData = null;
-        broadcast({ type: 'status', status: 'disconnected' });
+        broadcast({ type: 'status', status: 'disconnected', message: 'Desconectado manualmente' });
         if (fs.existsSync(AUTH_DIR)) fs.rmSync(AUTH_DIR, { recursive: true, force: true });
         res.json({ success: true, message: 'Desconectado' });
     } catch (err) {
-        connectionStatus = 'disconnected';
-        sock = null;
+        connectionStatus = 'disconnected'; sock = null;
         res.json({ success: true, message: 'Desconectado' });
     }
 });
 
 app.post('/send', async (req, res) => {
     const { phone, message } = req.body;
-    if (!sock || connectionStatus !== 'connected') return res.status(400).json({ error: 'No conectado' });
+    if (!sock || connectionStatus !== 'connected') return res.status(400).json({ success: false, error: 'No conectado' });
+    if (!phone || !message) return res.status(400).json({ success: false, error: 'Faltan phone o message' });
     try {
         const jid = phone.includes('@') ? phone : `${phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
         await sock.sendMessage(jid, { text: message });
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 app.get('/messages', (req, res) => {
-    res.json({ messages: messageHistory.slice(-200) });
+    const limit = parseInt(req.query.limit) || 200;
+    res.json({ messages: messageHistory.slice(-limit) });
 });
 
-// ============ CLASSIFIED MESSAGES (pisos / jobs) ============
 app.get('/messages/classified', (req, res) => {
-    const pisos = [];
-    const jobs = [];
-
+    const pisos = [], jobs = [];
     messageHistory.forEach(msg => {
-        if (!msg.body || msg.body.startsWith('[') || msg.body.startsWith('📷') || msg.body.startsWith('🎵')) return;
+        if (!msg.body || msg.type === 'outgoing') return;
+        if (['[', '📷', '🎵', '🎥'].some(p => msg.body.startsWith(p))) return;
         const t = msg.body.toLowerCase();
-
-        // Pisos keywords
         if (
-            (t.includes('piso') || t.includes('vivienda') || t.includes('alquiler') || t.includes('apartamento') || t.includes('habitación') || t.includes('casa ')) &&
-            (t.includes('€') || t.includes('eur') || t.includes('precio') || t.includes('mes') || t.includes('m2') || t.includes('m²') || t.includes('zona') || t.includes('barrio') || t.includes('habitaciones') || t.includes('baño'))
-        ) {
-            pisos.push(msg);
-        }
-
-        // Jobs keywords
+            (t.includes('piso') || t.includes('vivienda') || t.includes('alquiler') || t.includes('apartamento') || t.includes('habitación') || t.includes('casa ') || t.includes('ático') || t.includes('estudio') || t.includes('loft') || t.includes('duplex')) &&
+            (t.includes('€') || t.includes('eur') || t.includes('precio') || t.includes('mes') || t.includes('m2') || t.includes('m²') || t.includes('zona') || t.includes('barrio') || t.includes('habitaciones') || t.includes('baño') || t.includes('dormitorio'))
+        ) pisos.push(msg);
         if (
-            (t.includes('oferta') || t.includes('puesto') || t.includes('empleo') || t.includes('trabajo') || t.includes('vacante') || t.includes('contrato')) &&
-            (t.includes('salario') || t.includes('€') || t.includes('eur') || t.includes('empresa') || t.includes('jornada') || t.includes('requisitos') || t.includes('experiencia') || t.includes('contrat'))
-        ) {
-            jobs.push(msg);
-        }
+            (t.includes('oferta') || t.includes('puesto') || t.includes('empleo') || t.includes('trabajo') || t.includes('vacante') || t.includes('contrato') || t.includes('buscamos') || t.includes('se necesita') || t.includes('incorporación')) &&
+            (t.includes('salario') || t.includes('€') || t.includes('eur') || t.includes('empresa') || t.includes('jornada') || t.includes('requisitos') || t.includes('experiencia') || t.includes('contrat') || t.includes('sueldo'))
+        ) jobs.push(msg);
     });
-
     res.json({ pisos, jobs });
 });
 
-// ============ EMAIL SENDING ============
+// ============ EMAIL ============
 const nodemailer = require('nodemailer');
-
 app.post('/send-email', async (req, res) => {
     const { to, subject, html, gmailUser, gmailAppPassword } = req.body;
-
-    if (!to || !subject || !html) {
-        return res.status(400).json({ error: 'Faltan campos: to, subject, html' });
-    }
-
-    // Use provided credentials or env vars — strip spaces from app password
+    if (!to || !subject || !html) return res.status(400).json({ error: 'Faltan to, subject, html' });
     const user = gmailUser || process.env.GMAIL_USER;
     const pass = (gmailAppPassword || process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
-
-    if (!user || !pass) {
-        return res.status(400).json({
-            error: 'Se necesitan credenciales de Gmail. Envía gmailUser y gmailAppPassword en el body, o configura GMAIL_USER y GMAIL_APP_PASSWORD en .env'
-        });
-    }
-
+    if (!user || !pass) return res.status(400).json({ error: 'Se necesitan credenciales de Gmail' });
     try {
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: { user, pass }
-        });
-
-        await transporter.sendMail({
-            from: `FileHub IA <${user}>`,
-            to,
-            subject,
-            html
-        });
-
+        const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
+        await t.sendMail({ from: `FileHub IA <${user}>`, to, subject, html });
         res.json({ success: true, message: `Email enviado a ${to}` });
-    } catch (err) {
-        console.error('Error enviando email:', err.message);
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ============ APIFY SCRAPING ============
+// ============ APIFY ============
 const APIFY_TOKEN = process.env.APIFY_API_KEY || '';
 const APIFY_BASE = 'https://api.apify.com/v2';
 
-// Generic Apify actor runner
 async function runApifyActor(actorId, input, token) {
-    const url = `${APIFY_BASE}/acts/${actorId}/runs?token=${token}`;
-    const runRes = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+    const runRes = await fetch(`${APIFY_BASE}/acts/${actorId}/runs?token=${token}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input)
     });
-    if (!runRes.ok) throw new Error(`Apify run failed: ${runRes.status} ${await runRes.text()}`);
-    const runData = await runRes.json();
-    const runId = runData.data?.id;
-    if (!runId) throw new Error('No run ID returned');
-
-    // Wait for completion (poll every 3s, max 5 min)
-    const maxWait = 300000;
+    if (!runRes.ok) throw new Error(`Apify failed: ${runRes.status}`);
+    const { data } = await runRes.json();
+    if (!data?.id) throw new Error('No run ID');
     const start = Date.now();
     let status = 'RUNNING';
     while (status === 'RUNNING' || status === 'READY') {
-        if (Date.now() - start > maxWait) throw new Error('Apify run timeout');
+        if (Date.now() - start > 300000) throw new Error('Timeout');
         await new Promise(r => setTimeout(r, 3000));
-        const statusRes = await fetch(`${APIFY_BASE}/actor-runs/${runId}?token=${token}`);
-        const statusData = await statusRes.json();
-        status = statusData.data?.status;
+        const s = await (await fetch(`${APIFY_BASE}/actor-runs/${data.id}?token=${token}`)).json();
+        status = s.data?.status;
     }
-    if (status !== 'SUCCEEDED') throw new Error(`Apify run status: ${status}`);
-
-    // Get dataset items
-    const datasetId = runData.data?.defaultDatasetId;
-    const itemsRes = await fetch(`${APIFY_BASE}/datasets/${datasetId}/items?token=${token}`);
-    return await itemsRes.json();
+    if (status !== 'SUCCEEDED') throw new Error(`Status: ${status}`);
+    return await (await fetch(`${APIFY_BASE}/datasets/${data.defaultDatasetId}/items?token=${token}`)).json();
 }
 
-// Scrape pisos (apartments) - Idealista
 app.post('/scrape/pisos', async (req, res) => {
     const token = req.body.token || APIFY_TOKEN;
     if (!token) return res.status(400).json({ error: 'Falta APIFY_API_KEY' });
-
-    const { city = 'barcelona', maxPrice = 1200, minSize = 30, maxItems = 20, propertyType = 'alquiler' } = req.body;
-
+    const { city = 'barcelona', maxItems = 20, propertyType = 'alquiler' } = req.body;
     try {
-        console.log(`🔍 Scraping pisos: ${propertyType} en ${city}, max ${maxPrice}€...`);
-        // Use web scraper actor for Idealista
         const items = await runApifyActor('apify~web-scraper', {
-            startUrls: [
-                { url: `https://www.idealista.com/${propertyType}-viviendas/${city}/` }
-            ],
-            pseudoUrls: [
-                { purl: `https://www.idealista.com/${propertyType}-viviendas/${city}/[.*]` }
-            ],
-            pageFunction: `async function pageFunction(context) {
-                const { $, request } = context;
-                const results = [];
-                $('.item-multimedia-container').closest('.item').each((i, el) => {
-                    if (i >= ${maxItems}) return false;
-                    const $el = $(el);
-                    const title = $el.find('.item-link').text().trim();
-                    const price = $el.find('.item-price').text().trim();
-                    const detail = $el.find('.item-detail').text().trim();
-                    const link = $el.find('.item-link').attr('href');
-                    results.push({ title, price, detail, link: 'https://www.idealista.com' + link, source: 'idealista' });
-                });
-                return results;
-            }`,
-            maxRequestsPerCrawl: 5,
-            maxConcurrency: 1
+            startUrls: [{ url: `https://www.idealista.com/${propertyType}-viviendas/${city}/` }],
+            pageFunction: `async function pageFunction({$}) {
+                const r=[];$('.item').each((i,el)=>{if(i>=${maxItems})return false;const $e=$(el);r.push({title:$e.find('.item-link').text().trim(),price:$e.find('.item-price').text().trim(),detail:$e.find('.item-detail').text().trim(),link:'https://www.idealista.com'+$e.find('.item-link').attr('href')});});return r;}`,
+            maxRequestsPerCrawl: 5, maxConcurrency: 1
         }, token);
-
-        const pisos = (Array.isArray(items) ? items.flat() : []).map((item, i) => ({
-            id: `apify_piso_${Date.now()}_${i}`,
-            title: item.title || `Piso en ${city}`,
-            price: item.price || 'Consultar',
-            location: city,
-            sqm: 0,
-            rooms: 0,
-            baths: 0,
-            description: item.detail || '',
-            rawText: JSON.stringify(item),
-            link: item.link || '',
-            timestamp: Date.now(),
-            source: 'apify',
-            sent: false
+        const pisos = (Array.isArray(items)?items.flat():[]).map((item,i)=>({
+            id:`apify_piso_${Date.now()}_${i}`,title:item.title||`Piso en ${city}`,
+            price:item.price||'Consultar',location:city,sqm:0,rooms:0,baths:0,
+            description:item.detail||'',rawText:JSON.stringify(item),
+            url:item.link||'',timestamp:Date.now(),source:'apify',sent:false
         }));
-
-        console.log(`✅ ${pisos.length} pisos encontrados`);
         res.json({ success: true, pisos, count: pisos.length });
-    } catch (err) {
-        console.error('❌ Error scraping pisos:', err.message);
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Scrape jobs - InfoJobs
 app.post('/scrape/jobs', async (req, res) => {
     const token = req.body.token || APIFY_TOKEN;
     if (!token) return res.status(400).json({ error: 'Falta APIFY_API_KEY' });
-
     const { query = 'desarrollador', city = 'barcelona', maxItems = 20 } = req.body;
-
     try {
-        console.log(`🔍 Scraping jobs: "${query}" en ${city}...`);
         const items = await runApifyActor('apify~web-scraper', {
-            startUrls: [
-                { url: `https://www.infojobs.net/jobsearch/search-results/list.xhtml?keyword=${encodeURIComponent(query)}&provinceIds=9&categoryIds=` }
-            ],
-            pageFunction: `async function pageFunction(context) {
-                const { $, request } = context;
-                const results = [];
-                $('.ij-OfferCardContent').each((i, el) => {
-                    if (i >= ${maxItems}) return false;
-                    const $el = $(el);
-                    const title = $el.find('.ij-OfferCardContent-description-title-link').text().trim();
-                    const company = $el.find('.ij-OfferCardContent-description-subtitle-link').text().trim();
-                    const location = $el.find('.ij-OfferCardContent-description-list-item-truncate').first().text().trim();
-                    const salary = $el.find('.ij-OfferCardContent-description-salary').text().trim();
-                    const link = $el.find('.ij-OfferCardContent-description-title-link').attr('href');
-                    results.push({ title, company, location, salary, link, source: 'infojobs' });
-                });
-                return results;
-            }`,
-            maxRequestsPerCrawl: 3,
-            maxConcurrency: 1
+            startUrls: [{ url: `https://www.infojobs.net/jobsearch/search-results/list.xhtml?keyword=${encodeURIComponent(query)}` }],
+            pageFunction: `async function pageFunction({$}) {
+                const r=[];$('.ij-OfferCardContent').each((i,el)=>{if(i>=${maxItems})return false;const $e=$(el);r.push({title:$e.find('.ij-OfferCardContent-description-title-link').text().trim(),company:$e.find('.ij-OfferCardContent-description-subtitle-link').text().trim(),location:$e.find('.ij-OfferCardContent-description-list-item-truncate').first().text().trim(),salary:$e.find('.ij-OfferCardContent-description-salary').text().trim(),link:$e.find('.ij-OfferCardContent-description-title-link').attr('href')});});return r;}`,
+            maxRequestsPerCrawl: 3, maxConcurrency: 1
         }, token);
-
-        const jobs = (Array.isArray(items) ? items.flat() : []).map((item, i) => ({
-            id: `apify_job_${Date.now()}_${i}`,
-            title: item.title || query,
-            company: item.company || 'No especificada',
-            salary: item.salary || 'A consultar',
-            location: item.location || city,
-            type: 'No especificada',
-            description: '',
-            rawText: JSON.stringify(item),
-            link: item.link || '',
-            timestamp: Date.now(),
-            source: 'apify',
-            sent: false
+        const jobs = (Array.isArray(items)?items.flat():[]).map((item,i)=>({
+            id:`apify_job_${Date.now()}_${i}`,title:item.title||query,
+            company:item.company||'No especificada',salary:item.salary||'A consultar',
+            location:item.location||city,type:'No especificada',description:'',
+            rawText:JSON.stringify(item),url:item.link||'',
+            timestamp:Date.now(),source:'apify',sent:false
         }));
-
-        console.log(`✅ ${jobs.length} ofertas encontradas`);
         res.json({ success: true, jobs, count: jobs.length });
-    } catch (err) {
-        console.error('❌ Error scraping jobs:', err.message);
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Generic scrape endpoint
 app.post('/scrape/run', async (req, res) => {
-    const { actorId, input, token: bodyToken } = req.body;
-    const token = bodyToken || APIFY_TOKEN;
-    if (!token) return res.status(400).json({ error: 'Falta APIFY_API_KEY' });
+    const { actorId, input, token: t } = req.body;
+    const token = t || APIFY_TOKEN;
+    if (!token) return res.status(400).json({ error: 'Falta token' });
     if (!actorId) return res.status(400).json({ error: 'Falta actorId' });
-
     try {
-        console.log(`🔍 Running Apify actor: ${actorId}`);
         const items = await runApifyActor(actorId, input || {}, token);
         res.json({ success: true, items, count: Array.isArray(items) ? items.length : 0 });
-    } catch (err) {
-        console.error('❌ Error running actor:', err.message);
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ============ RECONNECT CONTROL ============
+function stopReconnect() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+}
+
+function scheduleReconnect(attempt) {
+    stopReconnect();
+    const delay = Math.round(Math.min(3000 * Math.pow(2, attempt - 1), 60000) + Math.random() * 2000);
+    console.log(`🔄 Reconectando en ${Math.round(delay/1000)}s (intento ${attempt}/${MAX_RECONNECT})`);
+    broadcast({ type: 'status', status: 'connecting', message: `Reconectando en ${Math.round(delay/1000)}s (intento ${attempt}/${MAX_RECONNECT})...` });
+    reconnectTimer = setTimeout(() => startWhatsApp(), delay);
+}
 
 // ============ WHATSAPP ============
 async function startWhatsApp() {
@@ -374,204 +358,146 @@ async function startWhatsApp() {
     isStarting = true;
     connectionStatus = 'connecting';
     qrCodeData = null;
-    broadcast({ type: 'status', status: 'connecting' });
+    if (qrExpiryTimer) { clearTimeout(qrExpiryTimer); qrExpiryTimer = null; }
+    broadcast({ type: 'status', status: 'connecting', message: 'Iniciando conexión...' });
+    console.log('🔄 Iniciando WhatsApp...');
 
-    console.log('🔄 Iniciando conexión WhatsApp...');
-
-    // Fetch latest WhatsApp Web version to avoid 405 errors
     let waVersion;
     try {
         const { version } = await fetchLatestWaWebVersion({});
         waVersion = version;
-        console.log('📦 Versión WhatsApp Web:', waVersion.join('.'));
-    } catch (err) {
-        console.log('⚠️ No se pudo obtener versión, usando defaults');
-        waVersion = [2, 3000, 1034715486]; // fallback
-    }
+        console.log('📦 WA version:', waVersion.join('.'));
+    } catch { waVersion = [2, 3000, 1034715486]; }
 
     if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+    let state, saveCreds;
+    try {
+        ({ state, saveCreds } = await useMultiFileAuthState(AUTH_DIR));
+    } catch (err) {
+        console.error('❌ Auth state corrupto:', err.message);
+        if (fs.existsSync(AUTH_DIR)) fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        isStarting = false;
+        if (reconnectAttempts < MAX_RECONNECT) { reconnectAttempts++; scheduleReconnect(reconnectAttempts); }
+        return;
+    }
+
     const logger = pino({ level: 'silent' });
 
-    sock = makeWASocket({
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, logger)
-        },
-        version: waVersion,
-        logger,
-        browser: ['Ubuntu', 'Chrome', '120.0.0'],
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: undefined,
-        keepAliveIntervalMs: 25000,
-        markOnlineOnConnect: true,
-        generateHighQualityLinkPreview: false,
-        syncFullHistory: false,
-    });
+    try {
+        sock = makeWASocket({
+            auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
+            version: waVersion, logger,
+            browser: ['Ubuntu', 'Chrome', '122.0.0'],
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: undefined,
+            keepAliveIntervalMs: 20000,   // KEY: keeps WA session alive on Railway
+            markOnlineOnConnect: true,
+            generateHighQualityLinkPreview: false,
+            syncFullHistory: false,
+            retryRequestDelayMs: 2000,
+        });
+    } catch (err) {
+        console.error('❌ Error creando socket:', err.message);
+        isStarting = false;
+        if (reconnectAttempts < MAX_RECONNECT) { reconnectAttempts++; scheduleReconnect(reconnectAttempts); }
+        return;
+    }
 
-    // ---- CONNECTION UPDATE ----
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            console.log('📱 ¡Código QR generado!');
+            console.log('📱 QR generado');
             try {
                 qrCodeData = await QRCode.toDataURL(qr, { width: 300, margin: 2 });
                 connectionStatus = 'qr_ready';
                 isStarting = false;
                 broadcast({ type: 'qr', qr: qrCodeData, status: 'qr_ready' });
-            } catch (err) {
-                console.error('Error QR:', err.message);
-            }
+                // Notify when QR expires (~115s, QR TTL is 2min)
+                if (qrExpiryTimer) clearTimeout(qrExpiryTimer);
+                qrExpiryTimer = setTimeout(() => {
+                    if (connectionStatus === 'qr_ready') {
+                        qrCodeData = null;
+                        broadcast({ type: 'qr_expired', message: 'El código QR ha expirado. Pulsa "Regenerar QR".' });
+                        console.log('⏰ QR expirado');
+                    }
+                }, 115000);
+            } catch (err) { console.error('Error QR:', err.message); }
         }
 
         if (connection === 'close') {
             isStarting = false;
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            console.log(`🔌 Desconectado. Código: ${statusCode}`);
+            if (qrExpiryTimer) { clearTimeout(qrExpiryTimer); qrExpiryTimer = null; }
+            const code = lastDisconnect?.error?.output?.statusCode;
+            console.log(`🔌 Desconectado. Código: ${code}`);
 
-            const isLoggedOut = statusCode === DisconnectReason.loggedOut;
-            const isBadSession = statusCode === DisconnectReason.badSession;
+            const logout = code === DisconnectReason.loggedOut;
+            const badSession = code === DisconnectReason.badSession;
+            const replaced = code === DisconnectReason.connectionReplaced;
+            const forbidden = code === 403;
 
-            if (isLoggedOut || isBadSession) {
-                console.log('🚫 Sesión terminada.');
-                connectionStatus = 'disconnected';
-                qrCodeData = null;
-                sock = null;
+            if (logout || badSession || forbidden) {
+                connectionStatus = 'disconnected'; qrCodeData = null; sock = null;
                 if (fs.existsSync(AUTH_DIR)) fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-                broadcast({ type: 'status', status: 'disconnected', message: 'Sesión terminada.' });
+                broadcast({ type: 'status', status: 'disconnected', message: logout ? 'Sesión cerrada desde el teléfono.' : 'Sesión inválida. Reconecta con QR.' });
                 reconnectAttempts = 0;
+            } else if (replaced) {
+                connectionStatus = 'disconnected'; sock = null;
+                broadcast({ type: 'status', status: 'disconnected', message: 'Sesión reemplazada en otro dispositivo.' });
             } else if (reconnectAttempts < MAX_RECONNECT) {
                 reconnectAttempts++;
-                const delay = Math.min(3000 * reconnectAttempts, 15000);
-                console.log(`🔄 Reconectando (${reconnectAttempts}/${MAX_RECONNECT}) en ${delay / 1000}s...`);
                 connectionStatus = 'connecting';
-                broadcast({ type: 'status', status: 'connecting', message: `Reconectando (${reconnectAttempts}/${MAX_RECONNECT})...` });
-                setTimeout(() => startWhatsApp(), delay);
-            } else {
-                console.log('❌ Máximo de reconexiones alcanzado.');
-                connectionStatus = 'disconnected';
-                qrCodeData = null;
                 sock = null;
+                scheduleReconnect(reconnectAttempts);
+            } else {
+                connectionStatus = 'disconnected'; qrCodeData = null; sock = null;
                 if (fs.existsSync(AUTH_DIR)) fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-                broadcast({ type: 'status', status: 'disconnected', message: 'Error de conexión.' });
+                broadcast({ type: 'status', status: 'disconnected', message: 'No se pudo reconectar. Reconecta manualmente.' });
                 reconnectAttempts = 0;
             }
         }
 
         if (connection === 'open') {
-            console.log('✅ ¡WhatsApp conectado exitosamente!');
-            connectionStatus = 'connected';
-            qrCodeData = null;
-            isStarting = false;
-            reconnectAttempts = 0;
+            console.log('✅ WhatsApp conectado!');
+            connectionStatus = 'connected'; qrCodeData = null;
+            isStarting = false; reconnectAttempts = 0;
+            stopReconnect();
+            if (qrExpiryTimer) { clearTimeout(qrExpiryTimer); qrExpiryTimer = null; }
             broadcast({ type: 'status', status: 'connected', message: '¡Conectado!' });
         }
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // ---- MESSAGES ----
     sock.ev.on('messages.upsert', async ({ messages: msgs, type }) => {
         if (type !== 'notify') return;
-
         for (const msg of msgs) {
             if (!msg.message) continue;
-
             const senderJid = msg.key.remoteJid;
             if (!senderJid || senderJid.endsWith('@g.us')) continue;
-
             const isFromMe = msg.key.fromMe;
             const contactNumber = senderJid.replace('@s.whatsapp.net', '');
-
-            // Extract message body
-            let body = '';
-            const m = msg.message;
-
-            // Unwrap wrapper messages (ephemeral, viewOnce, editedMessage, etc.)
-            const unwrap = (msgObj) => {
-                if (!msgObj) return msgObj;
-                if (msgObj.ephemeralMessage?.message) return unwrap(msgObj.ephemeralMessage.message);
-                if (msgObj.viewOnceMessage?.message) return unwrap(msgObj.viewOnceMessage.message);
-                if (msgObj.viewOnceMessageV2?.message) return unwrap(msgObj.viewOnceMessageV2.message);
-                if (msgObj.viewOnceMessageV2Extension?.message) return unwrap(msgObj.viewOnceMessageV2Extension.message);
-                if (msgObj.documentWithCaptionMessage?.message) return unwrap(msgObj.documentWithCaptionMessage.message);
-                if (msgObj.editedMessage?.message?.protocolMessage?.editedMessage) return unwrap(msgObj.editedMessage.message.protocolMessage.editedMessage);
-                if (msgObj.protocolMessage?.editedMessage) return unwrap(msgObj.protocolMessage.editedMessage);
-                return msgObj;
-            };
-
-            const um = unwrap(m);
-            if (!um) continue;
-
-            if (um.conversation) body = um.conversation;
-            else if (um.extendedTextMessage?.text) body = um.extendedTextMessage.text;
-            else if (um.imageMessage) body = '📷 ' + (um.imageMessage.caption || '[Imagen]');
-            else if (um.videoMessage) body = '🎥 ' + (um.videoMessage.caption || '[Video]');
-            else if (um.audioMessage) body = '🎵 [Audio]';
-            else if (um.documentMessage) body = `📄 [${um.documentMessage.fileName || 'Documento'}]`;
-            else if (um.stickerMessage) body = '🏷️ [Sticker]';
-            else if (um.contactMessage) body = `👤 [${um.contactMessage.displayName || 'Contacto'}]`;
-            else if (um.contactsArrayMessage) body = `👥 [${um.contactsArrayMessage.contacts?.length || 0} Contactos]`;
-            else if (um.locationMessage) body = '📍 [Ubicación]';
-            else if (um.liveLocationMessage) body = '📍 [Ubicación en vivo]';
-            else if (um.reactionMessage) continue; // skip reactions
-            else if (um.pollCreationMessage || um.pollCreationMessageV3) body = `📊 Encuesta: ${um.pollCreationMessage?.name || um.pollCreationMessageV3?.name || ''}`;
-            else if (um.pollUpdateMessage) continue; // skip poll votes
-            else if (um.buttonsResponseMessage) body = um.buttonsResponseMessage.selectedDisplayText || '[Respuesta botón]';
-            else if (um.listResponseMessage) body = um.listResponseMessage.title || um.listResponseMessage.singleSelectReply?.selectedRowId || '[Respuesta lista]';
-            else if (um.templateButtonReplyMessage) body = um.templateButtonReplyMessage.selectedDisplayText || '[Respuesta plantilla]';
-            else if (um.interactiveResponseMessage) {
-                try {
-                    const parsed = JSON.parse(um.interactiveResponseMessage.nativeFlowResponseMessage?.paramsJson || '{}');
-                    body = parsed.id || '[Respuesta interactiva]';
-                } catch { body = '[Respuesta interactiva]'; }
-            }
-            else if (um.protocolMessage) continue; // skip protocol messages (edits, deletes, etc.)
-            else if (um.senderKeyDistributionMessage) continue; // internal
-            else body = '[Mensaje]';
+            const body = extractBody(msg);
+            if (body === null) continue;
 
             if (isFromMe) {
-                // Outgoing message (bot response or sent from phone)
-                // Deduplicate: check if we already have this message from websocket send_message
-                const msgId = msg.key.id;
-                const alreadyExists = messageHistory.some(h =>
+                const dup = messageHistory.some(h =>
                     h.body === body && h.to === contactNumber &&
-                    Math.abs(h.timestamp - ((msg.messageTimestamp || Date.now() / 1000) * 1000)) < 5000
+                    Math.abs(h.timestamp - ((msg.messageTimestamp||Date.now()/1000)*1000)) < 5000
                 );
-
-                if (!alreadyExists) {
-                    const outMsg = {
-                        id: msgId || `out_${Date.now()}`,
-                        from: 'me',
-                        to: contactNumber,
-                        body,
-                        timestamp: (msg.messageTimestamp || Date.now() / 1000) * 1000,
-                        type: 'outgoing',
-                        status: 'sent'
-                    };
-                    messageHistory.push(outMsg);
-                    broadcast({ type: 'message', message: outMsg });
-                    console.log(`📤 Bot → ${contactNumber}: ${body.substring(0, 60)}`);
+                if (!dup) {
+                    const m = { id: msg.key.id||`out_${Date.now()}`, from:'me', to:contactNumber, body,
+                        timestamp:(msg.messageTimestamp||Date.now()/1000)*1000, type:'outgoing', status:'sent' };
+                    addToHistory(m); broadcast({ type:'message', message:m });
                 }
             } else {
-                // Incoming message
                 const senderName = msg.pushName || contactNumber;
-                const inMsg = {
-                    id: msg.key.id || `in_${Date.now()}`,
-                    from: contactNumber,
-                    fromName: senderName,
-                    to: 'me',
-                    body,
-                    timestamp: (msg.messageTimestamp || Date.now() / 1000) * 1000,
-                    type: 'incoming',
-                    status: 'delivered'
-                };
-
-                messageHistory.push(inMsg);
-                broadcast({ type: 'message', message: inMsg });
-                console.log(`📩 ${senderName}: ${body.substring(0, 60)}`);
+                const m = { id: msg.key.id||`in_${Date.now()}`, from:contactNumber, fromName:senderName,
+                    to:'me', body, timestamp:(msg.messageTimestamp||Date.now()/1000)*1000,
+                    type:'incoming', status:'delivered' };
+                addToHistory(m); broadcast({ type:'message', message:m });
+                console.log(`📩 ${senderName}: ${body.substring(0,60)}`);
             }
         }
     });
@@ -579,24 +505,54 @@ async function startWhatsApp() {
     sock.ev.on('messages.update', (updates) => {
         for (const u of updates) {
             if (u.update?.status) {
-                const map = { 2: 'sent', 3: 'delivered', 4: 'read' };
-                broadcast({ type: 'message_status', id: u.key.id, status: map[u.update.status] || 'sent' });
+                const map = {2:'sent',3:'delivered',4:'read'};
+                const s = map[u.update.status];
+                if (s) broadcast({ type:'message_status', id:u.key.id, status:s });
             }
         }
     });
+}
+
+function extractBody(msg) {
+    const m = msg.message;
+    if (!m) return null;
+    const unwrap = (o) => {
+        if (!o) return o;
+        if (o.ephemeralMessage?.message) return unwrap(o.ephemeralMessage.message);
+        if (o.viewOnceMessage?.message) return unwrap(o.viewOnceMessage.message);
+        if (o.viewOnceMessageV2?.message) return unwrap(o.viewOnceMessageV2.message);
+        if (o.documentWithCaptionMessage?.message) return unwrap(o.documentWithCaptionMessage.message);
+        if (o.editedMessage?.message?.protocolMessage?.editedMessage) return unwrap(o.editedMessage.message.protocolMessage.editedMessage);
+        if (o.protocolMessage?.editedMessage) return unwrap(o.protocolMessage.editedMessage);
+        return o;
+    };
+    const u = unwrap(m);
+    if (!u) return null;
+    if (u.conversation) return u.conversation;
+    if (u.extendedTextMessage?.text) return u.extendedTextMessage.text;
+    if (u.imageMessage) return '📷 '+(u.imageMessage.caption||'[Imagen]');
+    if (u.videoMessage) return '🎥 '+(u.videoMessage.caption||'[Video]');
+    if (u.audioMessage) return '🎵 [Audio]';
+    if (u.documentMessage) return `📄 [${u.documentMessage.fileName||'Documento'}]`;
+    if (u.stickerMessage) return '🏷️ [Sticker]';
+    if (u.contactMessage) return `👤 [${u.contactMessage.displayName||'Contacto'}]`;
+    if (u.locationMessage) return '📍 [Ubicación]';
+    if (u.pollCreationMessage||u.pollCreationMessageV3) return `📊 Encuesta: ${u.pollCreationMessage?.name||u.pollCreationMessageV3?.name||''}`;
+    if (u.buttonsResponseMessage) return u.buttonsResponseMessage.selectedDisplayText||'[Respuesta botón]';
+    if (u.listResponseMessage) return u.listResponseMessage.title||'[Respuesta lista]';
+    if (u.reactionMessage||u.pollUpdateMessage||u.protocolMessage||u.senderKeyDistributionMessage) return null;
+    return '[Mensaje]';
 }
 
 // ============ START ============
 server.listen(PORT, () => {
     console.log(`
 ╔════════════════════════════════════════════════╗
-║   🤖 FILEHUB WhatsApp Bot Server v4           ║
-║   baileys + fetchLatestWaWebVersion            ║
-║   Puerto: ${PORT}                               ║
-║   API:    http://localhost:${PORT}               ║
-║   WS:     ws://localhost:${PORT}/ws              ║
-╠════════════════════════════════════════════════╣
-║   Listo. Usa la webapp para conectar.          ║
-╚════════════════════════════════════════════════╝
-  `);
+║  🤖 FILEHUB WhatsApp Bot Server v5            ║
+║  WS ping/pong · backoff · historial · CORS    ║
+║  Puerto: ${String(PORT).padEnd(6)}                          ║
+╚════════════════════════════════════════════════╝`);
 });
+
+process.on('SIGTERM', () => { saveHistory(); process.exit(0); });
+process.on('SIGINT', () => { saveHistory(); process.exit(0); });

@@ -4,7 +4,7 @@ import {
     Home, MapPin, Maximize2, BedDouble, Bath, Send, Sparkles,
     RefreshCw, Mail, Trash2, Wifi, WifiOff, Euro, Clock,
     CheckCircle2, AlertTriangle, Settings, ExternalLink, Eye,
-    Search, Globe
+    Search, Globe, MessageCircle
 } from 'lucide-react';
 
 // ============ TYPES ============
@@ -23,7 +23,7 @@ interface Property {
     sent: boolean;
     senderPhone?: string;
     senderName?: string;
-    url?: string;
+    url?: string;  // enlace directo al inmueble
 }
 
 interface EmailConfig {
@@ -83,7 +83,7 @@ function parsePisoFromText(text: string, msgId: string, timestamp: number, sende
         extractLine('Dirección') || extractLine('Ciudad') || 'No especificada';
 
     // Extract URL
-    const urlMatch = text.match(/https?:\/\/[^\s]+/);
+    const urlMatch = text.match(/https?:\/\/[^\s\)>\"]+/);
     const url = urlMatch ? urlMatch[0] : undefined;
 
     return {
@@ -119,6 +119,7 @@ const WhatsAppPisosView: React.FC = () => {
     const [wsConnected, setWsConnected] = useState(false);
     const [showEmailConfig, setShowEmailConfig] = useState(false);
     const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+    const [sendingWaId, setSendingWaId] = useState<string | null>(null);
     const [sendingAll, setSendingAll] = useState(false);
     const [selectedPiso, setSelectedPiso] = useState<Property | null>(null);
     const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -367,6 +368,32 @@ const WhatsAppPisosView: React.FC = () => {
         }
     };
 
+    const sendQuickWa = async (prop: Property) => {
+        if (!prop.senderPhone) {
+            notify('No hay número de WhatsApp para este inmueble', 'error');
+            return;
+        }
+        setSendingWaId(prop.id);
+        const msg = `Hola, me interesa el inmueble "${prop.title}" en ${prop.location} por ${prop.price}. ¿Podría darme más información? Gracias.`;
+        try {
+            const res = await fetch(`${WA_SERVER}/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: prop.senderPhone, message: msg })
+            });
+            const result = await res.json();
+            if (result.success) {
+                notify('✅ Mensaje WhatsApp enviado', 'success');
+            } else {
+                notify(`Error: ${result.error || 'No se pudo enviar'}`, 'error');
+            }
+        } catch {
+            notify('Error de conexión con el servidor WhatsApp', 'error');
+        } finally {
+            setSendingWaId(null);
+        }
+    };
+
     const sendReplyWa = async (prop: Property) => {
         if (!prop.senderPhone) {
             notify('No hay número de teléfono para responder a este piso', 'error');
@@ -596,6 +623,16 @@ const WhatsAppPisosView: React.FC = () => {
 
                                     <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-3 flex-1 leading-relaxed mb-4">{prop.description}</p>
 
+                                    {/* URL visible si existe */}
+                                    {prop.url && (
+                                        <a href={prop.url} target="_blank" rel="noopener noreferrer"
+                                            className="flex items-center gap-1.5 text-xs font-bold text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-300 underline underline-offset-2 truncate mb-3 transition-colors"
+                                            onClick={e => e.stopPropagation()}>
+                                            <ExternalLink size={12} className="shrink-0" />
+                                            Ver anuncio completo
+                                        </a>
+                                    )}
+
                                     <div className="text-[10px] text-slate-400 flex items-center gap-1 mb-3">
                                         <Clock size={10} />
                                         {new Date(prop.timestamp).toLocaleString('es-ES')}
@@ -603,25 +640,47 @@ const WhatsAppPisosView: React.FC = () => {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="px-5 pb-5 flex gap-2">
-                                    {prop.url && (
+                                <div className="px-5 pb-5 flex gap-2 flex-wrap">
+                                    {/* Botón Ver anuncio */}
+                                    {prop.url ? (
                                         <a href={prop.url} target="_blank" rel="noopener noreferrer"
-                                            className="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-emerald-500/10">
-                                            <ExternalLink size={14} /> Link
+                                            className="flex-1 min-w-0 flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-emerald-500/20">
+                                            <ExternalLink size={13} /> Ver piso
                                         </a>
+                                    ) : (
+                                        <button onClick={() => sendEmail(prop)} disabled={sendingEmailId === prop.id}
+                                            className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-red-500/10 disabled:opacity-50">
+                                            {sendingEmailId === prop.id
+                                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                : <><Mail size={14} /> Gmail</>}
+                                        </button>
                                     )}
-                                    <button onClick={() => sendEmail(prop)} disabled={sendingEmailId === prop.id}
-                                        className="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-red-500/10 disabled:opacity-50">
-                                        {sendingEmailId === prop.id
-                                            ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                            : <><Mail size={14} /> Gmail</>}
-                                    </button>
+                                    {/* Botón WhatsApp respuesta rápida */}
+                                    {prop.senderPhone && (
+                                        <button onClick={() => sendQuickWa(prop)} disabled={sendingWaId === prop.id}
+                                            title="Responder por WhatsApp"
+                                            className="px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-colors disabled:opacity-50">
+                                            {sendingWaId === prop.id
+                                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                : <MessageCircle size={14} className="text-white" />}
+                                        </button>
+                                    )}
+                                    {/* Email si ya hay link */}
+                                    {prop.url && (
+                                        <button onClick={() => sendEmail(prop)} disabled={sendingEmailId === prop.id}
+                                            title="Guardar en Gmail"
+                                            className="px-3 py-2.5 bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors disabled:opacity-50">
+                                            {sendingEmailId === prop.id
+                                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                : <Mail size={14} className="text-white" />}
+                                        </button>
+                                    )}
                                     <button onClick={() => setSelectedPiso(prop)}
-                                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors shrink-0">
+                                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors">
                                         <Eye size={14} className="text-slate-500" />
                                     </button>
                                     <button onClick={() => deletePiso(prop.id)}
-                                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-xl transition-colors group shrink-0">
+                                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-xl transition-colors group">
                                         <Trash2 size={14} className="text-slate-400 group-hover:text-red-500" />
                                     </button>
                                 </div>
@@ -639,27 +698,65 @@ const WhatsAppPisosView: React.FC = () => {
                             <h2 className="text-lg font-black text-slate-900 dark:text-white">{selectedPiso.title}</h2>
                             <button onClick={() => setSelectedPiso(null)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
                         </div>
-                        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl">
+
+                        {/* Meta tags */}
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            <span className="text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-lg font-semibold">💶 {selectedPiso.price}</span>
+                            {selectedPiso.location !== 'No especificada' && (
+                                <span className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-lg font-semibold">📍 {selectedPiso.location}</span>
+                            )}
+                            {selectedPiso.sqm > 0 && <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-lg font-semibold">{selectedPiso.sqm} m²</span>}
+                            {selectedPiso.rooms > 0 && <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-lg font-semibold">{selectedPiso.rooms} hab</span>}
+                            {selectedPiso.baths > 0 && <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-lg font-semibold">{selectedPiso.baths} baño(s)</span>}
+                        </div>
+
+                        {/* URL link visible */}
+                        {selectedPiso.url && (
+                            <a href={selectedPiso.url} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-2 text-sm font-bold text-emerald-500 hover:text-emerald-700 underline underline-offset-2 mb-3 transition-colors break-all">
+                                <ExternalLink size={14} className="shrink-0" />
+                                {selectedPiso.url}
+                            </a>
+                        )}
+
+                        {/* Raw text */}
+                        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl mb-4">
                             {selectedPiso.rawText}
                         </div>
-                        <div className="mt-4 flex gap-2">
+
+                        {/* Sender info */}
+                        {selectedPiso.senderPhone && (
+                            <p className="text-xs text-slate-400 mb-3">
+                                📱 Enviado por: <span className="font-semibold text-slate-600 dark:text-slate-300">{selectedPiso.senderName || selectedPiso.senderPhone}</span>
+                            </p>
+                        )}
+
+                        {/* Action buttons */}
+                        <div className="flex gap-2 flex-wrap mb-3">
+                            {selectedPiso.url && (
+                                <a href={selectedPiso.url} target="_blank" rel="noopener noreferrer"
+                                    className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold py-3 rounded-xl transition-colors">
+                                    <ExternalLink size={16} /> Ver piso
+                                </a>
+                            )}
                             <button onClick={() => { sendEmail(selectedPiso); setSelectedPiso(null); }}
                                 className="flex-1 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors">
-                                <Mail size={16} /> Enviar a Gmail
+                                <Mail size={16} /> Gmail
                             </button>
                         </div>
+
                         {selectedPiso.source === 'whatsapp' && selectedPiso.senderPhone && (
-                            <div className="mt-4 bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Responder por WhatsApp</h4>
+                            <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Mensaje WhatsApp personalizado</h4>
                                 <textarea
                                     className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 h-20 mb-3"
-                                    placeholder="Escribe tu mensaje aquí..."
+                                    placeholder={`Hola, me interesa el inmueble "${selectedPiso.title}" en ${selectedPiso.location} por ${selectedPiso.price}. ¿Podría darme más información?`}
                                     value={replyText}
                                     onChange={(e) => setReplyText(e.target.value)}
                                 ></textarea>
                                 <button onClick={() => sendReplyWa(selectedPiso)} disabled={isReplyingWa}
                                     className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50">
-                                    {isReplyingWa ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Send size={16} /> Enviar WhatsApp</>}
+                                    {isReplyingWa ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Send size={16} /> Enviar por WhatsApp</>}
                                 </button>
                             </div>
                         )}
