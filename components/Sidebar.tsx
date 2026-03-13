@@ -34,7 +34,9 @@ import {
   Car,
   Newspaper,
   ShoppingCart,
-  MessageSquare
+  MessageSquare,
+  Star,
+  Shield
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -60,6 +62,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'vip-tasks', label: '⭐ Tareas VIP', icon: Star },
+    { id: 'shifts', label: '🛡️ Guardias', icon: Shield },
     { id: 'files', label: 'Archivos', icon: FolderOpen },
     { id: 'expenses', label: 'Gastos y Deuda', icon: LibraryBig },
     { id: 'shared-hub', label: 'Dashboard Hub', icon: Heart },

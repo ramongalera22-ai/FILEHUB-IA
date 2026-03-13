@@ -6,7 +6,7 @@ import { Expense, Task, CalendarEvent, Partnership } from '../types';
 import {
    TrendingUp, CheckSquare, CreditCard, Plus, Trash2, FolderOpen,
    FileText, BarChart3, Calendar, Clock, MapPin, AlertCircle, ChevronLeft, ChevronRight,
-   UploadCloud, FileUp, Loader2, Scan, Users
+   UploadCloud, FileUp, Loader2, Scan, Users, Star, Flame, Shield, Target, CheckCircle2, Circle
 } from 'lucide-react';
 import { analyzeFinancialDocument } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
@@ -360,6 +360,59 @@ const Dashboard: React.FC<DashboardProps> = ({
                               );
                            })}
                         </div>
+                     </div>
+
+                     {/* VIP Tasks Quick Panel */}
+                     <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/5 rounded-[2rem] border border-amber-200 dark:border-amber-500/20 p-6">
+                        <div className="flex items-center justify-between mb-4">
+                           <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-md shadow-amber-500/25">
+                                 <Star size={16} className="text-white fill-white" />
+                              </div>
+                              <div>
+                                 <h4 className="text-sm font-black text-slate-800 dark:text-white">Tareas VIP del día</h4>
+                                 <p className="text-[10px] text-slate-500 dark:text-slate-400">Prioridades críticas</p>
+                              </div>
+                           </div>
+                           <span className="bg-amber-500 text-white text-xs font-black px-2.5 py-1 rounded-xl shadow-sm">
+                              {tasks.filter(t => t.priority === 'high' && !t.completed).length} pendientes
+                           </span>
+                        </div>
+                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                           {tasks.filter(t => !t.completed && (t.priority === 'high' || t.priority === 'medium')).slice(0, 5).length > 0 ? (
+                              tasks.filter(t => !t.completed && (t.priority === 'high' || t.priority === 'medium')).slice(0, 5).map(task => (
+                                 <div key={task.id} className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-3 border border-amber-100 dark:border-amber-500/10">
+                                    <button onClick={() => onToggleTask(task.id)} className="shrink-0">
+                                       <Circle size={18} className="text-amber-400 hover:text-amber-600 transition-colors" />
+                                    </button>
+                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200 flex-1 truncate">{task.title}</span>
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${task.priority === 'high' ? 'bg-orange-100 text-orange-600 dark:bg-orange-500/20' : 'bg-amber-100 text-amber-600 dark:bg-amber-500/20'}`}>
+                                       {task.priority === 'high' ? 'Alta' : 'Media'}
+                                    </span>
+                                 </div>
+                              ))
+                           ) : (
+                              <div className="flex items-center justify-center py-6 gap-2 text-amber-400">
+                                 <CheckCircle2 size={20} />
+                                 <span className="text-sm font-bold">¡Todo al día! Sin tareas urgentes</span>
+                              </div>
+                           )}
+                        </div>
+                        {/* Próximas guardias */}
+                        {events.filter(e => e.type === 'work' && e.start >= new Date().toISOString().split('T')[0]).slice(0, 3).length > 0 && (
+                           <div className="mt-4 pt-4 border-t border-amber-200 dark:border-amber-500/20">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-2 flex items-center gap-1">
+                                 <Shield size={10} /> Próximas guardias
+                              </p>
+                              <div className="flex gap-2 flex-wrap">
+                                 {events.filter(e => e.type === 'work' && e.start >= new Date().toISOString().split('T')[0]).slice(0, 3).map(ev => (
+                                    <span key={ev.id} className="text-xs font-bold bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 px-3 py-1 rounded-xl">
+                                       🔴 {new Date(ev.start + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — {ev.title}
+                                    </span>
+                                 ))}
+                              </div>
+                           </div>
+                        )}
                      </div>
 
                      {/* Charts */}

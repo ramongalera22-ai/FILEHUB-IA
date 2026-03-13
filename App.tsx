@@ -28,6 +28,8 @@ import FilesView from './components/FilesView';
 import NotebookView from './components/NotebookView';
 import FilePreviewModal from './components/FilePreviewModal';
 import WhatsAppBotView from './components/WhatsAppBotView';
+import VipTasksView from './components/VipTasksView';
+import ShiftsCalendarView from './components/ShiftsCalendarView';
 import JobsView from './components/JobsView';
 import RealEstateView from './components/RealEstateView';
 import WhatsAppPisosView from './components/WhatsAppPisosView';
@@ -1251,6 +1253,15 @@ const App: React.FC = () => {
       case 'supermarkets': return <SupermarketsView />;
       case 'openwebui': return <OpenWebUIView url={openWebUIConfig.baseUrl} />;
       case 'notebook-ai': return <NotebookAIView />;
+      case 'vip-tasks': return <VipTasksView session={session} />;
+      case 'shifts': return (
+        <ShiftsCalendarView
+          events={calendarEvents}
+          onAddEvent={handleAddEvent}
+          onDeleteEvent={handleDeleteEvent}
+          session={session}
+        />
+      );
       default: return (
         <Dashboard
           expenses={expenses}

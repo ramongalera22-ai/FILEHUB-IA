@@ -357,4 +357,20 @@ export interface HubSection {
   updated_at?: string;
 }
 
-export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files' | 'shared-hub' | 'piso' | 'jobs' | 'activities' | 'whiteboard' | 'notebook' | 'openwebui' | 'car-mode' | 'news' | 'supermarkets' | 'whatsapp-bot' | 'whatsapp-pisos';
+export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files' | 'shared-hub' | 'piso' | 'jobs' | 'activities' | 'whiteboard' | 'notebook' | 'openwebui' | 'car-mode' | 'news' | 'supermarkets' | 'whatsapp-bot' | 'whatsapp-pisos' | 'vip-tasks' | 'shifts';
+
+export interface VipTask {
+  id: string;
+  title: string;
+  description?: string;
+  completed: boolean;
+  priority: 'urgent' | 'high' | 'medium' | 'low';
+  category: 'diario' | 'semanal' | 'mensual' | 'anual' | 'objetivo';
+  due_date?: string;
+  is_recurring: boolean;
+  frequency?: 'daily' | 'weekly' | 'monthly';
+  created_at: string;
+  user_id?: string;
+  pinned?: boolean;
+  tags?: string[];
+}
