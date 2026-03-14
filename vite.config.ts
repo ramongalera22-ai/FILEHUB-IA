@@ -23,6 +23,48 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve('.'),
       }
-    }
+    },
+    build: {
+      // Externalize Node.js-only server packages so they don't get bundled into browser build
+      rollupOptions: {
+        external: [
+          'ws',
+          'express',
+          'cors',
+          'dotenv',
+          'pino',
+          'qrcode',
+          'nodemailer',
+          'baileys',
+          '@whiskeysockets/baileys',
+          'fs',
+          'path',
+          'http',
+          'https',
+          'net',
+          'os',
+          'crypto',
+          'stream',
+          'buffer',
+          'events',
+          'util',
+          'child_process',
+        ],
+        output: {
+          // Provide empty stubs for any accidentally bundled Node modules
+          globals: {
+            ws: 'WebSocket',
+            express: '{}',
+            cors: '{}',
+            dotenv: '{}',
+            pino: '{}',
+            qrcode: '{}',
+            nodemailer: '{}',
+            baileys: '{}',
+            '@whiskeysockets/baileys': '{}',
+          },
+        },
+      },
+    },
   };
 });
