@@ -624,16 +624,20 @@ export default function CalendarView({
             )}
 
             {activeSubView === 'google-view' && (
-              <div className="h-[800px] overflow-hidden animate-in zoom-in-95">
-                <iframe
-                  src={sources.find(s => s.id === 'google-main')?.url || sources.find(s => s.type === 'google' && s.url)?.url || "https://calendar.google.com/calendar/embed"}
-                  style={{ border: 0 }}
-                  width="100%"
-                  height="100%"
-                  className="rounded-[3rem]"
-                  frameBorder="0"
-                  scrolling="no"
-                />
+              <div className="animate-in zoom-in-95 space-y-3 p-4">
+                <p className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">
+                  📅 Calendarios de Carlos — Vista directa Google
+                </p>
+                <div className="rounded-3xl overflow-hidden border border-slate-100 shadow-sm" style={{ height: '600px' }}>
+                  <iframe
+                    src="https://calendar.google.com/calendar/embed?src=carlosgalera2roman%40gmail.com&ctz=Europe%2FMadrid&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&mode=MONTH"
+                    style={{ border: 0 }}
+                    width="100%"
+                    height="100%"
+                    frameBorder="0"
+                    scrolling="no"
+                  />
+                </div>
               </div>
             )}
           </div>
