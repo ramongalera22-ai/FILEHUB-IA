@@ -1154,6 +1154,20 @@ const App: React.FC = () => {
           goals={goals}
           onAddEvent={handleAddEvent}
           onDeleteEvent={handleDeleteEvent}
+          onUpdateAllEvents={async (events) => {
+            // Replace all google-sourced events with freshly synced ones
+            setCalendarEvents(events);
+            if (session) {
+              // Upsert only google events to Supabase
+              const googleEvs = events.filter(e => e.source === 'google');
+              for (const ev of googleEvs) {
+                await supabase.from('calendar_events').upsert({
+                  id: ev.id, user_id: session.user.id, title: ev.title,
+                  start: ev.start, end: ev.end, type: ev.type, source: ev.source
+                });
+              }
+            }
+          }}
         />
       );
       case 'trips': return (

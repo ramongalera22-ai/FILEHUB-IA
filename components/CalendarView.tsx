@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { analyzeCalendarIntelligence, extractEventsFromICS } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
+import { syncAllCarlosCalendars, CARLOS_CALENDARS, SyncResult } from '../services/googleCalendarSync';
 
 interface CalendarViewProps {
   expenses: Expense[];
@@ -44,17 +45,31 @@ export default function CalendarView({
   tasks = [],
   goals = [],
   onAddEvent,
-  onDeleteEvent
+  onDeleteEvent,
+  onUpdateAllEvents
 }: CalendarViewProps) {
   const [activeSubView, setActiveSubView] = useState<SubView>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDate());
 
+  // Google Calendar Sync State
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResults, setSyncResults] = useState<SyncResult[]>([]);
+  const [lastSync, setLastSync] = useState<Date | null>(() => {
+    const s = localStorage.getItem('filehub_last_gcal_sync');
+    return s ? new Date(s) : null;
+  });
+
+  // Auto-sync on mount if last sync was > 30 min ago
+  React.useEffect(() => {
+    const shouldSync = !lastSync || (Date.now() - lastSync.getTime()) > 30 * 60 * 1000;
+    if (shouldSync) handleGoogleSync();
+  }, []);
+
   // Sources State
   const [sources, setSources] = useState<CalendarSource[]>([
-    { id: 'google-main', name: 'Ramon Galera', type: 'google', url: 'https://calendar.google.com/calendar/embed?src=ramongalera22%40gmail.com&ctz=Europe%2FMadrid', color: '#4f46e5', active: true },
-    { id: '1', name: 'Personal', type: 'google', url: '', color: '#4f46e5', active: true },
-    { id: '2', name: 'Trabajo', type: 'outlook', url: '', color: '#0ea5e9', active: false }
+    { id: 'carlos-main', name: 'Carlos Galera', type: 'google', url: 'https://calendar.google.com/calendar/embed?src=carlosgalera2roman%40gmail.com&ctz=Europe%2FMadrid', color: '#4f46e5', active: true },
+    { id: 'ramon-galera', name: 'Ramon Galera', type: 'google', url: 'https://calendar.google.com/calendar/embed?src=ramongalera22%40gmail.com&ctz=Europe%2FMadrid', color: '#10b981', active: true },
   ]);
   const [newSourceUrl, setNewSourceUrl] = useState('');
 
@@ -109,6 +124,31 @@ export default function CalendarView({
       console.log(`Sincronizados ${newEvents.length} eventos nuevos de ${source.name}`);
     } catch (error) {
       console.warn(`No se pudo sincronizar la fuente ${source.name}:`, error);
+    }
+  };
+
+  const handleGoogleSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const { allEvents, results } = await syncAllCarlosCalendars(calendarEvents);
+      setSyncResults(results);
+      const now = new Date();
+      setLastSync(now);
+      localStorage.setItem('filehub_last_gcal_sync', now.toISOString());
+
+      // Use onUpdateAllEvents if provided (replaces all google events cleanly)
+      if (typeof onUpdateAllEvents === 'function') {
+        onUpdateAllEvents(allEvents);
+      } else {
+        // Fallback: add only new events individually
+        const existingIds = new Set(calendarEvents.map(e => e.id));
+        allEvents.filter(e => !existingIds.has(e.id)).forEach(ev => onAddEvent(ev));
+      }
+    } catch (err) {
+      console.error('Google Calendar sync error:', err);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -262,19 +302,49 @@ export default function CalendarView({
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Google Calendar Sync */}
+                <button
+                  onClick={handleGoogleSync}
+                  disabled={isSyncing}
+                  className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-blue-100 transition-all disabled:opacity-50"
+                >
+                  {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <span>🔄</span>}
+                  Google Calendar
+                </button>
                 <button
                   onClick={runAIAnalysis}
                   disabled={isAnalyzing}
                   className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-600 transition-all disabled:opacity-50"
                 >
                   {isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <BrainCircuit size={16} />}
-                  Sincronización IA
+                  Análisis IA
                 </button>
               </div>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-6">
+            {/* Sync status */}
+            {(syncResults.length > 0 || isSyncing) && (
+              <div className="px-8 pb-4 flex flex-wrap gap-2 items-center">
+                {isSyncing && (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl">
+                    <Loader2 size={11} className="animate-spin" /> Sincronizando...
+                  </span>
+                )}
+                {syncResults.map(r => (
+                  <span key={r.calendarId} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border ${r.error ? 'bg-red-50 border-red-200 text-red-600' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+                    {r.error ? '❌' : '✅'} {r.calendarName}
+                    {!r.error && <span className="opacity-70">· {r.events.length} eventos</span>}
+                    {r.error && <span className="text-red-400 font-normal text-[10px] ml-1">(privado/sin acceso)</span>}
+                  </span>
+                ))}
+                {lastSync && !isSyncing && (
+                  <span className="text-[10px] text-slate-400">🕐 {lastSync.toLocaleTimeString('es-ES', {hour:'2-digit',minute:'2-digit'})}</span>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-6 px-8">
               {[
                 { id: 'month', label: 'Mes', icon: CalendarIcon },
                 { id: 'week', label: 'Semana', icon: LayoutGrid },
