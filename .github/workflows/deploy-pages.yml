@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: 🚀 Deploy → GitHub Pages
 
 on:
   push:
@@ -7,40 +7,41 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
-  build-and-deploy:
+  build-deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
+      - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Instalar dependencias
         run: npm ci
 
-      - name: Build for GitHub Pages
+      - name: Build (base=/FILEHUB-IA/)
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
-          VITE_WA_SERVER_URL: ${{ secrets.VITE_WA_SERVER_URL }}
-          VITE_WA_WS_URL: ${{ secrets.VITE_WA_WS_URL }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://xlbtwjxyphqnjeugfxds.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || '' }}
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY || '' }}
+          VITE_WA_SERVER_URL: ${{ secrets.VITE_WA_SERVER_URL || 'https://whatsapp-filehub-production.up.railway.app' }}
+          VITE_WA_WS_URL: ${{ secrets.VITE_WA_WS_URL || 'wss://whatsapp-filehub-production.up.railway.app/ws' }}
         run: npx vite build --base=/FILEHUB-IA/
 
-      - name: Fix SPA routing (404 → index.html)
+      - name: Copiar index → 404 (SPA routing)
         run: cp dist/index.html dist/404.html
 
-      - name: Deploy to gh-pages branch
+      - name: Deploy a rama gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           force_orphan: true
-          commit_message: "🚀 Deploy to GitHub Pages [skip ci]"
+          commit_message: "🚀 Auto-deploy [skip ci] — ${{ github.sha }}"
