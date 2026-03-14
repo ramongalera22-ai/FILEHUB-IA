@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Home, MapPin, Maximize2, BedDouble, Bath, Send, Sparkles,
     RefreshCw, Mail, Trash2, Wifi, WifiOff, Euro, Clock,
-    CheckCircle2, AlertTriangle, Settings, ExternalLink, Eye,
-    Search, Globe, MessageCircle
+    CheckCircle2, AlertTriangle, ExternalLink, Eye, Search,
+    MessageCircle, Heart, HeartOff, Filter, Star, Loader2,
+    X, ChevronDown, ChevronUp, Bot, Zap, Globe, Plus
 } from 'lucide-react';
 
 // ============ TYPES ============
@@ -19,747 +19,605 @@ interface Property {
     description: string;
     rawText: string;
     timestamp: number;
-    source: 'whatsapp' | 'manual';
+    source: 'whatsapp' | 'manual' | 'scrape' | string;
     sent: boolean;
     senderPhone?: string;
     senderName?: string;
-    url?: string;  // enlace directo al inmueble
+    url?: string;
+    favorite?: boolean;
 }
 
-interface EmailConfig {
-    gmailUser: string;
-    gmailAppPassword: string;
-    recipientEmail: string;
+interface SearchFilters {
+    city: string;
+    maxPrice: string;
+    minRooms: string;
+    propertyType: 'alquiler' | 'venta';
 }
 
 const WA_SERVER = import.meta.env.VITE_WA_SERVER_URL || 'https://whatsapp-filehub-production.up.railway.app';
 const WA_WS = import.meta.env.VITE_WA_WS_URL || 'wss://whatsapp-filehub-production.up.railway.app/ws';
-const STORAGE_KEY = 'filehub_pisos_data';
-const EMAIL_CONFIG_KEY = 'filehub_email_config';
+const STORAGE_KEY = 'filehub_pisos_data_v2';
 
-// ============ HELPER: Parse piso from text ============
+// ============ PARSE FROM WA TEXT ============
 function parsePisoFromText(text: string, msgId: string, timestamp: number, senderPhone?: string, senderName?: string): Property | null {
     const t = text.toLowerCase();
+    const hasPiso = ['piso', 'vivienda', 'alquiler', 'apartamento', 'habitación', 'casa ', 'ático', 'estudio', 'loft', 'duplex', 'chalet'].some(k => t.includes(k));
+    const hasDetail = ['€', 'eur', 'precio', 'mes', 'm2', 'm²', 'zona', 'barrio', 'habitaciones', 'baño', 'dormitorio'].some(k => t.includes(k));
+    if (!hasPiso || !hasDetail) return null;
 
-    // Must match property-related keywords
-    const hasPisoKeyword = ['piso', 'vivienda', 'alquiler', 'apartamento', 'habitación', 'casa ', 'ático', 'estudio', 'loft', 'duplex', 'chalet'].some(k => t.includes(k));
-    const hasDetailKeyword = ['€', 'eur', 'precio', 'mes', 'm2', 'm²', 'zona', 'barrio', 'habitaciones', 'baño', 'dormitorio'].some(k => t.includes(k));
-
-    if (!hasPisoKeyword || !hasDetailKeyword) return null;
-
-    const extractLine = (keyword: string): string => {
-        const regex = new RegExp(`${keyword}[:\\*\\s]*(.*)`, 'i');
-        const match = text.match(regex);
-        return match ? match[1].trim().replace(/\*+/g, '').trim() : '';
+    const extractLine = (kw: string) => {
+        const m = text.match(new RegExp(`${kw}[:\\*\\s]*(.*)`, 'i'));
+        return m ? m[1].trim().replace(/\*+/g, '').trim() : '';
     };
 
-    // Extract price
     const priceMatch = text.match(/(\d[\d.,]*)\s*€/);
-    const priceFromLine = extractLine('Precio') || extractLine('Valor') || extractLine('Alquiler');
-    const price = priceFromLine || (priceMatch ? priceMatch[0] : 'Consultar');
-
-    // Extract sqm
+    const price = extractLine('Precio') || extractLine('Alquiler') || (priceMatch ? priceMatch[0] : 'Consultar');
     const sqmMatch = text.match(/(\d+)\s*m[²2]/i);
-    const sqmFromLine = extractLine('Metros') || extractLine('Superficie') || extractLine('m2');
-    const sqm = parseInt(sqmFromLine) || (sqmMatch ? parseInt(sqmMatch[1]) : 0);
-
-    // Extract rooms
+    const sqm = parseInt(extractLine('Metros') || extractLine('m2')) || (sqmMatch ? parseInt(sqmMatch[1]) : 0);
     const roomsMatch = text.match(/(\d+)\s*(?:hab|dormitorio|habitaci)/i);
-    const roomsFromLine = extractLine('Habitaciones') || extractLine('Dormitorios');
-    const rooms = parseInt(roomsFromLine) || (roomsMatch ? parseInt(roomsMatch[1]) : 0);
-
-    // Extract baths
+    const rooms = parseInt(extractLine('Habitaciones')) || (roomsMatch ? parseInt(roomsMatch[1]) : 0);
     const bathsMatch = text.match(/(\d+)\s*(?:baño|bañ)/i);
-    const bathsFromLine = extractLine('Baños');
-    const baths = parseInt(bathsFromLine) || (bathsMatch ? parseInt(bathsMatch[1]) : 0);
-
-    // Extract title
-    const title = extractLine('Título') || extractLine('Vivienda') || extractLine('Piso') ||
-        text.split('\n').find(l => l.trim().length > 5 && l.trim().length < 80)?.replace(/\*+/g, '').trim() ||
-        'Inmueble detectado';
-
-    // Extract location
-    const location = extractLine('Zona') || extractLine('Ubicación') || extractLine('Barrio') ||
-        extractLine('Dirección') || extractLine('Ciudad') || 'No especificada';
-
-    // Extract URL
-    const urlMatch = text.match(/https?:\/\/[^\s\)>\"]+/);
-    const url = urlMatch ? urlMatch[0] : undefined;
+    const baths = parseInt(extractLine('Baños')) || (bathsMatch ? parseInt(bathsMatch[1]) : 0);
+    const title = extractLine('Título') || extractLine('Piso') ||
+        text.split('\n').find(l => l.trim().length > 5 && l.trim().length < 80)?.replace(/\*+/g, '').trim() || 'Inmueble detectado';
+    const location = extractLine('Zona') || extractLine('Ubicación') || extractLine('Barrio') || 'No especificada';
+    const urlMatch = text.match(/https?:\/\/[^\s\)>"]+/);
 
     return {
         id: `wa_piso_${msgId}_${timestamp}`,
-        title: title.substring(0, 80),
-        price,
-        location: location.substring(0, 60),
-        sqm,
-        rooms,
-        baths,
-        description: text.length > 200 ? text.substring(0, 200) + '...' : text,
-        rawText: text,
-        timestamp,
-        source: 'whatsapp',
-        sent: false,
-        senderPhone,
-        senderName,
-        url
+        title: title.substring(0, 80), price,
+        location: location.substring(0, 60), sqm, rooms, baths,
+        description: text.length > 300 ? text.substring(0, 300) + '...' : text,
+        rawText: text, timestamp, source: 'whatsapp', sent: false,
+        senderPhone, senderName, url: urlMatch ? urlMatch[0] : undefined
     };
 }
 
 // ============ COMPONENT ============
 const WhatsAppPisosView: React.FC = () => {
-    // State
     const [properties, setProperties] = useState<Property[]>(() => {
-        try {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            return saved ? JSON.parse(saved) : [];
-        } catch { return []; }
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
     });
-
-    const [isSyncing, setIsSyncing] = useState(false);
     const [wsConnected, setWsConnected] = useState(false);
-    const [showEmailConfig, setShowEmailConfig] = useState(false);
-    const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
-    const [sendingWaId, setSendingWaId] = useState<string | null>(null);
-    const [sendingAll, setSendingAll] = useState(false);
-    const [selectedPiso, setSelectedPiso] = useState<Property | null>(null);
-    const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
-    const [replyText, setReplyText] = useState("");
-    const [isReplyingWa, setIsReplyingWa] = useState(false);
-
-    // Scraping state
-    const [isScraping, setIsScraping] = useState(false);
-    const [showScrapeConfig, setShowScrapeConfig] = useState(false);
-    const [scrapeConfig, setScrapeConfig] = useState({
-        city: 'barcelona',
-        propertyType: 'alquiler',
-        maxPrice: 1200,
-        maxItems: 20
-    });
-
-    const [emailConfig, setEmailConfig] = useState<EmailConfig>(() => {
-        try {
-            const saved = localStorage.getItem(EMAIL_CONFIG_KEY);
-            return saved ? JSON.parse(saved) : { gmailUser: '', gmailAppPassword: '', recipientEmail: '' };
-        } catch { return { gmailUser: '', gmailAppPassword: '', recipientEmail: '' }; }
-    });
+    const [activeTab, setActiveTab] = useState<'pisos' | 'buscar' | 'favoritos'>('pisos');
+    const [selectedProp, setSelectedProp] = useState<Property | null>(null);
+    const [searchFilters, setSearchFilters] = useState<SearchFilters>({ city: 'murcia', maxPrice: '', minRooms: '', propertyType: 'alquiler' });
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchResults, setSearchResults] = useState<Property[]>([]);
+    const [scrapeStatus, setScrapeStatus] = useState('');
+    const [quickMsg, setQuickMsg] = useState('');
+    const [sendingId, setSendingId] = useState<string | null>(null);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     const wsRef = useRef<WebSocket | null>(null);
-    const reconnectRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Persist
-    useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
-    }, [properties]);
-
-    useEffect(() => {
-        localStorage.setItem(EMAIL_CONFIG_KEY, JSON.stringify(emailConfig));
-    }, [emailConfig]);
-
-    // Notification helper
-    const notify = useCallback((text: string, type: 'success' | 'error' | 'info' = 'info') => {
-        setNotification({ text, type });
-        setTimeout(() => setNotification(null), 4000);
+    const persist = useCallback((updated: Property[]) => {
+        setProperties(updated);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.slice(0, 200)));
     }, []);
 
-    // ======== WEBSOCKET (auto-receive) ========
-    const processMessage = useCallback((msg: any) => {
-        if (!msg.body) return;
-        const parsed = parsePisoFromText(msg.body, msg.id, msg.timestamp, msg.from, msg.fromName);
-        if (parsed) {
-            setProperties(prev => {
-                if (prev.some(p => p.id === parsed.id)) return prev;
-                return [parsed, ...prev];
-            });
-        }
-    }, []);
-
+    // ── WEBSOCKET ──────────────────────────────────────────────
     const connectWS = useCallback(() => {
         if (wsRef.current?.readyState === WebSocket.OPEN) return;
         try {
             const ws = new WebSocket(WA_WS);
+            wsRef.current = ws;
             ws.onopen = () => setWsConnected(true);
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'message') processMessage(data.message);
-                    if (data.type === 'history' && data.messages) {
-                        data.messages.forEach((m: any) => processMessage(m));
-                    }
-                } catch { }
-            };
             ws.onclose = () => {
                 setWsConnected(false);
-                wsRef.current = null;
-                reconnectRef.current = setTimeout(connectWS, 4000);
+                reconnectRef.current = setTimeout(connectWS, 5000);
             };
-            ws.onerror = () => setWsConnected(false);
-            wsRef.current = ws;
-        } catch { setWsConnected(false); }
-    }, [processMessage]);
+            ws.onerror = () => ws.close();
+            ws.onmessage = (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+
+                    // New WA message → try to parse as piso
+                    if (data.type === 'message' && data.message?.type === 'incoming') {
+                        const msg = data.message;
+                        const parsed = parsePisoFromText(msg.body || '', msg.id, msg.timestamp, msg.from, msg.fromName);
+                        if (parsed) {
+                            setProperties(prev => {
+                                if (prev.some(p => p.id === parsed.id)) return prev;
+                                const updated = [parsed, ...prev];
+                                localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.slice(0, 200)));
+                                return updated;
+                            });
+                        }
+                    }
+
+                    // History load
+                    if (data.type === 'history') {
+                        const msgs = data.messages || [];
+                        const newPisos: Property[] = [];
+                        msgs.forEach((msg: any) => {
+                            if (msg.type !== 'incoming' || !msg.body) return;
+                            const p = parsePisoFromText(msg.body, msg.id, msg.timestamp, msg.from, msg.fromName);
+                            if (p) newPisos.push(p);
+                        });
+                        if (newPisos.length > 0) {
+                            setProperties(prev => {
+                                const existingIds = new Set(prev.map(p => p.id));
+                                const merged = [...prev, ...newPisos.filter(p => !existingIds.has(p.id))];
+                                localStorage.setItem(STORAGE_KEY, JSON.stringify(merged.slice(0, 200)));
+                                return merged;
+                            });
+                        }
+                    }
+
+                    // Scraping results from bot command
+                    if (data.type === 'scrape_results' && data.target === 'pisos') {
+                        const newProps: Property[] = (data.items || []).map((item: any) => ({
+                            id: item.id || `scrape_${Date.now()}_${Math.random()}`,
+                            title: item.title || 'Piso encontrado',
+                            price: item.price || '—',
+                            location: item.location || '',
+                            sqm: item.sqm || 0, rooms: item.rooms || 0, baths: item.baths || 0,
+                            description: item.description || '',
+                            rawText: item.description || '',
+                            timestamp: item.timestamp || Date.now(),
+                            source: 'scrape', sent: false,
+                            url: item.url
+                        }));
+                        setSearchResults(newProps);
+                        setIsSearching(false);
+                        setScrapeStatus(`✅ ${newProps.length} pisos encontrados`);
+                    }
+
+                    if (data.type === 'bot_scrape_results' && data.target === 'pisos') {
+                        const newProps: Property[] = (data.items || []).map((item: any) => ({
+                            id: item.id || `bot_${Date.now()}_${Math.random()}`,
+                            title: item.title || 'Piso encontrado',
+                            price: item.price || '—', location: item.location || data.city || '',
+                            sqm: 0, rooms: 0, baths: 0, description: item.description || '',
+                            rawText: '', timestamp: Date.now(), source: 'scrape', sent: false,
+                            url: item.url
+                        }));
+                        setProperties(prev => {
+                            const existingIds = new Set(prev.map(p => p.id));
+                            const merged = [...newProps.filter(p => !existingIds.has(p.id)), ...prev];
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged.slice(0, 200)));
+                            return merged;
+                        });
+                        setScrapeStatus(`🤖 Bot encontró ${newProps.length} pisos en ${data.city}`);
+                    }
+
+                    if (data.type === 'scrape_status') setScrapeStatus(data.message || '');
+
+                } catch {}
+            };
+            // Ping keepalive
+            const pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+            }, 15000);
+            ws.addEventListener('close', () => clearInterval(pingInterval));
+        } catch {}
+    }, []);
 
     useEffect(() => {
         connectWS();
         return () => {
-            wsRef.current?.close();
             if (reconnectRef.current) clearTimeout(reconnectRef.current);
+            wsRef.current?.close();
         };
     }, [connectWS]);
 
-    // ======== MANUAL SYNC ========
+    // ── SYNC FROM SERVER ────────────────────────────────────────
     const syncFromServer = async () => {
         setIsSyncing(true);
         try {
-            const res = await fetch(`${WA_SERVER}/messages/classified`);
-            const data = await res.json();
-            let count = 0;
-            if (data.pisos) {
-                data.pisos.forEach((msg: any) => {
-                    const parsed = parsePisoFromText(msg.body, msg.id, msg.timestamp, msg.from, msg.fromName);
-                    if (parsed) {
-                        setProperties(prev => {
-                            if (prev.some(p => p.id === parsed.id)) return prev;
-                            count++;
-                            return [parsed, ...prev];
-                        });
-                    }
-                });
-            }
-            notify(count > 0 ? `✅ ${count} nuevos pisos importados` : 'No se encontraron nuevos pisos', count > 0 ? 'success' : 'info');
-        } catch {
-            notify('Error al conectar con el servidor WhatsApp', 'error');
-        } finally {
-            setIsSyncing(false);
-        }
-    };
-
-    // ======== APIFY SCRAPING ========
-    const scrapeFromApify = async () => {
-        setIsScraping(true);
-        try {
-            const res = await fetch(`${WA_SERVER}/scrape/pisos`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(scrapeConfig)
+            const r = await fetch(`${WA_SERVER}/messages/classified`);
+            const data = await r.json();
+            const pisoMsgs = data.pisos || [];
+            const newPisos: Property[] = [];
+            pisoMsgs.forEach((msg: any) => {
+                const p = parsePisoFromText(msg.body, msg.id, msg.timestamp, msg.from, msg.fromName);
+                if (p) newPisos.push(p);
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Error de scraping');
-            if (data.pisos && data.pisos.length > 0) {
+            if (newPisos.length > 0) {
                 setProperties(prev => {
-                    const newPisos = data.pisos.filter((p: Property) => !prev.some(e => e.id === p.id));
-                    return [...newPisos, ...prev];
+                    const existingIds = new Set(prev.map(p => p.id));
+                    const merged = [...prev, ...newPisos.filter(p => !existingIds.has(p.id))];
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged.slice(0, 200)));
+                    return merged;
                 });
-                notify(`✅ ${data.count} pisos encontrados via web scraping`, 'success');
-            } else {
-                notify('No se encontraron pisos con esos filtros', 'info');
             }
-        } catch (err: any) {
-            notify(`Error scraping: ${err.message}`, 'error');
-        } finally {
-            setIsScraping(false);
-        }
+        } catch {}
+        setIsSyncing(false);
     };
 
-    // ======== EMAIL ========
-    const generateEmailHTML = (prop: Property): string => {
-        return `
-        <div style="font-family:'Segoe UI',Arial,sans-serif; max-width:600px; margin:0 auto; border:1px solid #e2e8f0; border-radius:16px; overflow:hidden;">
-            <div style="background:linear-gradient(135deg,#059669,#10b981); padding:24px; color:white;">
-                <h1 style="margin:0; font-size:20px;">🏠 ${prop.title}</h1>
-                <p style="margin:8px 0 0; opacity:0.9; font-size:14px;">Enviado desde FileHub IA</p>
-            </div>
-            <div style="padding:24px;">
-                <table style="width:100%; border-collapse:collapse;">
-                    <tr><td style="padding:8px 0; color:#64748b; font-size:13px;">📍 Ubicación</td><td style="padding:8px 0; font-weight:600; font-size:14px;">${prop.location}</td></tr>
-                    <tr><td style="padding:8px 0; color:#64748b; font-size:13px;">💶 Precio</td><td style="padding:8px 0; font-weight:700; color:#059669; font-size:16px;">${prop.price}</td></tr>
-                    <tr><td style="padding:8px 0; color:#64748b; font-size:13px;">📐 Superficie</td><td style="padding:8px 0; font-weight:600; font-size:14px;">${prop.sqm} m²</td></tr>
-                    <tr><td style="padding:8px 0; color:#64748b; font-size:13px;">🛏️ Habitaciones</td><td style="padding:8px 0; font-weight:600; font-size:14px;">${prop.rooms}</td></tr>
-                    <tr><td style="padding:8px 0; color:#64748b; font-size:13px;">🛁 Baños</td><td style="padding:8px 0; font-weight:600; font-size:14px;">${prop.baths}</td></tr>
-                </table>
-                <hr style="border:none; border-top:1px solid #e2e8f0; margin:16px 0;">
-                <p style="color:#334155; font-size:13px; line-height:1.6; white-space:pre-wrap;">${prop.rawText}</p>
-            </div>
-            <div style="background:#f8fafc; padding:16px 24px; text-align:center; font-size:11px; color:#94a3b8;">
-                FileHub IA · Gestión Inmobiliaria · ${new Date().toLocaleDateString('es-ES')}
-            </div>
-        </div>`;
-    };
+    // ── SEARCH (scraping) ──────────────────────────────────────
+    const handleSearch = () => {
+        if (!searchFilters.city.trim()) return;
+        setIsSearching(true);
+        setScrapeStatus(`🔍 Buscando pisos en ${searchFilters.city}...`);
+        setSearchResults([]);
 
-    const sendEmail = async (prop: Property) => {
-        if (!emailConfig.gmailUser || !emailConfig.gmailAppPassword) {
-            setShowEmailConfig(true);
-            notify('Configura tu Gmail primero', 'error');
-            return;
-        }
-        const recipient = emailConfig.recipientEmail || emailConfig.gmailUser;
-        setSendingEmailId(prop.id);
-        try {
-            const res = await fetch(`${WA_SERVER}/send-email`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: recipient,
-                    subject: `🏠 Piso: ${prop.title} - ${prop.price}`,
-                    html: generateEmailHTML(prop),
-                    gmailUser: emailConfig.gmailUser,
-                    gmailAppPassword: emailConfig.gmailAppPassword
+        // Via WebSocket to server (preferred - server-side scraping avoids CORS)
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'scrape_pisos',
+                city: searchFilters.city,
+                maxPrice: searchFilters.maxPrice || undefined,
+                rooms: searchFilters.minRooms || undefined,
+                propertyType: searchFilters.propertyType,
+                maxItems: 20
+            }));
+            // Timeout fallback
+            setTimeout(() => {
+                setIsSearching(prev => { if (prev) setScrapeStatus('⏱️ Timeout — intenta de nuevo'); return false; });
+            }, 30000);
+        } else {
+            // REST fallback
+            const params = new URLSearchParams({ city: searchFilters.city, type: searchFilters.propertyType, limit: '20' });
+            if (searchFilters.maxPrice) params.set('maxPrice', searchFilters.maxPrice);
+            if (searchFilters.minRooms) params.set('rooms', searchFilters.minRooms);
+            fetch(`${WA_SERVER}/scrape/pisos?${params}`)
+                .then(r => r.json())
+                .then(data => {
+                    const items: Property[] = (data.pisos || []).map((item: any, i: number) => ({
+                        id: item.id || `rest_${Date.now()}_${i}`,
+                        title: item.title || 'Piso', price: item.price || '—',
+                        location: item.location || searchFilters.city,
+                        sqm: item.sqm || 0, rooms: item.rooms || 0, baths: item.baths || 0,
+                        description: item.description || '', rawText: '', timestamp: Date.now(),
+                        source: 'scrape', sent: false, url: item.url
+                    }));
+                    setSearchResults(items);
+                    setScrapeStatus(`✅ ${items.length} pisos encontrados`);
                 })
-            });
-            const result = await res.json();
-            if (result.success) {
-                setProperties(prev => prev.map(p => p.id === prop.id ? { ...p, sent: true } : p));
-                notify(`✅ Email enviado a ${recipient}`, 'success');
-            } else {
-                notify(`Error: ${result.error}`, 'error');
-            }
-        } catch {
-            notify('Error de conexión con el servidor', 'error');
-        } finally {
-            setSendingEmailId(null);
+                .catch(() => setScrapeStatus('❌ Error al buscar'))
+                .finally(() => setIsSearching(false));
         }
     };
 
-    const sendAllByEmail = async () => {
-        if (!emailConfig.gmailUser || !emailConfig.gmailAppPassword) {
-            setShowEmailConfig(true);
-            return;
-        }
-        const unsent = properties.filter(p => !p.sent);
-        if (unsent.length === 0) { notify('No hay pisos pendientes de enviar', 'info'); return; }
-
-        setSendingAll(true);
-        const recipient = emailConfig.recipientEmail || emailConfig.gmailUser;
-        const allHTML = unsent.map(p => generateEmailHTML(p)).join('<br/><br/>');
-
+    // ── SEND WA MESSAGE ─────────────────────────────────────────
+    const sendQuickWA = async (prop: Property, customMsg?: string) => {
+        if (!prop.senderPhone) return;
+        setSendingId(prop.id);
+        const text = customMsg || quickMsg || `Hola, he visto tu anuncio sobre el ${prop.title} en ${prop.location} a ${prop.price}. ¿Podría visitarlo? Gracias 🏠`;
         try {
-            const res = await fetch(`${WA_SERVER}/send-email`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: recipient,
-                    subject: `🏠 ${unsent.length} Pisos disponibles - FileHub IA`,
-                    html: `<h2 style="font-family:sans-serif; color:#0f172a;">📋 Resumen de ${unsent.length} pisos</h2>${allHTML}`,
-                    gmailUser: emailConfig.gmailUser,
-                    gmailAppPassword: emailConfig.gmailAppPassword
-                })
+            const r = await fetch(`${WA_SERVER}/send`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: prop.senderPhone, message: text })
             });
-            const result = await res.json();
-            if (result.success) {
-                setProperties(prev => prev.map(p => ({ ...p, sent: true })));
-                notify(`✅ ${unsent.length} pisos enviados a ${recipient}`, 'success');
-            } else {
-                notify(`Error: ${result.error}`, 'error');
-            }
-        } catch {
-            notify('Error de conexión', 'error');
-        } finally {
-            setSendingAll(false);
-        }
+            if (r.ok) persist(properties.map(p => p.id === prop.id ? { ...p, sent: true } : p));
+        } catch {}
+        setSendingId(null);
     };
 
-    const deletePiso = (id: string) => {
-        setProperties(prev => prev.filter(p => p.id !== id));
-        if (selectedPiso?.id === id) setSelectedPiso(null);
+    // ── FAVORITE ────────────────────────────────────────────────
+    const toggleFavorite = (id: string) => {
+        persist(properties.map(p => p.id === id ? { ...p, favorite: !p.favorite } : p));
     };
 
-    const clearAll = () => {
-        if (confirm('¿Eliminar todos los pisos guardados?')) {
-            setProperties([]);
-            setSelectedPiso(null);
-        }
+    const addToMyPisos = (prop: Property) => {
+        if (properties.some(p => p.id === prop.id)) return;
+        persist([prop, ...properties]);
+        setScrapeStatus(`✅ "${prop.title}" añadido a Mis Pisos`);
     };
 
-    const sendQuickWa = async (prop: Property) => {
-        if (!prop.senderPhone) {
-            notify('No hay número de WhatsApp para este inmueble', 'error');
-            return;
-        }
-        setSendingWaId(prop.id);
-        const msg = `Hola, me interesa el inmueble "${prop.title}" en ${prop.location} por ${prop.price}. ¿Podría darme más información? Gracias.`;
-        try {
-            const res = await fetch(`${WA_SERVER}/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: prop.senderPhone, message: msg })
-            });
-            const result = await res.json();
-            if (result.success) {
-                notify('✅ Mensaje WhatsApp enviado', 'success');
-            } else {
-                notify(`Error: ${result.error || 'No se pudo enviar'}`, 'error');
-            }
-        } catch {
-            notify('Error de conexión con el servidor WhatsApp', 'error');
-        } finally {
-            setSendingWaId(null);
-        }
-    };
+    const deleteProp = (id: string) => persist(properties.filter(p => p.id !== id));
 
-    const sendReplyWa = async (prop: Property) => {
-        if (!prop.senderPhone) {
-            notify('No hay número de teléfono para responder a este piso', 'error');
-            return;
-        }
-        setIsReplyingWa(true);
-        try {
-            const res = await fetch(`${WA_SERVER}/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    phone: prop.senderPhone,
-                    message: replyText || `Hola, me interesa el piso ubicado en ${prop.location} de ${prop.price} que encontraste.`
-                })
-            });
-            const result = await res.json();
-            if (result.success) {
-                notify('✅ Mensaje de WhatsApp enviado', 'success');
-                setReplyText('');
-                setSelectedPiso(null);
-            } else {
-                notify(`Error: ${result.error || 'No se pudo enviar'}`, 'error');
-            }
-        } catch {
-            notify('Error de conexión enviando WA', 'error');
-        } finally {
-            setIsReplyingWa(false);
-        }
-    };
+    // ── FILTERED LISTS ──────────────────────────────────────────
+    const myPisos = properties.sort((a, b) => b.timestamp - a.timestamp);
+    const favorites = properties.filter(p => p.favorite);
 
-    // ======== RENDER ========
-    return (
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-
-            {/* Notification */}
-            {notification && (
-                <div className={`mx-6 mt-4 px-5 py-3 rounded-2xl text-sm font-bold flex items-center gap-3 shadow-lg animate-pulse ${notification.type === 'success' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
-                    : notification.type === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
-                    }`}>
-                    {notification.type === 'success' ? <CheckCircle2 size={18} /> : notification.type === 'error' ? <AlertTriangle size={18} /> : <Sparkles size={18} />}
-                    {notification.text}
+    // ── PROPERTY CARD ────────────────────────────────────────────
+    const PropCard = ({ prop, showAddBtn = false }: { prop: Property; showAddBtn?: boolean }) => (
+        <div className={`group bg-white dark:bg-slate-800 rounded-2xl border transition-all hover:shadow-lg ${
+            prop.favorite ? 'border-pink-300 dark:border-pink-500/40' : 'border-slate-200 dark:border-slate-700'
+        }`}>
+            {/* Source badge */}
+            <div className="px-4 pt-3 flex items-center justify-between">
+                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg ${
+                    prop.source === 'whatsapp' ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400' :
+                    prop.source === 'scrape' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400' :
+                    'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                }`}>
+                    {prop.source === 'whatsapp' ? '💬 WhatsApp' : prop.source === 'scrape' ? '🔍 Scraping' : '✏️ Manual'}
+                </span>
+                <div className="flex gap-1">
+                    <button onClick={() => toggleFavorite(prop.id)}
+                        className="p-1.5 rounded-lg hover:bg-pink-50 dark:hover:bg-pink-500/10 transition-colors">
+                        {prop.favorite
+                            ? <Heart size={14} className="text-pink-500 fill-pink-500" />
+                            : <HeartOff size={14} className="text-slate-400" />}
+                    </button>
+                    {showAddBtn
+                        ? <button onClick={() => addToMyPisos(prop)}
+                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 transition-colors">
+                            <Plus size={14} className="text-emerald-600" />
+                          </button>
+                        : <button onClick={() => deleteProp(prop.id)}
+                            className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100">
+                            <Trash2 size={14} className="text-slate-400 hover:text-red-500" />
+                          </button>
+                    }
                 </div>
-            )}
+            </div>
 
-            {/* Header */}
-            <header className="p-6 pb-0">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg shadow-emerald-500/20">
-                            <Home className="w-7 h-7 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Pisos (WhatsApp Bot)</h1>
-                            <div className="flex items-center gap-3 mt-1">
-                                <span className="text-sm text-slate-500">{properties.length} guardados</span>
-                                <span className="text-slate-300">•</span>
-                                <span className={`text-xs font-bold flex items-center gap-1 ${wsConnected ? 'text-emerald-500' : 'text-slate-400'}`}>
-                                    {wsConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-                                    {wsConnected ? 'Auto-sync ON' : 'Offline'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button onClick={syncFromServer} disabled={isSyncing}
-                            className="flex items-center gap-2 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-sm py-2.5 px-5 rounded-xl transition-all active:scale-95 disabled:opacity-60">
-                            <RefreshCw size={15} className={isSyncing ? 'animate-spin' : ''} />
-                            Sincronizar WA
-                        </button>
-                        <button onClick={() => setShowScrapeConfig(!showScrapeConfig)} disabled={isScraping}
-                            className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-bold text-sm py-2.5 px-5 rounded-xl transition-all active:scale-95 disabled:opacity-60 shadow-lg shadow-violet-500/20">
-                            <Globe size={15} className={isScraping ? 'animate-spin' : ''} />
-                            {isScraping ? 'Scraping...' : 'Scraping Web'}
-                        </button>
-                        <button onClick={sendAllByEmail} disabled={sendingAll || properties.length === 0}
-                            className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-bold text-sm py-2.5 px-5 rounded-xl transition-all active:scale-95 disabled:opacity-60 shadow-lg shadow-red-500/20">
-                            <Mail size={15} />
-                            {sendingAll ? 'Enviando...' : 'Enviar todo a Gmail'}
-                        </button>
-                        <button onClick={() => setShowEmailConfig(!showEmailConfig)}
-                            className="p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors">
-                            <Settings size={16} className="text-slate-500" />
-                        </button>
-                        {properties.length > 0 && (
-                            <button onClick={clearAll}
-                                className="p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-xl transition-colors group">
-                                <Trash2 size={16} className="text-slate-400 group-hover:text-red-500" />
-                            </button>
-                        )}
-                    </div>
+            <div className="p-4 pt-2">
+                {/* Title & Price */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                    <p className="font-black text-sm text-slate-800 dark:text-white leading-snug line-clamp-2">{prop.title}</p>
+                    <span className="shrink-0 text-base font-black text-emerald-600 dark:text-emerald-400">{prop.price}</span>
                 </div>
 
-                {/* Gmail Config Panel */}
-                {showEmailConfig && (
-                    <div className="mt-4 p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
-                        <h3 className="text-sm font-black text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                            <Mail size={16} /> Configuración Gmail
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gmail</label>
-                                <input type="email" value={emailConfig.gmailUser} onChange={e => setEmailConfig(c => ({ ...c, gmailUser: e.target.value }))}
-                                    placeholder="tu@gmail.com"
-                                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none" />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contraseña App</label>
-                                <input type="password" value={emailConfig.gmailAppPassword} onChange={e => setEmailConfig(c => ({ ...c, gmailAppPassword: e.target.value }))}
-                                    placeholder="xxxx xxxx xxxx xxxx"
-                                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none" />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Enviar a (opcional)</label>
-                                <input type="email" value={emailConfig.recipientEmail} onChange={e => setEmailConfig(c => ({ ...c, recipientEmail: e.target.value }))}
-                                    placeholder="destino@gmail.com"
-                                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none" />
-                            </div>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-3">
-                            💡 Ve a <a href="https://myaccount.google.com/apppasswords" target="_blank" className="text-emerald-500 underline">myaccount.google.com/apppasswords</a> para generar una contraseña de aplicación. Necesitas tener 2FA activado.
-                        </p>
-                    </div>
+                {/* Location */}
+                <div className="flex items-center gap-1 text-xs text-slate-500 mb-2">
+                    <MapPin size={11} />
+                    <span className="truncate">{prop.location}</span>
+                </div>
+
+                {/* Stats chips */}
+                <div className="flex gap-1.5 flex-wrap mb-3">
+                    {prop.sqm > 0 && <span className="flex items-center gap-1 text-[10px] font-bold bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-lg"><Maximize2 size={9}/>{prop.sqm}m²</span>}
+                    {prop.rooms > 0 && <span className="flex items-center gap-1 text-[10px] font-bold bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-lg"><BedDouble size={9}/>{prop.rooms}hab</span>}
+                    {prop.baths > 0 && <span className="flex items-center gap-1 text-[10px] font-bold bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-lg"><Bath size={9}/>{prop.baths}baños</span>}
+                    {prop.sent && <span className="text-[10px] font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 px-2 py-1 rounded-lg">✓ Enviado</span>}
+                </div>
+
+                {/* Description */}
+                {prop.description && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">{prop.description}</p>
                 )}
 
-                {/* Scrape Config Panel */}
-                {showScrapeConfig && (
-                    <div className="mt-4 p-5 bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-800 rounded-2xl shadow-sm">
-                        <h3 className="text-sm font-black text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                            <Globe size={16} className="text-violet-500" /> Scraping Web (Apify)
+                {/* URL link */}
+                {prop.url && (
+                    <a href={prop.url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs font-bold text-blue-500 hover:text-blue-700 mb-3 truncate">
+                        <ExternalLink size={11} /> Ver anuncio
+                    </a>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-2">
+                    <button onClick={() => setSelectedProp(prop)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 transition-all">
+                        <Eye size={12} /> Ver
+                    </button>
+                    {prop.senderPhone && (
+                        <button
+                            onClick={() => sendQuickWA(prop)}
+                            disabled={sendingId === prop.id}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-500 hover:bg-green-600 disabled:opacity-50 rounded-xl text-xs font-bold text-white transition-all shadow-sm shadow-green-500/20">
+                            {sendingId === prop.id ? <Loader2 size={12} className="animate-spin" /> : <MessageCircle size={12} />}
+                            {sendingId === prop.id ? 'Enviando...' : 'WhatsApp'}
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="space-y-5">
+            {/* HEADER */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                        <Home size={24} className="text-white" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+                            Pisos Bot WA
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{wsConnected ? 'Bot conectado' : 'Bot desconectado'}</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={syncFromServer} disabled={isSyncing}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:border-emerald-400/50 transition-all disabled:opacity-50">
+                        {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                        Sincronizar
+                    </button>
+                </div>
+            </div>
+
+            {/* BOT COMMAND HELP */}
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-500/10 dark:to-emerald-500/5 rounded-2xl border border-green-200 dark:border-green-500/20 p-4">
+                <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 bg-green-500 rounded-xl flex items-center justify-center shadow-md shrink-0">
+                        <Bot size={18} className="text-white" />
+                    </div>
+                    <div>
+                        <p className="font-black text-sm text-green-700 dark:text-green-400 mb-1">Comandos del Bot WhatsApp</p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {[
+                                { cmd: '/buscar piso murcia 800', desc: 'Busca pisos' },
+                                { cmd: '/buscar trabajo enfermero murcia', desc: 'Busca empleo' },
+                                { cmd: '/pisos', desc: 'Lista últimos' },
+                                { cmd: '/ayuda', desc: 'Ver comandos' },
+                            ].map(c => (
+                                <span key={c.cmd} className="font-mono text-[10px] bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 px-2 py-1 rounded-lg">
+                                    {c.cmd}
+                                </span>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-green-600/70 dark:text-green-400/50 mt-1">Envía estos comandos a tu propio número de WhatsApp para que el bot busque y te responda</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* TABS */}
+            <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl w-fit">
+                {[
+                    { id: 'pisos', label: `🏠 Mis Pisos (${myPisos.length})` },
+                    { id: 'buscar', label: '🔍 Buscar' },
+                    { id: 'favoritos', label: `❤️ Favoritos (${favorites.length})` },
+                ].map(t => (
+                    <button key={t.id} onClick={() => setActiveTab(t.id as any)}
+                        className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                            activeTab === t.id ? 'bg-white dark:bg-slate-700 text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}>
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* TAB: BUSCAR */}
+            {activeTab === 'buscar' && (
+                <div className="space-y-4">
+                    {/* Search form */}
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+                        <h3 className="font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                            <Search size={16} className="text-emerald-500" /> Búsqueda de pisos
                         </h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ciudad</label>
-                                <input type="text" value={scrapeConfig.city} onChange={e => setScrapeConfig(c => ({ ...c, city: e.target.value }))}
-                                    placeholder="barcelona"
-                                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-violet-500 outline-none" />
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                            <div className="col-span-2 sm:col-span-1">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Ciudad</label>
+                                <input value={searchFilters.city} onChange={e => setSearchFilters(f => ({ ...f, city: e.target.value }))}
+                                    onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                                    placeholder="murcia, valencia..."
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400" />
                             </div>
                             <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tipo</label>
-                                <select value={scrapeConfig.propertyType} onChange={e => setScrapeConfig(c => ({ ...c, propertyType: e.target.value }))}
-                                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-violet-500 outline-none">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Precio max €</label>
+                                <input type="number" value={searchFilters.maxPrice} onChange={e => setSearchFilters(f => ({ ...f, maxPrice: e.target.value }))}
+                                    placeholder="800"
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Hab. mín.</label>
+                                <input type="number" value={searchFilters.minRooms} onChange={e => setSearchFilters(f => ({ ...f, minRooms: e.target.value }))}
+                                    placeholder="2"
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Tipo</label>
+                                <select value={searchFilters.propertyType} onChange={e => setSearchFilters(f => ({ ...f, propertyType: e.target.value as any }))}
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm font-bold focus:ring-2 focus:ring-emerald-500/20">
                                     <option value="alquiler">Alquiler</option>
                                     <option value="venta">Venta</option>
                                 </select>
                             </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Precio máx (€)</label>
-                                <input type="number" value={scrapeConfig.maxPrice} onChange={e => setScrapeConfig(c => ({ ...c, maxPrice: parseInt(e.target.value) || 0 }))}
-                                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-violet-500 outline-none" />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Máx resultados</label>
-                                <input type="number" value={scrapeConfig.maxItems} onChange={e => setScrapeConfig(c => ({ ...c, maxItems: parseInt(e.target.value) || 10 }))}
-                                    className="w-full mt-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-violet-500 outline-none" />
-                            </div>
                         </div>
-                        <button onClick={scrapeFromApify} disabled={isScraping}
-                            className="mt-4 flex items-center gap-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-bold text-sm py-2.5 px-6 rounded-xl transition-all active:scale-95 disabled:opacity-60 shadow-lg shadow-violet-500/20">
-                            <Search size={15} className={isScraping ? 'animate-bounce' : ''} />
-                            {isScraping ? 'Buscando pisos...' : 'Buscar pisos'}
+                        <button onClick={handleSearch} disabled={isSearching}
+                            className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black rounded-xl shadow-lg shadow-emerald-500/20 hover:opacity-90 disabled:opacity-50 transition-all">
+                            {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+                            {isSearching ? 'Buscando pisos...' : 'Buscar pisos ahora'}
                         </button>
-                        <p className="text-[11px] text-slate-400 mt-2">🔍 Busca pisos en Idealista usando Apify. Requiere API key configurada.</p>
-                    </div>
-                )}
-            </header>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6 pt-4">
-                {properties.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center py-20">
-                        <div className="w-24 h-24 bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 rounded-3xl flex items-center justify-center mb-6 shadow-inner">
-                            <Home size={40} className="text-emerald-400" />
-                        </div>
-                        <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Sin pisos todavía</h3>
-                        <p className="text-slate-500 max-w-sm text-sm leading-relaxed">
-                            Cuando tu bot de WhatsApp envíe anuncios de pisos, aparecerán aquí automáticamente.
-                            También puedes pulsar "Sincronizar WA" para importar del historial.
-                        </p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
-                        {properties.map(prop => (
-                            <article key={prop.id}
-                                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col overflow-hidden group">
-
-                                {/* Card Header */}
-                                <div className="relative bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-850 p-5 flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black text-lg px-3 py-1 rounded-xl flex items-center gap-1">
-                                            <Euro size={16} />
-                                            {prop.price}
-                                        </div>
-                                    </div>
-                                    {prop.sent && (
-                                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-lg">
-                                            <CheckCircle2 size={12} /> Enviado
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* Card Body */}
-                                <div className="p-5 flex-1 flex flex-col">
-                                    <h3 className="text-base font-black text-slate-900 dark:text-white leading-snug mb-2 line-clamp-2">{prop.title}</h3>
-
-                                    <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium mb-4">
-                                        <MapPin size={13} className="text-emerald-500 shrink-0" />
-                                        <span className="truncate">{prop.location}</span>
-                                    </div>
-
-                                    {/* Stats */}
-                                    <div className="grid grid-cols-3 gap-2 mb-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl">
-                                        <div className="flex flex-col items-center gap-0.5 text-slate-500">
-                                            <Maximize2 size={14} />
-                                            <span className="text-[11px] font-bold">{prop.sqm || '—'} m²</span>
-                                        </div>
-                                        <div className="flex flex-col items-center gap-0.5 text-slate-500 border-x border-slate-200 dark:border-slate-700">
-                                            <BedDouble size={14} />
-                                            <span className="text-[11px] font-bold">{prop.rooms || '—'} Hab</span>
-                                        </div>
-                                        <div className="flex flex-col items-center gap-0.5 text-slate-500">
-                                            <Bath size={14} />
-                                            <span className="text-[11px] font-bold">{prop.baths || '—'} Bañ</span>
-                                        </div>
-                                    </div>
-
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-3 flex-1 leading-relaxed mb-4">{prop.description}</p>
-
-                                    {/* URL visible si existe */}
-                                    {prop.url && (
-                                        <a href={prop.url} target="_blank" rel="noopener noreferrer"
-                                            className="flex items-center gap-1.5 text-xs font-bold text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-300 underline underline-offset-2 truncate mb-3 transition-colors"
-                                            onClick={e => e.stopPropagation()}>
-                                            <ExternalLink size={12} className="shrink-0" />
-                                            Ver anuncio completo
-                                        </a>
-                                    )}
-
-                                    <div className="text-[10px] text-slate-400 flex items-center gap-1 mb-3">
-                                        <Clock size={10} />
-                                        {new Date(prop.timestamp).toLocaleString('es-ES')}
-                                    </div>
-                                </div>
-
-                                {/* Actions */}
-                                <div className="px-5 pb-5 flex gap-2 flex-wrap">
-                                    {/* Botón Ver anuncio */}
-                                    {prop.url ? (
-                                        <a href={prop.url} target="_blank" rel="noopener noreferrer"
-                                            className="flex-1 min-w-0 flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-emerald-500/20">
-                                            <ExternalLink size={13} /> Ver piso
-                                        </a>
-                                    ) : (
-                                        <button onClick={() => sendEmail(prop)} disabled={sendingEmailId === prop.id}
-                                            className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-red-500/10 disabled:opacity-50">
-                                            {sendingEmailId === prop.id
-                                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                : <><Mail size={14} /> Gmail</>}
-                                        </button>
-                                    )}
-                                    {/* Botón WhatsApp respuesta rápida */}
-                                    {prop.senderPhone && (
-                                        <button onClick={() => sendQuickWa(prop)} disabled={sendingWaId === prop.id}
-                                            title="Responder por WhatsApp"
-                                            className="px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-colors disabled:opacity-50">
-                                            {sendingWaId === prop.id
-                                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                : <MessageCircle size={14} className="text-white" />}
-                                        </button>
-                                    )}
-                                    {/* Email si ya hay link */}
-                                    {prop.url && (
-                                        <button onClick={() => sendEmail(prop)} disabled={sendingEmailId === prop.id}
-                                            title="Guardar en Gmail"
-                                            className="px-3 py-2.5 bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors disabled:opacity-50">
-                                            {sendingEmailId === prop.id
-                                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                : <Mail size={14} className="text-white" />}
-                                        </button>
-                                    )}
-                                    <button onClick={() => setSelectedPiso(prop)}
-                                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors">
-                                        <Eye size={14} className="text-slate-500" />
-                                    </button>
-                                    <button onClick={() => deletePiso(prop.id)}
-                                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-xl transition-colors group">
-                                        <Trash2 size={14} className="text-slate-400 group-hover:text-red-500" />
-                                    </button>
-                                </div>
-                            </article>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Detail Modal */}
-            {selectedPiso && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedPiso(null)}>
-                    <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl p-6" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-black text-slate-900 dark:text-white">{selectedPiso.title}</h2>
-                            <button onClick={() => setSelectedPiso(null)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
-                        </div>
-
-                        {/* Meta tags */}
-                        <div className="flex flex-wrap gap-2 mb-3">
-                            <span className="text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-lg font-semibold">💶 {selectedPiso.price}</span>
-                            {selectedPiso.location !== 'No especificada' && (
-                                <span className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-lg font-semibold">📍 {selectedPiso.location}</span>
-                            )}
-                            {selectedPiso.sqm > 0 && <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-lg font-semibold">{selectedPiso.sqm} m²</span>}
-                            {selectedPiso.rooms > 0 && <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-lg font-semibold">{selectedPiso.rooms} hab</span>}
-                            {selectedPiso.baths > 0 && <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-lg font-semibold">{selectedPiso.baths} baño(s)</span>}
-                        </div>
-
-                        {/* URL link visible */}
-                        {selectedPiso.url && (
-                            <a href={selectedPiso.url} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-2 text-sm font-bold text-emerald-500 hover:text-emerald-700 underline underline-offset-2 mb-3 transition-colors break-all">
-                                <ExternalLink size={14} className="shrink-0" />
-                                {selectedPiso.url}
-                            </a>
-                        )}
-
-                        {/* Raw text */}
-                        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl mb-4">
-                            {selectedPiso.rawText}
-                        </div>
-
-                        {/* Sender info */}
-                        {selectedPiso.senderPhone && (
-                            <p className="text-xs text-slate-400 mb-3">
-                                📱 Enviado por: <span className="font-semibold text-slate-600 dark:text-slate-300">{selectedPiso.senderName || selectedPiso.senderPhone}</span>
+                        {scrapeStatus && (
+                            <p className={`text-xs font-bold mt-2 text-center ${scrapeStatus.startsWith('❌') ? 'text-red-500' : 'text-emerald-600'}`}>
+                                {scrapeStatus}
                             </p>
                         )}
+                    </div>
 
-                        {/* Action buttons */}
-                        <div className="flex gap-2 flex-wrap mb-3">
-                            {selectedPiso.url && (
-                                <a href={selectedPiso.url} target="_blank" rel="noopener noreferrer"
-                                    className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold py-3 rounded-xl transition-colors">
-                                    <ExternalLink size={16} /> Ver piso
-                                </a>
-                            )}
-                            <button onClick={() => { sendEmail(selectedPiso); setSelectedPiso(null); }}
-                                className="flex-1 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors">
-                                <Mail size={16} /> Gmail
+                    {/* Search results */}
+                    {searchResults.length > 0 && (
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                                <Globe size={12} /> Resultados scraping ({searchResults.length})
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {searchResults.map(p => <PropCard key={p.id} prop={p} showAddBtn />)}
+                            </div>
+                        </div>
+                    )}
+
+                    {!isSearching && searchResults.length === 0 && scrapeStatus && !scrapeStatus.startsWith('❌') && (
+                        <div className="flex flex-col items-center py-12 text-center">
+                            <div className="text-4xl mb-3">🏠</div>
+                            <p className="font-bold text-slate-500">Sin resultados</p>
+                            <p className="text-xs text-slate-400 mt-1">Prueba con otra ciudad o quita el filtro de precio</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* TAB: MIS PISOS */}
+            {activeTab === 'pisos' && (
+                <div>
+                    {myPisos.length === 0 ? (
+                        <div className="flex flex-col items-center py-16 text-center">
+                            <div className="text-5xl mb-4">🏠</div>
+                            <p className="font-bold text-slate-600 dark:text-slate-300">Sin pisos todavía</p>
+                            <p className="text-xs text-slate-400 mt-1 max-w-xs">Los pisos aparecerán automáticamente cuando el bot reciba mensajes con anuncios, o búscalos con la pestaña 🔍 Buscar</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {myPisos.map(p => <PropCard key={p.id} prop={p} />)}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* TAB: FAVORITOS */}
+            {activeTab === 'favoritos' && (
+                <div>
+                    {favorites.length === 0 ? (
+                        <div className="flex flex-col items-center py-16 text-center">
+                            <Heart size={48} className="text-pink-300 mb-4" />
+                            <p className="font-bold text-slate-600 dark:text-slate-300">Sin favoritos</p>
+                            <p className="text-xs text-slate-400 mt-1">Pulsa ❤️ en cualquier piso para guardarlo aquí</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {favorites.map(p => <PropCard key={p.id} prop={p} />)}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* DETAIL MODAL */}
+            {selectedProp && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedProp(null)}>
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between">
+                            <div className="flex-1">
+                                <h3 className="font-black text-lg text-slate-800 dark:text-white">{selectedProp.title}</h3>
+                                <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{selectedProp.price}</p>
+                            </div>
+                            <button onClick={() => setSelectedProp(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">
+                                <X size={18} />
                             </button>
                         </div>
-
-                        {selectedPiso.source === 'whatsapp' && selectedPiso.senderPhone && (
-                            <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Mensaje WhatsApp personalizado</h4>
-                                <textarea
-                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 h-20 mb-3"
-                                    placeholder={`Hola, me interesa el inmueble "${selectedPiso.title}" en ${selectedPiso.location} por ${selectedPiso.price}. ¿Podría darme más información?`}
-                                    value={replyText}
-                                    onChange={(e) => setReplyText(e.target.value)}
-                                ></textarea>
-                                <button onClick={() => sendReplyWa(selectedPiso)} disabled={isReplyingWa}
-                                    className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50">
-                                    {isReplyingWa ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Send size={16} /> Enviar por WhatsApp</>}
-                                </button>
+                        <div className="p-6 space-y-4">
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { icon: MapPin, val: selectedProp.location },
+                                    selectedProp.sqm > 0 && { icon: Maximize2, val: `${selectedProp.sqm} m²` },
+                                    selectedProp.rooms > 0 && { icon: BedDouble, val: `${selectedProp.rooms} hab.` },
+                                    selectedProp.baths > 0 && { icon: Bath, val: `${selectedProp.baths} baños` },
+                                ].filter(Boolean).map((chip: any, i) => (
+                                    <span key={i} className="flex items-center gap-1.5 text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl">
+                                        <chip.icon size={12} className="text-emerald-500" /> {chip.val}
+                                    </span>
+                                ))}
                             </div>
-                        )}
+                            {selectedProp.description && (
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">Descripción</p>
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{selectedProp.rawText || selectedProp.description}</p>
+                                </div>
+                            )}
+                            {selectedProp.url && (
+                                <a href={selectedProp.url} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-500/10 text-blue-600 font-bold rounded-xl hover:bg-blue-100 transition-all text-sm">
+                                    <ExternalLink size={14} /> Ver anuncio completo
+                                </a>
+                            )}
+                            {selectedProp.senderPhone && (
+                                <div className="space-y-2">
+                                    <p className="text-xs font-black uppercase tracking-wider text-slate-400">Respuesta rápida WhatsApp</p>
+                                    <textarea value={quickMsg} onChange={e => setQuickMsg(e.target.value)}
+                                        placeholder={`Hola, me interesa el piso en ${selectedProp.location} a ${selectedProp.price}. ¿Podría visitarlo?`}
+                                        rows={3} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-green-500/20 focus:border-green-400" />
+                                    <button onClick={() => { sendQuickWA(selectedProp); setSelectedProp(null); }}
+                                        disabled={sendingId === selectedProp.id}
+                                        className="w-full flex items-center justify-center gap-2 py-3 bg-green-500 hover:bg-green-600 text-white font-black rounded-xl transition-all shadow-md shadow-green-500/20 disabled:opacity-50">
+                                        {sendingId === selectedProp.id ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                                        Enviar por WhatsApp
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
