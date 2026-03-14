@@ -38,6 +38,103 @@ interface CalendarViewProps {
 
 type SubView = 'month' | 'week' | 'daily' | 'quick' | 'sources' | 'google-view';
 
+// ── EMBEDDED GOOGLE CALENDAR VIEW (two calendars with tab switcher) ──────────
+const GCAL_EMBEDS = [
+  {
+    id: 'carlos',
+    name: 'Carlos Galera',
+    email: 'carlosgalera2roman@gmail.com',
+    color: '#4f46e5',
+    src: 'https://calendar.google.com/calendar/embed?src=carlosgalera2roman%40gmail.com&ctz=Europe%2FMadrid&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&mode=MONTH',
+  },
+  {
+    id: 'ramon',
+    name: 'Ramon Galera',
+    email: 'ramongalera22@gmail.com',
+    color: '#10b981',
+    src: 'https://calendar.google.com/calendar/embed?src=ramongalera22%40gmail.com&ctz=Europe%2FMadrid&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&mode=MONTH',
+  },
+  {
+    id: 'both',
+    name: 'Ambos calendarios',
+    email: '',
+    color: '#f59e0b',
+    // Google supports multiple src params for combined view
+    src: 'https://calendar.google.com/calendar/embed?src=carlosgalera2roman%40gmail.com&src=ramongalera22%40gmail.com&ctz=Europe%2FMadrid&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=1&showCalendars=1&mode=MONTH',
+  },
+];
+
+function GoogleCalendarEmbedView() {
+  const [active, setActive] = React.useState('both');
+  const cal = GCAL_EMBEDS.find(c => c.id === active) || GCAL_EMBEDS[2];
+
+  return (
+    <div className="animate-in zoom-in-95 space-y-3 p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between px-1">
+        <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+          📅 Google Calendar — Vista directa
+        </p>
+        <a
+          href={`https://calendar.google.com/calendar/r?cid=${cal.email}`}
+          target="_blank" rel="noopener noreferrer"
+          className="text-xs font-bold text-indigo-500 hover:text-indigo-700 transition-colors"
+        >
+          Abrir en Google ↗
+        </a>
+      </div>
+
+      {/* Tab switcher */}
+      <div className="flex gap-2 flex-wrap">
+        {GCAL_EMBEDS.map(c => (
+          <button
+            key={c.id}
+            onClick={() => setActive(c.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all border ${
+              active === c.id
+                ? 'text-white shadow-md'
+                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+            }`}
+            style={active === c.id ? { backgroundColor: c.color, borderColor: c.color } : {}}
+          >
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: active === c.id ? 'rgba(255,255,255,0.7)' : c.color }} />
+            {c.name}
+          </button>
+        ))}
+      </div>
+
+      {/* iFrame embed */}
+      <div className="rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm bg-white" style={{ height: '620px' }}>
+        <iframe
+          key={cal.src}
+          src={cal.src}
+          style={{ border: 0 }}
+          width="100%"
+          height="100%"
+          frameBorder="0"
+          scrolling="no"
+          title={`Google Calendar — ${cal.name}`}
+        />
+      </div>
+
+      {/* Quick links */}
+      <div className="flex flex-wrap gap-2 pt-1">
+        {GCAL_EMBEDS.filter(c => c.id !== 'both').map(c => (
+          <a
+            key={c.id}
+            href={`https://calendar.google.com/calendar/r?cid=${c.email}`}
+            target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-indigo-300 transition-all"
+          >
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
+            {c.email}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CalendarView({
   expenses = [],
   projects = [],
@@ -624,21 +721,7 @@ export default function CalendarView({
             )}
 
             {activeSubView === 'google-view' && (
-              <div className="animate-in zoom-in-95 space-y-3 p-4">
-                <p className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">
-                  📅 Calendarios de Carlos — Vista directa Google
-                </p>
-                <div className="rounded-3xl overflow-hidden border border-slate-100 shadow-sm" style={{ height: '600px' }}>
-                  <iframe
-                    src="https://calendar.google.com/calendar/embed?src=carlosgalera2roman%40gmail.com&ctz=Europe%2FMadrid&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&mode=MONTH"
-                    style={{ border: 0 }}
-                    width="100%"
-                    height="100%"
-                    frameBorder="0"
-                    scrolling="no"
-                  />
-                </div>
-              </div>
+              <GoogleCalendarEmbedView />
             )}
           </div>
         </div>
