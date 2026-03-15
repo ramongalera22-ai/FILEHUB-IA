@@ -32,9 +32,9 @@ import {
 import { analyzeNutritionDocument, generateNutritionPlan } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import {
-import { BotPanelNutricion } from './BotPanel';
   LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
+import { BotPanelNutricion } from './BotPanel';
 
 interface NutritionViewProps {
   weightEntries: WeightEntry[];

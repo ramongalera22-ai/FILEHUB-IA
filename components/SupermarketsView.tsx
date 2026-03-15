@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingItem, ShoppingOrder } from '../types';
 import {
-import { BotPanelSupermercados } from './BotPanel';
     ShoppingCart,
     Search,
     Zap,
@@ -26,6 +25,7 @@ import { BotPanelSupermercados } from './BotPanel';
     Table,
     PlusCircle
 } from 'lucide-react';
+import { BotPanelSupermercados } from './BotPanel';
 
 interface SupermarketsViewProps {
     items: ShoppingItem[];
@@ -190,7 +190,6 @@ const SupermarketsView: React.FC<SupermarketsViewProps> = ({
     const addManualToMainCart = (item: any) => {
         addToCart(item);
     };
-
 
     const finalizePurchase = async () => {
         setIsOrdering(true);

@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-import { BotPanelEmpleoMedico } from './BotPanel';
     Briefcase, MapPin, Building2, Euro, Clock, Send,
     RefreshCw, Mail, Trash2, Wifi, WifiOff, Sparkles,
     CheckCircle2, AlertTriangle, Settings, Eye, Users, GraduationCap,
     Search, Globe, ExternalLink, MessageSquare
 } from 'lucide-react';
+import { BotPanelEmpleoMedico } from './BotPanel';
 
 // ============ TYPES ============
 interface JobOffer {
@@ -341,7 +341,6 @@ const JobsView: React.FC = () => {
     // ======== RENDER ========
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
-
 
       <div className="px-4 pb-2 pt-4"><BotPanelEmpleoMedico /></div>
             {/* Notification */}

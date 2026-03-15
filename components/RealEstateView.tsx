@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-import { BotPanelPisos } from './BotPanel';
     Home, MapPin, Maximize2, BedDouble, Bath, Send, Sparkles,
     RefreshCw, Mail, Trash2, Wifi, WifiOff, Euro, Clock,
     CheckCircle2, AlertTriangle, Settings, ExternalLink, Eye,
     Search, Globe
 } from 'lucide-react';
+import { BotPanelPisos } from './BotPanel';
 
 // ============ TYPES ============
 interface Property {
@@ -395,7 +395,6 @@ const RealEstateView: React.FC = () => {
     // ======== RENDER ========
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
-
 
       <div className="px-4 pb-2 pt-4"><BotPanelPisos /></div>
             {/* Notification */}
