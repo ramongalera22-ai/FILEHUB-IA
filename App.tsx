@@ -43,6 +43,8 @@ import OpenWebUIView from './components/OpenWebUIView';
 import MonthlyAnalysisView from './components/MonthlyAnalysisView';
 import NotebookAIView from './components/NotebookAIView';
 import CronJobsView from './components/CronJobsView';
+import TimeBlockView from './components/TimeBlockView';
+import WhatsAppInboxView from './components/WhatsAppInboxView';
 import { processUniversalDocument } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 import { dbService } from './services/databaseService';
@@ -1270,6 +1272,8 @@ const App: React.FC = () => {
       case 'news': return <NewsView />;
       case 'supermarkets': return <SupermarketsView />;
       case 'cron-jobs': return <CronJobsView />;
+      case 'time-block': return <TimeBlockView calendarEvents={calendarEvents} tasks={tasks} session={session} />;
+      case 'whatsapp-inbox': return <WhatsAppInboxView />;
       case 'openwebui': return <OpenWebUIView url={openWebUIConfig.baseUrl} />;
       case 'notebook-ai': return <NotebookAIView />;
       case 'vip-tasks': return <VipTasksView session={session} />;

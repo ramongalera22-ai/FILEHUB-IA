@@ -31,6 +31,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'shifts',         label: '🛡️ Guardias',           icon: Shield },
     { id: 'budget-alerts',  label: '💰 Alertas Presupuesto',icon: Target },
     { id: 'cron-jobs',      label: '⏰ Cron Jobs Bot',      icon: Activity },
+    { id: 'time-block',     label: '🧠 Asesor de Tiempo',   icon: Brain },
+    { id: 'whatsapp-inbox', label: '📱 Inbox WhatsApp IA',  icon: MessageSquare },
     { id: 'files',          label: 'Archivos',              icon: FolderOpen },
     { id: 'expenses',       label: 'Gastos y Deuda',        icon: LibraryBig },
     { id: 'shared-hub',     label: 'Dashboard Hub',         icon: Heart },
