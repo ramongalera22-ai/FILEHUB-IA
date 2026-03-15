@@ -33,6 +33,7 @@ jobs:
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY || '' }}
           VITE_WA_SERVER_URL: ${{ secrets.VITE_WA_SERVER_URL || 'https://whatsapp-filehub-production.up.railway.app' }}
           VITE_WA_WS_URL: ${{ secrets.VITE_WA_WS_URL || 'wss://whatsapp-filehub-production.up.railway.app/ws' }}
+          VITE_OPENROUTER_KEY: ${{ secrets.VITE_OPENROUTER_KEY }}
         run: npx vite build --base=/FILEHUB-IA/
 
       - name: Copiar index → 404 (SPA routing)
