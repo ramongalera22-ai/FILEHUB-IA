@@ -1,9 +1,7 @@
 name: 🔵 Deploy → Vercel
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:  # Solo manual - añade VERCEL_TOKEN en GitHub Secrets para auto-deploy
 
 jobs:
   deploy:
