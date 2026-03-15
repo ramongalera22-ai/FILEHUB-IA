@@ -31,7 +31,7 @@ import {
     Power,
     Loader2
 } from 'lucide-react';
-import { chatWithGemini } from '../services/geminiService';
+import { chatWithGemini } from '../services/openrouterService';
 import CronJobsView from './CronJobsView';
 import WhatsAppInboxView from './WhatsAppInboxView';
 

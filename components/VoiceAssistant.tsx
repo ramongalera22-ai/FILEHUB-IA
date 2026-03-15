@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Mic, Square, Loader2, Sparkles, X, Check, Save } from 'lucide-react';
-import { transcribeAudio } from '../services/geminiService';
+import { transcribeAudio } from '../services/openrouterService';
 
 const VoiceAssistant: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);

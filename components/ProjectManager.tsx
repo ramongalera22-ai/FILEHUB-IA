@@ -30,7 +30,7 @@ import {
   Save,
   Link as LinkIcon
 } from 'lucide-react';
-import { chatWithGemini } from '../services/geminiService';
+import { chatWithGemini } from '../services/openrouterService';
 
 interface ProjectManagerProps {
   projects: Project[];

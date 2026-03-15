@@ -27,7 +27,7 @@ import {
   Share2,
   Edit3
 } from 'lucide-react';
-import { extractTasksFromPDF, getTaskSuggestions, analyzeTaskEfficiency } from '../services/geminiService';
+import { extractTasksFromPDF, getTaskSuggestions, analyzeTaskEfficiency } from '../services/openrouterService';
 import { BotPanelTareas } from './BotPanel';
 
 interface TasksViewProps {

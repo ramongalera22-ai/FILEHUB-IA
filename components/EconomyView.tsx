@@ -8,7 +8,7 @@ import {
 import {
    PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line
 } from 'recharts';
-import { generateFinancialSummary, analyzeFinancialDocument } from '../services/geminiService';
+import { generateFinancialSummary, analyzeFinancialDocument } from '../services/openrouterService';
 import { BotPanelGastos } from './BotPanel';
 
 interface EconomyViewProps {

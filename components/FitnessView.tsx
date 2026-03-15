@@ -7,7 +7,7 @@ import {
   Table, CalendarDays, BrainCircuit, Sparkles, Trash2, Edit3, ClipboardList,
   Brain, Share2, ArrowUpRight
 } from 'lucide-react';
-import { extractTrainingPlanFromPDF, generateTrainingPlan } from '../services/geminiService';
+import { extractTrainingPlanFromPDF, generateTrainingPlan } from '../services/openrouterService';
 
 const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
 

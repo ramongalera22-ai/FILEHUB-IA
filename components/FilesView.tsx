@@ -7,7 +7,7 @@ import {
   File, FileCode, Play, Pause, Sparkles, Server, Cloud, FileSpreadsheet, Presentation,
   ChevronDown, ChevronUp, CheckCircle2, AlertCircle, ArrowRight, Loader2
 } from 'lucide-react';
-import { analyzeFileDeeply, analyzeGeneralFile } from '../services/geminiService';
+import { analyzeFileDeeply, analyzeGeneralFile } from '../services/openrouterService';
 import { supabase } from '../services/supabaseClient';
 import FilePreviewModal from './FilePreviewModal';
 import { BotPanelArchivos } from './BotPanel';

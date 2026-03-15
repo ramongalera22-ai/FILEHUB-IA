@@ -13,7 +13,7 @@ import {
   Zap,
   Edit3
 } from 'lucide-react';
-import { getIdeaInspiration } from '../services/geminiService';
+import { getIdeaInspiration } from '../services/openrouterService';
 import { BotPanelIdeas } from './BotPanel';
 
 interface IdeasViewProps {

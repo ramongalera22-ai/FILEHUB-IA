@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { Expense, Debt, Investment } from '../types';
-import { extractExpenseFromDocument } from '../services/geminiService';
+import { extractExpenseFromDocument } from '../services/openrouterService';
 import {
   Plus, X, Loader2, Receipt, Trash2, TrendingUp, CreditCard, Target,
   BarChart3, FileText, Zap, BookOpen, ExternalLink, FileUp

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Expense } from '../types';
-import { getFinancialOptimization } from '../services/geminiService';
+import { getFinancialOptimization } from '../services/openrouterService';
 import {
   Sparkles,
   Calendar,

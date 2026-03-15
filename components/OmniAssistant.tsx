@@ -10,7 +10,7 @@ import {
 import {
   chatWithGemini, generateImagePro, editImageWithAI, speakText,
   getAIInstance, decodeAudioData, decodePCM, encodePCM, analyzeImagePro, analyzeVideo
-} from '../services/geminiService';
+} from '../services/openrouterService';
 import { chatWithOllama } from '../services/ollamaService';
 import { Modality, LiveServerMessage } from '@google/genai';
 import { Expense, OllamaConfig } from '../types';

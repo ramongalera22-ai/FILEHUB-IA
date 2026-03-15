@@ -45,7 +45,7 @@ import NotebookAIView from './components/NotebookAIView';
 import CronJobsView from './components/CronJobsView';
 import TimeBlockView from './components/TimeBlockView';
 import WhatsAppInboxView from './components/WhatsAppInboxView';
-import { processUniversalDocument } from './services/geminiService';
+import { processUniversalDocument } from './services/openrouterService';
 import { supabase } from './services/supabaseClient';
 import { dbService } from './services/databaseService';
 import {

@@ -21,7 +21,7 @@ import {
   X,
   LayoutGrid
 } from 'lucide-react';
-import { analyzeCalendarIntelligence, extractEventsFromICS } from '../services/geminiService';
+import { analyzeCalendarIntelligence, extractEventsFromICS } from '../services/openrouterService';
 
 const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
 const ICAL_URL = 'https://calendar.google.com/calendar/ical/carlosgalera2roman%40gmail.com/public/basic.ics';

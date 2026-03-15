@@ -17,7 +17,7 @@ import {
   Tag,
   Box
 } from 'lucide-react';
-import { formatShoppingListForEmail } from '../services/geminiService';
+import { formatShoppingListForEmail } from '../services/openrouterService';
 import { BotPanelCompras } from './BotPanel';
 
 interface ShoppingViewProps {

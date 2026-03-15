@@ -21,7 +21,7 @@ import {
   Edit3
 } from 'lucide-react';
 import Whiteboard from './Whiteboard';
-import { chatWithGemini, generateDetailedItinerary } from '../services/geminiService';
+import { chatWithGemini, generateDetailedItinerary } from '../services/openrouterService';
 import { Cloud, Sun, CloudRain, Thermometer, Wind, MapPin as MapPinIcon } from 'lucide-react';
 
 const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';

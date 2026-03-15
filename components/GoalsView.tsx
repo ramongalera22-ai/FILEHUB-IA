@@ -7,7 +7,7 @@ import {
   AlertCircle, Clock, ArrowRight, ChevronRight, ChevronLeft, CalendarDays,
   ListTodo, BarChart3, CheckCircle2, Info, Trash2, Edit3, X, Type as TypeIcon, UploadCloud, Loader2
 } from 'lucide-react';
-import { extractGoalsFromText, extractGoalsFromFile } from '../services/geminiService';
+import { extractGoalsFromText, extractGoalsFromFile } from '../services/openrouterService';
 import { BotPanelMetas } from './BotPanel';
 
 interface GoalsViewProps {

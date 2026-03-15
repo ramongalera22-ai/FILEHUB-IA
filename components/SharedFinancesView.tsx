@@ -4,7 +4,7 @@ import { SharedExpense, SharedDebt } from '../types';
 import {
   Users, Plus, Receipt, DollarSign, CheckCircle2, X, Sparkles, History, Loader2, RefreshCw, FileUp, Trash2
 } from 'lucide-react';
-import { getSharedFinancesInsight, extractExpenseFromDocument } from '../services/geminiService';
+import { getSharedFinancesInsight, extractExpenseFromDocument } from '../services/openrouterService';
 
 interface SharedFinancesViewProps {
   sharedExpenses: SharedExpense[];

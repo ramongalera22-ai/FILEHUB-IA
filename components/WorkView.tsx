@@ -8,7 +8,7 @@ import {
   BookOpen, Library, Image as ImageIcon, MessageSquare, Send, Server, Cloud, Trash2,
   LayoutDashboard, Heart, Brain, ArrowUpRight, Share2, Edit3
 } from 'lucide-react';
-import { extractWorkItemsFromDoc, generatePresentationFromDoc, generatePresentationOllama, askOllamaDocument, chatWithGemini } from '../services/geminiService';
+import { extractWorkItemsFromDoc, generatePresentationFromDoc, generatePresentationOllama, askOllamaDocument, chatWithGemini } from '../services/openrouterService';
 import ProjectManager from './ProjectManager';
 import { BotPanelWorkHub } from './BotPanel';
 

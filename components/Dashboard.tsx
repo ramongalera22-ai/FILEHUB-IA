@@ -10,7 +10,7 @@ import {
    Sparkles, Zap, Brain, Sun, CloudRain, Wind, Thermometer, ArrowRight, Activity,
    RefreshCw, Coffee, Moon, Sunrise
 } from 'lucide-react';
-import { analyzeFinancialDocument } from '../services/geminiService';
+import { analyzeFinancialDocument } from '../services/openrouterService';
 import { supabase } from '../services/supabaseClient';
 
 const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';

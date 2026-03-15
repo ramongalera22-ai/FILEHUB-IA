@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, FileText, Image as ImageIcon, ExternalLink, Cpu, Loader2, FileCode, File, Send, MessageSquare, Sparkles } from 'lucide-react';
 import { StoredFile } from '../types';
-import { chatWithGemini } from '../services/geminiService';
+import { chatWithGemini } from '../services/openrouterService';
 
 interface FilePreviewModalProps {
   file: StoredFile;

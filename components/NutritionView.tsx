@@ -29,7 +29,7 @@ import {
   ArrowUpRight,
   Edit3
 } from 'lucide-react';
-import { analyzeNutritionDocument, generateNutritionPlan } from '../services/geminiService';
+import { analyzeNutritionDocument, generateNutritionPlan } from '../services/openrouterService';
 
 const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
 

@@ -22,7 +22,7 @@ import {
   MessageSquare,
   Lock
 } from 'lucide-react';
-import { chatWithGemini } from '../services/geminiService';
+import { chatWithGemini } from '../services/openrouterService';
 import { checkOllamaStatus, chatWithOllama } from '../services/ollamaService';
 import { checkAnythingStatus, chatWithAnything } from '../services/anythingLlmService';
 import { checkLocalLlmStatus, chatWithLocalLlm } from '../services/localLlmService';
