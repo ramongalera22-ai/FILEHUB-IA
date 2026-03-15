@@ -32,6 +32,8 @@ import {
     Loader2
 } from 'lucide-react';
 import { chatWithGemini } from '../services/geminiService';
+import CronJobsView from './CronJobsView';
+import WhatsAppInboxView from './WhatsAppInboxView';
 
 // ============ TYPES ============
 interface WAMessage {
@@ -71,7 +73,7 @@ const WA_WS_URL = import.meta.env.VITE_WA_WS_URL || 'wss://whatsapp-filehub-prod
 
 const WhatsAppBotView: React.FC<WhatsAppBotViewProps> = ({ globalContext }) => {
     // ========== STATE ==========
-    const [activeTab, setActiveTab] = useState<'chat' | 'config' | 'stats' | 'logs'>('config');
+    const [activeTab, setActiveTab] = useState<'chat' | 'config' | 'stats' | 'logs' | 'crons' | 'inbox'>('config');
     const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'qr_ready' | 'connected'>('disconnected');
     const [qrCode, setQrCode] = useState<string | null>(null);
     const [serverOnline, setServerOnline] = useState(false);
@@ -512,8 +514,10 @@ Si te preguntan algo que no sabes, sugiere usar la webapp de FileHub.`
                 {[
                     { id: 'chat', label: 'Conversaciones', icon: MessageCircle },
                     { id: 'config', label: 'Conexión QR', icon: QrCode },
+                    { id: 'inbox', label: 'Inbox IA', icon: Sparkles },
+                    { id: 'crons', label: 'Cron Jobs', icon: Clock },
                     { id: 'stats', label: 'Estadísticas', icon: BarChart3 },
-                    { id: 'logs', label: 'Logs', icon: Clock }
+                    { id: 'logs', label: 'Logs', icon: Filter }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -1168,6 +1172,21 @@ Si te preguntan algo que no sabes, sugiere usar la webapp de FileHub.`
                     </div>
                 </div>
             )}
+
+            {/* =============== TAB: INBOX IA =============== */}
+            {activeTab === 'inbox' && (
+                <div className="-mx-0">
+                    <WhatsAppInboxView />
+                </div>
+            )}
+
+            {/* =============== TAB: CRON JOBS =============== */}
+            {activeTab === 'crons' && (
+                <div className="-mx-0">
+                    <CronJobsView />
+                </div>
+            )}
+
         </div>
     );
 };
