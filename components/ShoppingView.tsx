@@ -18,6 +18,7 @@ import {
   Box
 } from 'lucide-react';
 import { formatShoppingListForEmail } from '../services/geminiService';
+import { BotPanelCompras } from './BotPanel';
 
 interface ShoppingViewProps {
   items: ShoppingItem[];
@@ -85,6 +86,8 @@ const ShoppingView: React.FC<ShoppingViewProps> = ({
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelCompras /></div>
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">Centro de Compras</h2>

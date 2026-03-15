@@ -32,6 +32,7 @@ import {
 import { analyzeNutritionDocument, generateNutritionPlan } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import {
+import { BotPanelNutricion } from './BotPanel';
   LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 
@@ -213,6 +214,8 @@ const NutritionView: React.FC<NutritionViewProps> = ({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelNutricion /></div>
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Nutrición & Salud</h2>

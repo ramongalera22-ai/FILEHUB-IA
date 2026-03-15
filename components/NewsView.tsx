@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Newspaper, ExternalLink, RefreshCw, Loader2, BookOpen } from 'lucide-react';
+import { BotPanelNoticias } from './BotPanel';
 
 interface NewsItem {
     title: string;
@@ -80,6 +81,8 @@ const NewsView: React.FC = () => {
 
     return (
         <div className="space-y-12 animate-in fade-in duration-700 pb-20">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelNoticias /></div>
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-3">

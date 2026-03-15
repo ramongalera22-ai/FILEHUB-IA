@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { extractWorkItemsFromDoc, generatePresentationFromDoc, generatePresentationOllama, askOllamaDocument, chatWithGemini } from '../services/geminiService';
 import ProjectManager from './ProjectManager';
+import { BotPanelWorkHub } from './BotPanel';
 
 interface WorkViewProps {
   initialProjects: Project[];
@@ -194,6 +195,8 @@ const WorkView: React.FC<WorkViewProps> = ({
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelWorkHub /></div>
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">Work Hub</h2>

@@ -14,6 +14,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { getIdeaInspiration } from '../services/geminiService';
+import { BotPanelIdeas } from './BotPanel';
 
 interface IdeasViewProps {
   ideas: Idea[];
@@ -66,6 +67,8 @@ const IdeasView: React.FC<IdeasViewProps> = ({ ideas, onAddIdea, onDeleteIdea, o
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelIdeas /></div>
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">Laboratorio de Ideas</h2>

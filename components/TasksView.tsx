@@ -28,6 +28,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { extractTasksFromPDF, getTaskSuggestions, analyzeTaskEfficiency } from '../services/geminiService';
+import { BotPanelTareas } from './BotPanel';
 
 interface TasksViewProps {
   tasks: Task[];
@@ -198,6 +199,8 @@ const TasksView: React.FC<TasksViewProps> = ({ tasks, calendarEvents, expenses, 
 
   return (
     <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in duration-500 pb-20">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelTareas /></div>
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 overflow-hidden">
         <div>
           <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Tareas & Brain</h2>

@@ -8,6 +8,7 @@ import {
   Brain, Share2, ArrowUpRight
 } from 'lucide-react';
 import { extractTrainingPlanFromPDF, generateTrainingPlan } from '../services/geminiService';
+import { BotPanelFitness } from './BotPanel';
 
 interface FitnessViewProps {
   sessions: TrainingSession[];
@@ -115,6 +116,8 @@ const FitnessView: React.FC<FitnessViewProps> = ({
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-20">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelFitness /></div>
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">Centro de Entrenamiento</h2>

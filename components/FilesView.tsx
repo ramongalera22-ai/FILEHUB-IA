@@ -10,6 +10,7 @@ import {
 import { analyzeFileDeeply, analyzeGeneralFile } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import FilePreviewModal from './FilePreviewModal';
+import { BotPanelArchivos } from './BotPanel';
 
 interface FilesViewProps {
   files: StoredFile[];
@@ -210,6 +211,8 @@ const FilesView: React.FC<FilesViewProps> = ({ files, ollamaConfig, onAddFile, o
 
   return (
     <div className="h-[calc(100vh-2rem)] flex flex-col animate-in fade-in duration-500">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelArchivos /></div>
       <header className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8 shrink-0">
         <div>
           <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">

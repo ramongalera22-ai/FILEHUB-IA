@@ -24,6 +24,7 @@ import {
 import { analyzeCalendarIntelligence, extractEventsFromICS } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { syncAllCarlosCalendars, CARLOS_CALENDARS, SyncResult } from '../services/googleCalendarSync';
+import { BotPanelCalendario } from './BotPanel';
 
 interface CalendarViewProps {
   expenses: Expense[];
@@ -70,6 +71,8 @@ function GoogleCalendarEmbedView() {
 
   return (
     <div className="animate-in zoom-in-95 space-y-3 p-4">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelCalendario /></div>
       {/* Header */}
       <div className="flex items-center justify-between px-1">
         <p className="text-xs font-black uppercase tracking-widest text-slate-400">

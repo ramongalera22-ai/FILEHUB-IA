@@ -9,6 +9,7 @@ import {
    PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line
 } from 'recharts';
 import { generateFinancialSummary, analyzeFinancialDocument } from '../services/geminiService';
+import { BotPanelGastos } from './BotPanel';
 
 interface EconomyViewProps {
    expenses: Expense[];
@@ -187,6 +188,8 @@ const EconomyView: React.FC<EconomyViewProps> = ({
 
    return (
       <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelGastos /></div>
          <header className="relative bg-slate-900 rounded-[3rem] p-12 overflow-hidden shadow-2xl border border-slate-800">
             <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-indigo-600/20 to-transparent"></div>
             <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-8">

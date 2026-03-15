@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
+import { BotPanelPisos } from './BotPanel';
     Home, MapPin, Maximize2, BedDouble, Bath, Send, Sparkles,
     RefreshCw, Mail, Trash2, Wifi, WifiOff, Euro, Clock,
     CheckCircle2, AlertTriangle, Settings, ExternalLink, Eye,
@@ -395,6 +396,8 @@ const RealEstateView: React.FC = () => {
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
 
+
+      <div className="px-4 pb-2 pt-4"><BotPanelPisos /></div>
             {/* Notification */}
             {notification && (
                 <div className={`mx-6 mt-4 px-5 py-3 rounded-2xl text-sm font-bold flex items-center gap-3 shadow-lg animate-pulse ${notification.type === 'success' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'

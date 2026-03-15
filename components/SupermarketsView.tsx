@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingItem, ShoppingOrder } from '../types';
 import {
+import { BotPanelSupermercados } from './BotPanel';
     ShoppingCart,
     Search,
     Zap,
@@ -222,6 +223,8 @@ const SupermarketsView: React.FC<SupermarketsViewProps> = ({
     if (activeScreen === 'hub') {
         return (
             <div className="min-h-screen bg-[#f8fafc] p-8 text-[#0f172a] font-sans animate-in fade-in">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelSupermercados /></div>
                 <div className="max-w-6xl mx-auto">
                     <header className="mb-10">
                         <h1 className="text-4xl font-black tracking-tighter mb-2">SUPERMERCADOS <span className="text-red-600">HUB</span></h1>

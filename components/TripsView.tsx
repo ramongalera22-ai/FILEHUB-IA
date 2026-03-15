@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import Whiteboard from './Whiteboard';
 import { chatWithGemini, generateDetailedItinerary } from '../services/geminiService';
+import { BotPanelViajes } from './BotPanel';
 
 const TRAVEL_NOTEBOOK_URL = "https://notebooklm.google.com/notebook/afe26943-fe4e-4b79-9b7d-8d95a2b247b1";
 
@@ -126,6 +127,8 @@ const TripsView: React.FC<TripsViewProps> = ({ trips, onAddTrip, onDeleteTrip })
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-10 animate-in fade-in duration-700 pb-20">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelViajes /></div>
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">Expediciones & Viajes</h2>

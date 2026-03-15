@@ -8,6 +8,7 @@ import {
   ListTodo, BarChart3, CheckCircle2, Info, Trash2, Edit3, X, Type as TypeIcon, UploadCloud, Loader2
 } from 'lucide-react';
 import { extractGoalsFromText, extractGoalsFromFile } from '../services/geminiService';
+import { BotPanelMetas } from './BotPanel';
 
 interface GoalsViewProps {
   goals: Goal[];
@@ -175,6 +176,8 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
       const data = payload[0].payload;
       return (
         <div className="bg-slate-900 text-white p-4 rounded-xl shadow-2xl border border-slate-800/50 backdrop-blur-md min-w-[200px]">
+
+      <div className="px-4 pb-2 pt-4"><BotPanelMetas /></div>
           <div className="flex items-center gap-2 mb-2">
             <span className={`w-2 h-2 rounded-full ${data.category === 'financial' ? 'bg-emerald-400' :
               data.category === 'career' ? 'bg-blue-400' :
