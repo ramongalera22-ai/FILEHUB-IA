@@ -30,6 +30,24 @@ import {
   Edit3
 } from 'lucide-react';
 import { analyzeNutritionDocument, generateNutritionPlan } from '../services/geminiService';
+
+const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
+
+async function generateMealPlanAI(preferences: string, days: number): Promise<string> {
+  if (!OPENROUTER_KEY) return 'Configura tu API key de OpenRouter.';
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-haiku-4.5', max_tokens: 1500,
+        messages: [{ role: 'user', content: `Crea un plan de comidas de ${days} días para un médico con estas preferencias: ${preferences}. Incluye: desayuno, comida y cena para cada día, con tiempo de preparación máximo 20 min por comida. También incluye lista de la compra al final. Responde en español.` }]
+      })
+    });
+    const d = await res.json();
+    return d.choices?.[0]?.message?.content || 'Error generando plan.';
+  } catch { return 'Error de conexión.'; }
+}
 import { supabase } from '../services/supabaseClient';
 import {
   LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer

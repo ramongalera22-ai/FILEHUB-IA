@@ -22,6 +22,25 @@ import {
   LayoutGrid
 } from 'lucide-react';
 import { analyzeCalendarIntelligence, extractEventsFromICS } from '../services/geminiService';
+
+const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
+const ICAL_URL = 'https://calendar.google.com/calendar/ical/carlosgalera2roman%40gmail.com/public/basic.ics';
+
+async function analyzeCalendarAI(events: string): Promise<string> {
+  if (!OPENROUTER_KEY) return 'Configura tu API key de OpenRouter.';
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-haiku-4.5', max_tokens: 800,
+        messages: [{ role: 'user', content: `Analiza estos eventos de mi calendario de esta semana y dime: 1) Días más cargados, 2) Tiempo libre disponible, 3) Recomendaciones para organizar mejor mi semana, 4) Alertas importantes. Responde de forma concisa en español.\n\nEventos:\n${events}` }]
+      })
+    });
+    const d = await res.json();
+    return d.choices?.[0]?.message?.content || 'Error analizando calendario.';
+  } catch { return 'Error de conexión.'; }
+}
 import { supabase } from '../services/supabaseClient';
 import { syncAllCarlosCalendars, CARLOS_CALENDARS, SyncResult } from '../services/googleCalendarSync';
 import { BotPanelCalendario } from './BotPanel';

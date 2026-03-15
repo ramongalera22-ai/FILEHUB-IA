@@ -8,6 +8,24 @@ import {
   Brain, Share2, ArrowUpRight
 } from 'lucide-react';
 import { extractTrainingPlanFromPDF, generateTrainingPlan } from '../services/geminiService';
+
+const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
+
+async function generatePlanAI(goal: string, days: number): Promise<string> {
+  if (!OPENROUTER_KEY) return 'Configura tu API key de OpenRouter.';
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-haiku-4.5', max_tokens: 1200,
+        messages: [{ role: 'user', content: `Crea un plan de entrenamiento de ${days} días para: ${goal}. Soy médico con guardias de 24h, necesito entrenamientos de 30-45 min máximo. Incluye: día, tipo de ejercicio, duración, series/reps, intensidad y consejo de recuperación. Responde en español con emojis.` }]
+      })
+    });
+    const d = await res.json();
+    return d.choices?.[0]?.message?.content || 'Error generando plan.';
+  } catch { return 'Error de conexión.'; }
+}
 import { BotPanelFitness } from './BotPanel';
 
 interface FitnessViewProps {
@@ -28,6 +46,17 @@ const FitnessView: React.FC<FitnessViewProps> = ({
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [aiPlanResult, setAiPlanResult] = useState('');
+  const [daysCount, setDaysCount] = useState(7);
+  const [generatingAI, setGeneratingAI] = useState(false);
+
+  const handleGenerateAIPlan = async () => {
+    if (!goalInput.trim()) return;
+    setGeneratingAI(true);
+    const result = await generatePlanAI(goalInput, daysCount);
+    setAiPlanResult(result);
+    setGeneratingAI(false);
+  };
   const [goalInput, setGoalInput] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [documents, setDocuments] = useState<WorkDocument[]>([]);
@@ -376,16 +405,38 @@ const FitnessView: React.FC<FitnessViewProps> = ({
               <button onClick={() => setShowModal(false)}><X className="text-slate-400 hover:text-slate-600" /></button>
             </div>
             <div className="space-y-4">
-              <p className="text-sm text-slate-500 font-medium">Describe tu objetivo (ej: "Perder grasa y ganar resistencia en 4 semanas") y generaré un plan completo.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Describe tu objetivo y generaré un plan completo adaptado a tu horario de médico.</p>
               <textarea
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/5 h-32 resize-none"
-                placeholder="Tu objetivo aquí..."
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/5 h-28 resize-none text-slate-800 dark:text-white"
+                placeholder="Ej: Perder grasa y ganar resistencia, entrenos de 30 min..."
                 value={goalInput}
                 onChange={e => setGoalInput(e.target.value)}
               />
-              <button onClick={handleGeneratePlan} disabled={isGenerating} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                {isGenerating ? <Loader2 className="animate-spin" size={16} /> : <BrainCircuit size={16} />} Generar Rutina
-              </button>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500 font-bold shrink-0">Días:</span>
+                {[7, 14, 30].map(d => (
+                  <button key={d} onClick={() => setDaysCount(d)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${daysCount === d ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10'}`}>
+                    {d}d
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleGenerateAIPlan} disabled={generatingAI || !goalInput.trim()}
+                  className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                  {generatingAI ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
+                  {generatingAI ? 'Generando...' : 'Plan con IA (Haiku)'}
+                </button>
+                <button onClick={handleGeneratePlan} disabled={isGenerating || !goalInput.trim()}
+                  className="px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex items-center gap-2 disabled:opacity-50">
+                  {isGenerating ? <Loader2 className="animate-spin" size={14} /> : <BrainCircuit size={14} />} Gemini
+                </button>
+              </div>
+              {aiPlanResult && (
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-white/10 max-h-64 overflow-y-auto custom-scrollbar">
+                  <pre className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap font-sans leading-relaxed">{aiPlanResult}</pre>
+                </div>
+              )}
             </div>
           </div>
         </div>

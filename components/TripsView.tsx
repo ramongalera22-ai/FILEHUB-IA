@@ -22,6 +22,25 @@ import {
 } from 'lucide-react';
 import Whiteboard from './Whiteboard';
 import { chatWithGemini, generateDetailedItinerary } from '../services/geminiService';
+import { Cloud, Sun, CloudRain, Thermometer, Wind, MapPin as MapPinIcon } from 'lucide-react';
+
+const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
+
+async function generateItineraryAI(destination: string, startDate: string, endDate: string, budget: string): Promise<string> {
+  if (!OPENROUTER_KEY) return 'Configura tu API key de OpenRouter en Settings para usar esta función.';
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-haiku-4.5', max_tokens: 1500,
+        messages: [{ role: 'user', content: `Crea un itinerario detallado para ${destination} del ${startDate} al ${endDate} con presupuesto de ${budget}€. Incluye: actividades por día y hora, restaurantes recomendados, transporte, consejos prácticos y estimación de costes. Responde en español con emojis.` }]
+      })
+    });
+    const d = await res.json();
+    return d.choices?.[0]?.message?.content || 'Error generando itinerario.';
+  } catch { return 'Error de conexión con la IA.'; }
+}
 import { BotPanelViajes } from './BotPanel';
 
 const TRAVEL_NOTEBOOK_URL = "https://notebooklm.google.com/notebook/afe26943-fe4e-4b79-9b7d-8d95a2b247b1";
@@ -43,6 +62,16 @@ const TripsView: React.FC<TripsViewProps> = ({ trips, onAddTrip, onDeleteTrip })
   const [newTrip, setNewTrip] = useState({ destination: '', startDate: '', endDate: '', budget: '', notebookUrl: '' });
   const [activeSubTab, setActiveSubTab] = useState<'itinerary' | 'economy' | 'documents' | 'notebook' | 'whiteboard'>('itinerary');
   const [isGeneratingItinerary, setIsGeneratingItinerary] = useState(false);
+  const [aiItinerary, setAiItinerary] = useState('');
+  const [generatingAI, setGeneratingAI] = useState(false);
+
+  const handleGenerateAI = async () => {
+    if (!selectedTrip) return;
+    setGeneratingAI(true);
+    const result = await generateItineraryAI(selectedTrip.destination, selectedTrip.startDate, selectedTrip.endDate, String(selectedTrip.budget));
+    setAiItinerary(result);
+    setGeneratingAI(false);
+  };
 
   const selectedTrip = trips.find(t => t.id === selectedTripId) || (trips.length > 0 ? trips[0] : null);
 
@@ -199,31 +228,36 @@ const TripsView: React.FC<TripsViewProps> = ({ trips, onAddTrip, onDeleteTrip })
 
               <div className="p-8 flex-1 overflow-y-auto custom-scrollbar">
                 {activeSubTab === 'itinerary' && (
-                  <div className="space-y-6 animate-in slide-in-from-right-4">
-                    <div className="flex justify-between items-center mb-4">
+                  <div className="space-y-4 animate-in slide-in-from-right-4">
+                    <div className="flex justify-between items-center">
                       <h4 className="font-black text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                        <Sparkles size={14} className="text-indigo-500" /> Plan de Ruta por Gemini Pro
+                        <Sparkles size={14} className="text-indigo-500" /> Itinerario IA
                       </h4>
-                      {!selectedTrip.aiItinerary && (
-                        <button
-                          onClick={handleGenerateFullItinerary}
-                          disabled={isGeneratingItinerary}
-                          className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all flex items-center gap-2"
-                        >
-                          {isGeneratingItinerary ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                          {isGeneratingItinerary ? 'Generando Itinerario...' : 'Generar Itinerario IA'}
+                      <div className="flex gap-2">
+                        <button onClick={handleGenerateAI} disabled={generatingAI}
+                          className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black transition-all flex items-center gap-1.5 disabled:opacity-60">
+                          {generatingAI ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                          {generatingAI ? 'Generando...' : 'Generar con IA'}
                         </button>
-                      )}
+                        {!selectedTrip.aiItinerary && (
+                          <button onClick={handleGenerateFullItinerary} disabled={isGeneratingItinerary}
+                            className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] font-black transition-all flex items-center gap-1.5 disabled:opacity-60">
+                            {isGeneratingItinerary ? <Loader2 size={11} className="animate-spin" /> : <Globe size={11} />}
+                            Gemini
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    {selectedTrip.aiItinerary ? (
-                      <div className="prose prose-slate max-w-none text-slate-600 text-sm bg-slate-50/50 p-8 rounded-3xl border border-dashed border-slate-200">
-                        {selectedTrip.aiItinerary.split('\n').map((line, i) => <p key={i}>{line}</p>)}
+                    {(aiItinerary || selectedTrip.aiItinerary) ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 rounded-2xl p-5 text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto custom-scrollbar">
+                        {aiItinerary || selectedTrip.aiItinerary}
                       </div>
                     ) : (
-                      <div className="p-20 text-center border-2 border-dashed border-slate-50 rounded-[2rem] flex flex-col items-center">
-                        <MapPin size={40} className="text-slate-200 mb-4" />
-                        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">No hay itinerario generado aún</p>
+                      <div className="p-16 text-center border-2 border-dashed border-slate-100 dark:border-white/5 rounded-2xl flex flex-col items-center">
+                        <MapPin size={32} className="text-slate-200 dark:text-slate-700 mb-3" />
+                        <p className="text-slate-400 font-bold text-xs">Genera un itinerario personalizado con IA</p>
+                        <p className="text-slate-300 dark:text-slate-600 text-[10px] mt-1">Incluye actividades, restaurantes y consejos</p>
                       </div>
                     )}
                   </div>
