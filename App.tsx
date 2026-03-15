@@ -42,6 +42,7 @@ import SupermarketsView from './components/SupermarketsView';
 import OpenWebUIView from './components/OpenWebUIView';
 import MonthlyAnalysisView from './components/MonthlyAnalysisView';
 import NotebookAIView from './components/NotebookAIView';
+import CronJobsView from './components/CronJobsView';
 import { processUniversalDocument } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 import { dbService } from './services/databaseService';
@@ -1268,6 +1269,7 @@ const App: React.FC = () => {
       case 'car-mode': return <CarPlayView />;
       case 'news': return <NewsView />;
       case 'supermarkets': return <SupermarketsView />;
+      case 'cron-jobs': return <CronJobsView />;
       case 'openwebui': return <OpenWebUIView url={openWebUIConfig.baseUrl} />;
       case 'notebook-ai': return <NotebookAIView />;
       case 'vip-tasks': return <VipTasksView session={session} />;
