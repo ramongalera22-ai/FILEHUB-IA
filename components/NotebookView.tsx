@@ -4,8 +4,57 @@ import {
   Loader, Sparkles, X, Upload,
   AlignLeft, HelpCircle, Clock,
   Copy, Check,
-  PenLine, Star, Globe, Hash
+  PenLine, Star, Globe, Hash, AlertTriangle
 } from 'lucide-react';
+
+// ── PDF extraction via PDF.js CDN ─────────────────────────────────────────────
+async function extractPdfText(file: File): Promise<string> {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      if ((window as any).pdfjsLib) { resolve(); return; }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => resolve();
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    const lib = (window as any).pdfjsLib;
+    lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+    const pages: string[] = [];
+    for (let i = 1; i <= Math.min(pdf.numPages, 60); i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = (textContent.items as any[]).map((item: any) => item.str).join(' ').replace(/\s+/g, ' ').trim();
+      if (pageText) pages.push(`[Página ${i}]\n${pageText}`);
+    }
+    return pages.join('\n\n') || 'No se pudo extraer texto del PDF.';
+  } catch (e: any) {
+    return `Error al leer PDF: ${e?.message || e}`;
+  }
+}
+
+// ── PPTX extraction via JSZip ─────────────────────────────────────────────────
+async function extractPptxText(file: File): Promise<string> {
+  try {
+    const JSZip = (await import('jszip')).default;
+    const arrayBuffer = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const slideFiles = Object.keys(zip.files)
+      .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+      .sort((a, b) => (parseInt(a.match(/slide(\d+)/)?.[1] || '0')) - (parseInt(b.match(/slide(\d+)/)?.[1] || '0')));
+    const slideTexts: string[] = [];
+    for (let i = 0; i < slideFiles.length; i++) {
+      const xml = await zip.files[slideFiles[i]].async('text');
+      const texts = (xml.match(/<a:t[^>]*>([^<]+)<\/a:t>/g) || []).map((m: string) => m.replace(/<[^>]+>/g, '').trim()).filter((t: string) => t.length > 0);
+      if (texts.length) slideTexts.push(`[Diapositiva ${i + 1}]\n${texts.join(' ')}`);
+    }
+    return slideTexts.join('\n\n') || 'No se pudo extraer texto del PPTX.';
+  } catch (e: any) {
+    return `Error al leer PPTX: ${e?.message || e}`;
+  }
+}
 
 interface Source {
   id: string;
@@ -178,16 +227,36 @@ const NotebookView: React.FC<any> = () => {
     setShowAddSource(false);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setNewSourceContent(ev.target?.result as string);
-      setNewSourceTitle(file.name.replace(/\.[^.]+$/, ''));
-      setAddSourceType('text');
-    };
-    reader.readAsText(file);
+    setFileError(null);
+    setFileLoading(true);
+    setNewSourceTitle(file.name.replace(/\.[^.]+$/, ''));
+    setAddSourceType('text');
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') {
+        const text = await extractPdfText(file);
+        setNewSourceContent(text);
+      } else if (ext === 'pptx') {
+        const text = await extractPptxText(file);
+        setNewSourceContent(text);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => setNewSourceContent(ev.target?.result as string || '');
+        reader.readAsText(file);
+      }
+    } catch (err: any) {
+      setFileError(`Error al procesar el archivo: ${err?.message || err}`);
+    } finally {
+      setFileLoading(false);
+    }
+    // Reset input so same file can be re-uploaded
+    e.target.value = '';
   };
 
   const sendMessage = useCallback(async (text?: string) => {
@@ -553,11 +622,24 @@ const NotebookView: React.FC<any> = () => {
                   </button>
                 ))}
               </div>
-              <label className="flex items-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                <Upload size={14} className="text-slate-500" />
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Subir archivo .txt / .md / .csv</span>
-                <input type="file" accept=".txt,.md,.csv" className="hidden" onChange={handleFileUpload} />
+              <label className={`flex items-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${fileLoading ? 'opacity-60 pointer-events-none' : ''}`}>
+                {fileLoading ? <Loader size={14} className="text-indigo-500 animate-spin" /> : <Upload size={14} className="text-slate-500" />}
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  {fileLoading ? 'Procesando archivo...' : 'Subir .txt · .md · .pdf · .pptx · .csv'}
+                </span>
+                <input type="file" accept=".txt,.md,.csv,.pdf,.pptx" className="hidden" onChange={handleFileUpload} />
               </label>
+              {fileError && (
+                <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                  <AlertTriangle size={14} className="text-red-400 shrink-0" />
+                  <span className="text-xs text-red-400">{fileError}</span>
+                </div>
+              )}
+              {newSourceContent && !fileLoading && (
+                <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                  <span className="text-xs text-emerald-500 font-bold">✓ {newSourceContent.split(/\s+/).length} palabras extraídas</span>
+                </div>
+              )}
               <input
                 className="w-full bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-white border border-slate-200 dark:border-white/5 focus:outline-none focus:border-indigo-500 font-bold"
                 placeholder="Título de la fuente (opcional)"
