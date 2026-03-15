@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
 } from 'recharts';
@@ -6,10 +6,35 @@ import { Expense, Task, CalendarEvent, Partnership } from '../types';
 import {
    TrendingUp, CheckSquare, CreditCard, Plus, Trash2, FolderOpen,
    FileText, BarChart3, Calendar, Clock, MapPin, AlertCircle, ChevronLeft, ChevronRight,
-   UploadCloud, FileUp, Loader2, Scan, Users, Star, Flame, Shield, Target, CheckCircle2, Circle
+   UploadCloud, FileUp, Loader2, Scan, Users, Star, Flame, Shield, Target, CheckCircle2, Circle,
+   Sparkles, Zap, Brain, Sun, CloudRain, Wind, Thermometer, ArrowRight, Activity,
+   RefreshCw, Coffee, Moon, Sunrise
 } from 'lucide-react';
 import { analyzeFinancialDocument } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
+
+const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
+const MURCIA_WEATHER_URL = 'https://wttr.in/Murcia?format=j1';
+
+async function generateDailyBriefing(tasks: Task[], events: CalendarEvent[], hour: number): Promise<string> {
+  if (!OPENROUTER_KEY) return '';
+  const greeting = hour < 12 ? 'Buenos días' : hour < 18 ? 'Buenas tardes' : 'Buenas noches';
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayEvents = events.filter(e => e.start.startsWith(todayStr));
+  const urgentTasks = tasks.filter(t => !t.completed && t.priority === 'high').slice(0, 5);
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-haiku-4.5', max_tokens: 300,
+        messages: [{ role: 'user', content: `${greeting}, Carlos. Soy tu asistente IA. Dame un briefing motivador en 3-4 frases cortas sobre: Eventos hoy: ${todayEvents.map(e=>e.title).join(', ') || 'ninguno'}. Tareas urgentes: ${urgentTasks.map(t=>t.title).join(', ') || 'ninguna'}. Incluye un consejo práctico para el día. Sé conciso, directo y positivo. No uses listas.` }]
+      })
+    });
+    const d = await res.json();
+    return d.choices?.[0]?.message?.content || '';
+  } catch { return ''; }
+}
 
 interface DashboardProps {
    expenses: Expense[];
@@ -44,6 +69,30 @@ const Dashboard: React.FC<DashboardProps> = ({
    // AI Scan State
    const [isAnalyzingFile, setIsAnalyzingFile] = useState(false);
    const [scannedExpense, setScannedExpense] = useState<Partial<Expense> | null>(null);
+
+   // Dashboard AI Briefing
+   const [briefing, setBriefing] = useState('');
+   const [loadingBriefing, setLoadingBriefing] = useState(false);
+   const [weather, setWeather] = useState<{temp: string; desc: string; icon: string} | null>(null);
+   const currentHour = new Date().getHours();
+   const greeting = currentHour < 12 ? '☀️ Buenos días' : currentHour < 18 ? '🌤️ Buenas tardes' : '🌙 Buenas noches';
+
+   useEffect(() => {
+     // Load weather
+     fetch('https://wttr.in/Murcia?format=%t|%C|%w')
+       .then(r => r.text())
+       .then(text => {
+         const [temp, desc, wind] = text.split('|');
+         setWeather({ temp: temp?.trim() || '--', desc: desc?.trim() || '', icon: '🌤️' });
+       }).catch(() => {});
+   }, []);
+
+   const handleGenerateBriefing = async () => {
+     setLoadingBriefing(true);
+     const result = await generateDailyBriefing(tasks, events, currentHour);
+     setBriefing(result);
+     setLoadingBriefing(false);
+   };
 
    // --- Calculations ---
    const totalSpent = useMemo(() => expenses.reduce((acc, curr) => acc + Math.abs(curr.amount), 0), [expenses]);
@@ -257,212 +306,205 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="lg:col-span-8 space-y-6">
 
                {activeTab === 'overview' && (
-                  <>
-                     {/* KPI Cards */}
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Gasto Total</p>
-                           <h3 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white">€{totalSpent.toLocaleString()}</h3>
-                        </div>
-                        <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tareas Pendientes</p>
-                           <h3 className="text-2xl md:text-3xl font-black text-indigo-600">{pendingTasks.length}</h3>
-                        </div>
-                     </div>
+                  <div className="space-y-5">
 
-                     {/* Weekly Agenda View */}
-                     {/* Weekly Agenda View - Redesigned */}
-                     <div className="bg-slate-900 p-8 rounded-[3rem] shadow-2xl overflow-hidden border border-slate-800 relative">
-                        {/* Header */}
-                        <div className="flex items-center gap-4 mb-8 relative z-10">
-                           <Calendar size={24} className="text-indigo-400" />
-                           <h4 className="text-lg font-black text-white uppercase tracking-widest">
-                              Agenda Semanal Sincronizada
-                           </h4>
-                        </div>
-
-                        {/* Columns Container */}
-                        <div className="grid grid-cols-5 gap-4 h-[450px]">
-                           {weekDays.slice(0, 5).map((day, i) => {
-                              const isToday = i === 0; // Assumption based on logic
-                              const hasItems = day.items.length > 0;
-
-                              return (
-                                 <div
-                                    key={day.dateStr}
-                                    className={`relative flex flex-col items-center py-6 px-2 rounded-[2.5rem] transition-all duration-300 group
-                                       ${isToday
-                                          ? 'bg-gradient-to-b from-indigo-900/40 to-slate-900 border border-indigo-500/50 shadow-lg shadow-indigo-900/20'
-                                          : 'bg-slate-800/30 border border-slate-800 hover:bg-slate-800/50'
-                                       }
-                                    `}
-                                 >
-                                    {/* Date Header */}
-                                    <div className="text-center mb-6 z-10">
-                                       <span className={`text-[10px] font-black uppercase tracking-widest block mb-1 ${isToday ? 'text-indigo-300' : 'text-slate-500'}`}>
-                                          {day.dayName.toUpperCase()}
-                                       </span>
-                                       <span className={`text-2xl font-black ${isToday ? 'text-white scale-110 inline-block' : 'text-slate-400'}`}>
-                                          {day.dayNumber}
-                                       </span>
-                                    </div>
-
-                                    {/* Items Container (Vertical Stack) */}
-                                    <div className="flex-1 w-full flex flex-col items-center gap-2 overflow-y-auto no-scrollbar pb-8 px-2">
-                                       {hasItems ? (
-                                          day.items.map((item: any) => {
-                                             const isEvent = !!item.start;
-                                             // Determine Icon
-                                             let Icon = isEvent ? Clock : CheckSquare;
-                                             if (isEvent && (item.title.toLowerCase().includes('vuelo') || item.title.toLowerCase().includes('viaje'))) Icon = TrendingUp;
-
-                                             return (
-                                                <div
-                                                   key={item.id}
-                                                   className={`w-full p-2 rounded-xl flex items-center gap-2 border transition-all cursor-pointer group/item
-                                                      ${isEvent
-                                                         ? 'bg-indigo-500/10 border-indigo-500/20 hover:bg-indigo-600 hover:border-indigo-600'
-                                                         : 'bg-slate-700/30 border-slate-700 hover:bg-emerald-600 hover:border-emerald-600'
-                                                      }
-                                                   `}
-                                                   title={item.title}
-                                                >
-                                                   <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${isEvent ? 'bg-indigo-500/20 text-indigo-300 group-hover/item:bg-white/20 group-hover/item:text-white' : 'bg-slate-600/30 text-slate-400 group-hover/item:bg-white/20 group-hover/item:text-white'}`}>
-                                                      <Icon size={14} strokeWidth={2.5} />
-                                                   </div>
-                                                   <div className="flex-1 overflow-hidden">
-                                                      <p className={`text-[10px] font-black uppercase tracking-wider truncate transition-colors ${isEvent ? 'text-indigo-200 group-hover/item:text-white' : 'text-slate-300 group-hover/item:text-white'}`}>
-                                                         {item.title}
-                                                      </p>
-                                                      {isEvent && item.start.includes('T') && (
-                                                         <p className="text-[9px] font-bold text-slate-500 group-hover/item:text-indigo-100 flex items-center gap-1">
-                                                            <span>{item.start.split('T')[1].substring(0, 5)}</span>
-                                                         </p>
-                                                      )}
-                                                   </div>
-                                                </div>
-                                             );
-                                          })
-                                       ) : (
-                                          <div className="flex-1 flex flex-col justify-end pb-4 opacity-30">
-                                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest -rotate-90 whitespace-nowrap">
-                                                Libre
-                                             </span>
-                                          </div>
-                                       )}
-                                    </div>
-
-                                    {/* Scroll Indicator (if many items, simplified visual cue) */}
-                                    {day.items.length > 5 && (
-                                       <div className="absolute bottom-2 w-1 h-1 bg-slate-600 rounded-full animate-pulse" />
-                                    )}
-                                 </div>
-                              );
-                           })}
-                        </div>
-                     </div>
-
-                     {/* VIP Tasks Quick Panel */}
-                     <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/5 rounded-[2rem] border border-amber-200 dark:border-amber-500/20 p-6">
-                        <div className="flex items-center justify-between mb-4">
-                           <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-md shadow-amber-500/25">
-                                 <Star size={16} className="text-white fill-white" />
-                              </div>
-                              <div>
-                                 <h4 className="text-sm font-black text-slate-800 dark:text-white">Tareas VIP del día</h4>
-                                 <p className="text-[10px] text-slate-500 dark:text-slate-400">Prioridades críticas</p>
-                              </div>
+                     {/* BRIEFING + WEATHER ROW */}
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                       {/* Greeting + Briefing */}
+                       <div className="md:col-span-2 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-5 text-white relative overflow-hidden">
+                         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10" />
+                         <div className="flex items-start justify-between gap-3 relative z-10">
+                           <div className="flex-1">
+                             <p className="text-sm font-black opacity-90 mb-1">{greeting}, Carlos 👋</p>
+                             {briefing ? (
+                               <p className="text-xs opacity-80 leading-relaxed">{briefing}</p>
+                             ) : (
+                               <p className="text-xs opacity-60">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} · {pendingTasks.length} tareas pendientes · {events.filter(e => e.start.startsWith(new Date().toISOString().split('T')[0])).length} eventos hoy</p>
+                             )}
                            </div>
-                           <span className="bg-amber-500 text-white text-xs font-black px-2.5 py-1 rounded-xl shadow-sm">
-                              {tasks.filter(t => t.priority === 'high' && !t.completed).length} pendientes
-                           </span>
-                        </div>
-                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                           {tasks.filter(t => !t.completed && (t.priority === 'high' || t.priority === 'medium')).slice(0, 5).length > 0 ? (
-                              tasks.filter(t => !t.completed && (t.priority === 'high' || t.priority === 'medium')).slice(0, 5).map(task => (
-                                 <div key={task.id} className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-3 border border-amber-100 dark:border-amber-500/10">
-                                    <button onClick={() => onToggleTask(task.id)} className="shrink-0">
-                                       <Circle size={18} className="text-amber-400 hover:text-amber-600 transition-colors" />
-                                    </button>
-                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200 flex-1 truncate">{task.title}</span>
-                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${task.priority === 'high' ? 'bg-orange-100 text-orange-600 dark:bg-orange-500/20' : 'bg-amber-100 text-amber-600 dark:bg-amber-500/20'}`}>
-                                       {task.priority === 'high' ? 'Alta' : 'Media'}
-                                    </span>
-                                 </div>
-                              ))
-                           ) : (
-                              <div className="flex items-center justify-center py-6 gap-2 text-amber-400">
-                                 <CheckCircle2 size={20} />
-                                 <span className="text-sm font-bold">¡Todo al día! Sin tareas urgentes</span>
-                              </div>
-                           )}
-                        </div>
-                        {/* Próximas guardias */}
-                        {events.filter(e => e.type === 'work' && e.start >= new Date().toISOString().split('T')[0]).slice(0, 3).length > 0 && (
-                           <div className="mt-4 pt-4 border-t border-amber-200 dark:border-amber-500/20">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-2 flex items-center gap-1">
-                                 <Shield size={10} /> Próximas guardias
-                              </p>
-                              <div className="flex gap-2 flex-wrap">
-                                 {events.filter(e => e.type === 'work' && e.start >= new Date().toISOString().split('T')[0]).slice(0, 3).map(ev => (
-                                    <span key={ev.id} className="text-xs font-bold bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 px-3 py-1 rounded-xl">
-                                       🔴 {new Date(ev.start + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — {ev.title}
-                                    </span>
-                                 ))}
-                              </div>
-                           </div>
-                        )}
+                           <button onClick={handleGenerateBriefing} disabled={loadingBriefing}
+                             className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold transition-colors disabled:opacity-60">
+                             {loadingBriefing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                             {briefing ? 'Regenerar' : 'Briefing IA'}
+                           </button>
+                         </div>
+                       </div>
+
+                       {/* Weather + Time */}
+                       <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/60 dark:border-white/5 flex flex-col justify-between">
+                         <div className="flex items-center justify-between mb-2">
+                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Murcia ahora</span>
+                           <span className="text-lg">🌤️</span>
+                         </div>
+                         {weather ? (
+                           <>
+                             <div className="text-3xl font-black text-slate-800 dark:text-white">{weather.temp}</div>
+                             <div className="text-xs text-slate-500 truncate">{weather.desc}</div>
+                           </>
+                         ) : (
+                           <div className="text-3xl font-black text-slate-300 dark:text-slate-700">--°C</div>
+                         )}
+                         <div className="text-[10px] text-slate-400 mt-2 font-mono">{new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</div>
+                       </div>
                      </div>
 
-                     {/* Charts */}
+                     {/* KPI CARDS */}
+                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                       {[
+                         { label: 'Gasto Total', value: `€${totalSpent.toLocaleString()}`, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-500/10', sub: 'este mes' },
+                         { label: 'Tareas Pend.', value: pendingTasks.length, icon: CheckSquare, color: 'text-indigo-500', bg: 'bg-indigo-500/10', sub: `${tasks.filter(t=>t.completed).length} completadas` },
+                         { label: 'Eventos Hoy', value: events.filter(e => e.start.startsWith(new Date().toISOString().split('T')[0])).length, icon: Calendar, color: 'text-violet-500', bg: 'bg-violet-500/10', sub: 'en agenda' },
+                         { label: 'Prioridad Alta', value: tasks.filter(t=>!t.completed && t.priority==='high').length, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-500/10', sub: 'urgentes' },
+                       ].map(kpi => (
+                         <div key={kpi.label} className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-white/5 shadow-sm">
+                           <div className={`w-9 h-9 ${kpi.bg} rounded-xl flex items-center justify-center mb-3`}>
+                             <kpi.icon size={18} className={kpi.color} />
+                           </div>
+                           <div className="text-2xl font-black text-slate-800 dark:text-white">{kpi.value}</div>
+                           <div className="text-[10px] font-bold text-slate-500 mt-0.5">{kpi.label}</div>
+                           <div className="text-[10px] text-slate-400">{kpi.sub}</div>
+                         </div>
+                       ))}
+                     </div>
+
+                     {/* TODAY'S FOCUS + UPCOMING EVENTS */}
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm h-[300px]">
-                           <h4 className="text-xs font-black text-slate-800 dark:text-white mb-4 uppercase tracking-widest">Distribución (Pie)</h4>
-                           <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                 <Pie
-                                    data={pieData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                    isAnimationActive={true}
-                                    animationBegin={0}
-                                    animationDuration={1500}
-                                    animationEasing="ease-out"
-                                 >
-                                    {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                 </Pie>
-                                 <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
-                                 <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                              </PieChart>
-                           </ResponsiveContainer>
-                        </div>
 
-                        <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm h-[300px]">
-                           <h4 className="text-xs font-black text-slate-800 dark:text-white mb-4 uppercase tracking-widest">Gastos por Categoría</h4>
-                           <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={pieData}>
-                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval={0} />
-                                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(value) => `€${value}`} />
-                                 <Tooltip
-                                    cursor={{ fill: 'transparent' }}
-                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
-                                    formatter={(value: number) => [`€${value}`, 'Gasto']}
-                                 />
-                                 <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={30} />
-                              </BarChart>
-                           </ResponsiveContainer>
-                        </div>
+                       {/* Today's top 3 tasks */}
+                       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-white/5 shadow-sm p-5">
+                         <div className="flex items-center justify-between mb-4">
+                           <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                             <Target size={13} className="text-amber-500" /> Foco del Día
+                           </h4>
+                           <span className="text-[10px] bg-amber-500/10 text-amber-500 font-bold px-2 py-0.5 rounded-full">{tasks.filter(t=>!t.completed && t.priority==='high').length} urgentes</span>
+                         </div>
+                         <div className="space-y-2">
+                           {tasks.filter(t => !t.completed).sort((a,b) => (a.priority==='high'?0:a.priority==='medium'?1:2) - (b.priority==='high'?0:b.priority==='medium'?1:2)).slice(0,5).length > 0 ? (
+                             tasks.filter(t => !t.completed).sort((a,b) => (a.priority==='high'?0:a.priority==='medium'?1:2) - (b.priority==='high'?0:b.priority==='medium'?1:2)).slice(0,5).map(task => (
+                               <div key={task.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                 <button onClick={() => onToggleTask(task.id)} className="shrink-0">
+                                   <Circle size={16} className={`transition-colors ${task.priority==='high' ? 'text-red-400 hover:text-red-600' : task.priority==='medium' ? 'text-amber-400 hover:text-amber-600' : 'text-slate-300 hover:text-slate-500'}`} />
+                                 </button>
+                                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex-1 truncate">{task.title}</span>
+                                 <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg ${task.priority==='high' ? 'bg-red-100 text-red-600 dark:bg-red-500/20' : task.priority==='medium' ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>
+                                   {task.priority==='high' ? '🔴' : task.priority==='medium' ? '🟡' : '🟢'}
+                                 </span>
+                               </div>
+                             ))
+                           ) : (
+                             <div className="text-center py-6">
+                               <CheckCircle2 size={24} className="mx-auto text-emerald-400 mb-2" />
+                               <p className="text-xs font-bold text-slate-400">¡Sin tareas urgentes!</p>
+                             </div>
+                           )}
+                         </div>
+                       </div>
+
+                       {/* Next 5 events */}
+                       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-white/5 shadow-sm p-5">
+                         <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
+                           <Calendar size={13} className="text-indigo-500" /> Próximos Eventos
+                         </h4>
+                         <div className="space-y-2">
+                           {events.filter(e => e.start >= new Date().toISOString().split('T')[0]).sort((a,b) => a.start.localeCompare(b.start)).slice(0,5).length > 0 ? (
+                             events.filter(e => e.start >= new Date().toISOString().split('T')[0]).sort((a,b) => a.start.localeCompare(b.start)).slice(0,5).map(ev => {
+                               const evDate = new Date(ev.start.includes('T') ? ev.start : ev.start + 'T12:00:00');
+                               const isToday = ev.start.startsWith(new Date().toISOString().split('T')[0]);
+                               return (
+                                 <div key={ev.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                   <div className={`w-9 h-9 rounded-xl flex flex-col items-center justify-center text-[9px] font-black shrink-0 ${isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
+                                     <span>{evDate.toLocaleDateString('es-ES', { day: 'numeric' })}</span>
+                                     <span className="uppercase">{evDate.toLocaleDateString('es-ES', { month: 'short' })}</span>
+                                   </div>
+                                   <div className="flex-1 min-w-0">
+                                     <p className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">{ev.title}</p>
+                                     <p className="text-[10px] text-slate-400">{isToday ? 'Hoy' : evDate.toLocaleDateString('es-ES', { weekday: 'short' })} {ev.start.includes('T') ? ev.start.split('T')[1].substring(0,5) : ''}</p>
+                                   </div>
+                                   {isToday && <span className="text-[10px] bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold px-1.5 rounded-lg shrink-0">HOY</span>}
+                                 </div>
+                               );
+                             })
+                           ) : (
+                             <div className="text-center py-6">
+                               <Calendar size={24} className="mx-auto text-slate-300 dark:text-slate-700 mb-2" />
+                               <p className="text-xs font-bold text-slate-400">Sin eventos próximos</p>
+                             </div>
+                           )}
+                         </div>
+                       </div>
                      </div>
-                  </>
+
+                     {/* WEEKLY AGENDA - COMPACT */}
+                     <div className="bg-slate-900 rounded-2xl border border-slate-800 p-5 overflow-hidden">
+                       <div className="flex items-center gap-3 mb-4">
+                         <Calendar size={16} className="text-indigo-400" />
+                         <h4 className="text-xs font-black text-white uppercase tracking-widest">Agenda Semanal</h4>
+                       </div>
+                       <div className="grid grid-cols-7 gap-2">
+                         {weekDays.map((day, i) => {
+                           const isToday = day.dateStr === new Date().toISOString().split('T')[0];
+                           return (
+                             <div key={day.dateStr} className={`flex flex-col items-center p-2 rounded-xl transition-all ${isToday ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}>
+                               <span className="text-[9px] font-black uppercase">{day.dayName}</span>
+                               <span className={`text-lg font-black ${isToday ? 'text-white' : 'text-slate-300'}`}>{day.dayNumber}</span>
+                               {day.items.length > 0 ? (
+                                 <div className="mt-1 space-y-0.5 w-full">
+                                   {day.items.slice(0,2).map((item: any) => (
+                                     <div key={item.id} className={`text-[8px] font-bold truncate px-1 py-0.5 rounded ${isToday ? 'bg-white/20' : 'bg-slate-700'}`}>
+                                       {item.title}
+                                     </div>
+                                   ))}
+                                   {day.items.length > 2 && <div className="text-[8px] text-slate-400 text-center">+{day.items.length-2}</div>}
+                                 </div>
+                               ) : (
+                                 <div className="mt-1 text-[8px] text-slate-600">libre</div>
+                               )}
+                             </div>
+                           );
+                         })}
+                       </div>
+                     </div>
+
+                     {/* CHARTS ROW */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/60 dark:border-white/5 shadow-sm h-[260px]">
+                         <h4 className="text-xs font-black text-slate-500 mb-3 uppercase tracking-widest">Gastos por Categoría</h4>
+                         {pieData.length > 0 ? (
+                           <ResponsiveContainer width="100%" height="90%">
+                             <BarChart data={pieData} layout="vertical" margin={{ left: 8 }}>
+                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                               <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `€${v}`} />
+                               <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={70} />
+                               <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} formatter={(v: number) => [`€${v}`, 'Gasto']} />
+                               <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={16} />
+                             </BarChart>
+                           </ResponsiveContainer>
+                         ) : (
+                           <div className="flex items-center justify-center h-[200px] text-slate-300 dark:text-slate-700 text-xs">Sin datos de gastos</div>
+                         )}
+                       </div>
+
+                       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/60 dark:border-white/5 shadow-sm h-[260px]">
+                         <h4 className="text-xs font-black text-slate-500 mb-3 uppercase tracking-widest">Distribución Gastos</h4>
+                         {pieData.length > 0 ? (
+                           <ResponsiveContainer width="100%" height="90%">
+                             <PieChart>
+                               <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={75} paddingAngle={4} dataKey="value">
+                                 {pieData.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
+                               </Pie>
+                               <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
+                               <Legend verticalAlign="bottom" height={30} iconType="circle" iconSize={8} />
+                             </PieChart>
+                           </ResponsiveContainer>
+                         ) : (
+                           <div className="flex items-center justify-center h-[200px] text-slate-300 dark:text-slate-700 text-xs">Sin datos de gastos</div>
+                         )}
+                       </div>
+                     </div>
+                  </div>
                )}
 
-               {/* Tasks Tab */}
+                              {/* Tasks Tab */}
                {activeTab === 'tasks' && (
                   <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm min-h-[400px]">
                      <h4 className="text-lg font-black text-slate-900 dark:text-white mb-6 flex items-center gap-2"><CheckSquare size={20} className="text-indigo-500" /> Gestión de Tareas</h4>
