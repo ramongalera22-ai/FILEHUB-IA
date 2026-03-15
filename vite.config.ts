@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
       'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY || ''),
       'process.env.VITE_WA_SERVER_URL': JSON.stringify(env.VITE_WA_SERVER_URL || ''),
       'process.env.VITE_WA_WS_URL': JSON.stringify(env.VITE_WA_WS_URL || ''),
+      'process.env.VITE_OPENROUTER_KEY': JSON.stringify(env.VITE_OPENROUTER_KEY || ''),
     },
     resolve: {
       alias: {

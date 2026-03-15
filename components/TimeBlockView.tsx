@@ -195,17 +195,23 @@ Crea un plan horario realista para hoy con:
 
 Sé concreto con horas. Responde en español, máximo 200 palabras.`;
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENROUTER_KEY}`,
+          'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA',
+          'X-Title': 'FILEHUB IA',
+        },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'anthropic/claude-haiku-4.5',
           max_tokens: 1000,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
       const data = await response.json();
-      const text = data.content?.find((c: any) => c.type === 'text')?.text || 'No se pudo generar el plan';
+      const text = data.choices?.[0]?.message?.content || 'No se pudo generar el plan';
       setAiPlan(text);
     } catch {
       setAiPlan('Error al conectar con IA. Verifica tu conexión.');
