@@ -200,7 +200,7 @@ const SupermarketsView: React.FC<SupermarketsViewProps> = ({
                 items: cart,
                 total: total,
                 address,
-                status: 'Completado',
+                status: 'completed',
                 createdAt: Date.now(),
                 store: 'Alcampo Antigravity',
                 date: new Date().toISOString()
