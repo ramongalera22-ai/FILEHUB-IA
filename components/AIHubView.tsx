@@ -26,6 +26,7 @@ import { chatWithGemini } from '../services/openrouterService';
 import { checkOllamaStatus, chatWithOllama } from '../services/ollamaService';
 import { checkAnythingStatus, chatWithAnything } from '../services/anythingLlmService';
 import { checkLocalLlmStatus, chatWithLocalLlm } from '../services/localLlmService';
+import { chatWithKimi, DEFAULT_KIMI_CONFIG } from '../services/kimiService';
 
 interface AIHubViewProps {
   ollamaConfig: OllamaConfig;
@@ -54,7 +55,7 @@ const AIHubView: React.FC<AIHubViewProps> = ({
   onUpdateOpenWebUIConfig,
   globalContext
 }) => {
-  const [mode, setMode] = useState<'cloud' | 'local' | 'notebook' | 'anything' | 'openwebui' | 'local_llm'>('local');
+  const [mode, setMode] = useState<'cloud' | 'local' | 'notebook' | 'anything' | 'openwebui' | 'local_llm' | 'kimi'>('kimi');
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -164,7 +165,14 @@ const AIHubView: React.FC<AIHubViewProps> = ({
     try {
       let responseText = '';
 
-      if (mode === 'cloud') {
+      if (mode === 'kimi') {
+        const kimiCfg = { ...DEFAULT_KIMI_CONFIG };
+        const saved = localStorage.getItem('filehub_kimi_config');
+        if (saved) Object.assign(kimiCfg, JSON.parse(saved));
+        responseText = await chatWithKimi([{ role: 'user', content: input }], kimiCfg, {
+          systemPrompt: globalContext ? `Contexto del usuario:\n${JSON.stringify(globalContext).substring(0, 2000)}\n\nEres el asistente IA de FileHub para Carlos. Responde siempre en español.` : undefined
+        });
+      } else if (mode === 'cloud') {
         const res = await chatWithGemini(input, globalContext);
         responseText = res.text;
       } else if (mode === 'local') {
@@ -235,6 +243,7 @@ const AIHubView: React.FC<AIHubViewProps> = ({
 
         <div className="flex bg-white dark:bg-slate-900 p-2 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-sm overflow-x-auto no-scrollbar gap-2">
           {[
+            { id: 'kimi', label: '🌙 Kimi 2.5', icon: Zap, color: 'bg-violet-600' },
             { id: 'cloud', label: 'Cloud', icon: Cloud, color: 'bg-indigo-600' },
             { id: 'local', label: 'Ollama', icon: Server, color: 'bg-cyan-500' },
             { id: 'notebook', label: 'Knowledge', icon: Library, color: 'bg-amber-500' },
