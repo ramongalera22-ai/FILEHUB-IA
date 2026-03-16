@@ -7,7 +7,7 @@
 import { CalendarEvent, DayPlan, Task } from '../types';
 
 const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
-const MODEL = 'anthropic/claude-haiku-4.5';
+const MODEL = 'moonshotai/kimi-k2:free';
 const BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REFERER = 'https://ramongalera22-ai.github.io/FILEHUB-IA';
 
