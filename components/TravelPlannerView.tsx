@@ -1,10 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Plane, MapPin, Calendar, Plus, Trash2, Sparkles, Loader2,
   Clock, Euro, Hotel, Utensils, Camera, ChevronDown, ChevronUp,
   Copy, Check, Download, Globe, Star, X, RefreshCw, Sun,
   Navigation, Coffee, ShoppingBag, Music, Mountain, Waves,
-  ExternalLink, Heart, HeartOff, Bot
+  ExternalLink, Heart, HeartOff, Bot, Send
 } from 'lucide-react';
 import { chatWithKimi } from '../services/kimiService';
 import { NY_PLAN_PRESET } from '../data/nyItinerary';
@@ -186,7 +186,11 @@ const TravelPlannerView: React.FC = () => {
   const [genError, setGenError] = useState('');
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'tips' | 'budget'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'tips' | 'budget' | 'chat'>('itinerary');
+  const [chatMessages, setChatMessages] = useState<{role: 'user'|'assistant'; content: string; isModification?: boolean}[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatting, setIsChatting] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const [selectedModel, setSelectedModel] = useState<'kimi' | 'haiku'>('kimi');
 
   const [form, setForm] = useState({
@@ -293,6 +297,124 @@ const TravelPlannerView: React.FC = () => {
     savePlans([plan, ...plans]);
     setSelectedPlan(plan);
     setView('detail');
+  };
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  // ── CHAT WITH ITINERARY ───────────────────────────────────────
+  const chatWithItinerary = async () => {
+    if (!chatInput.trim() || !selectedPlan?.itinerary || isChatting) return;
+    const userMsg = chatInput.trim();
+    setChatInput('');
+    setIsChatting(true);
+
+    const newMessages = [...chatMessages, { role: 'user' as const, content: userMsg }];
+    setChatMessages(newMessages);
+
+    // Detect if it's a modification request
+    const isModification = /cambi|añad|quita|sustitu|modific|actualiz|agrega|elimina|mueve|traslad|reemplaz|borra|pon|ponme|ponle|incluye|incorpora|adapta|reorganiz/i.test(userMsg);
+
+    const systemPrompt = `Eres el asistente de viajes de FileHub. Tienes acceso al itinerario completo de ${selectedPlan.destination}.
+
+ITINERARIO ACTUAL (JSON):
+${JSON.stringify(selectedPlan.itinerary, null, 2)}
+
+INSTRUCCIONES:
+- Si el usuario pide información, preguntas o consejos: responde en texto claro y útil.
+- Si el usuario pide MODIFICAR el itinerario (cambiar, añadir, quitar, mover actividades, cambiar restaurantes, etc.):
+  1. Explica brevemente qué vas a cambiar
+  2. Devuelve el itinerario COMPLETO modificado en JSON válido entre las etiquetas <ITINERARY_UPDATE> y </ITINERARY_UPDATE>
+  3. El JSON debe tener exactamente la misma estructura que el original
+- Responde SIEMPRE en español.
+- Sé conciso en la explicación (2-3 frases máximo antes del JSON).
+- Preserva TODOS los días y actividades que no se modifican.`;
+
+    try {
+      const tryAnthropic = async (model: string) => {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: isModification ? 8000 : 1024,
+            system: systemPrompt,
+            messages: [
+              ...newMessages.slice(-6).map(m => ({ role: m.role, content: m.content })),
+            ],
+          }),
+        });
+        if (!resp.ok) throw new Error(`${resp.status}`);
+        const data = await resp.json();
+        return data.content?.[0]?.text || '';
+      };
+
+      const tryKimi = async () => {
+        const savedConfig = localStorage.getItem('filehub_kimi_config');
+        const cfg = savedConfig ? JSON.parse(savedConfig) : {};
+        return chatWithKimi(
+          [...newMessages.slice(-6).map(m => ({ role: m.role as 'user'|'assistant', content: m.content }))],
+          cfg,
+          { systemPrompt, maxTokens: isModification ? 8000 : 1024 }
+        );
+      };
+
+      let responseText = '';
+      try {
+        responseText = await tryAnthropic('claude-haiku-4-5-20251001');
+      } catch {
+        try { responseText = await tryAnthropic('claude-sonnet-4-6'); }
+        catch { responseText = await tryKimi(); }
+      }
+
+      // Check if response contains itinerary update
+      const updateMatch = responseText.match(/<ITINERARY_UPDATE>([\s\S]*?)<\/ITINERARY_UPDATE>/);
+      let displayText = responseText.replace(/<ITINERARY_UPDATE>[\s\S]*?<\/ITINERARY_UPDATE>/g, '').trim();
+
+      if (updateMatch) {
+        try {
+          const jsonStr = updateMatch[1].trim();
+          const start = jsonStr.indexOf('{');
+          const end = jsonStr.lastIndexOf('}');
+          const updatedItinerary = JSON.parse(jsonStr.slice(start, end + 1));
+          updatedItinerary.model = updatedItinerary.model || selectedPlan.itinerary.model;
+
+          // Apply the update
+          const updatedPlan = { ...selectedPlan, itinerary: updatedItinerary };
+          const updatedPlans = plans.map(p => p.id === selectedPlan.id ? updatedPlan : p);
+          savePlans(updatedPlans);
+          setSelectedPlan(updatedPlan);
+
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: displayText || '✅ Itinerario actualizado correctamente.',
+            isModification: true
+          }]);
+        } catch {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: displayText || responseText
+          }]);
+        }
+      } else {
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: responseText
+        }]);
+      }
+    } catch (err: any) {
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `❌ Error: ${err.message}. Configura la API key de Kimi en Notebook → ⚙️`
+      }]);
+    }
+    setIsChatting(false);
   };
 
   const deletePlan = (id: string) => {
@@ -616,11 +738,12 @@ const TravelPlannerView: React.FC = () => {
           <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl w-fit">
             {[
               { id: 'itinerary', label: '📋 Itinerario' },
+              { id: 'chat', label: `🤖 Chat IA${chatMessages.length > 0 ? ` (${chatMessages.length})` : ''}` },
               { id: 'tips', label: '💡 Consejos' },
               { id: 'budget', label: '💰 Presupuesto' },
             ].map(t => (
               <button key={t.id} onClick={() => setActiveTab(t.id as any)}
-                className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === t.id ? 'bg-white dark:bg-slate-700 text-sky-600 shadow-sm' : 'text-slate-500'}`}>
+                className={`px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-white dark:bg-slate-700 text-sky-600 shadow-sm' : 'text-slate-500'}`}>
                 {t.label}
               </button>
             ))}
@@ -694,6 +817,115 @@ const TravelPlannerView: React.FC = () => {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* CHAT TAB */}
+          {activeTab === 'chat' && (
+            <div className="flex flex-col gap-3" style={{ minHeight: '500px' }}>
+              {/* Intro */}
+              <div className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-500/10 dark:to-indigo-500/5 rounded-2xl border border-violet-200 dark:border-violet-500/20 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shrink-0 shadow-md">
+                    <Bot size={16} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="font-black text-sm text-violet-700 dark:text-violet-400">IA sobre tu itinerario</p>
+                    <p className="text-xs text-violet-600/70 dark:text-violet-400/60 mt-0.5 leading-relaxed">
+                      Pídeme cambios y los aplico directamente. También puedo responder preguntas sobre el viaje.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {[
+                        'Cambia el restaurante del día 3',
+                        'Añade el Cloisters al día 6',
+                        '¿Cuánto cuesta el MOMA?',
+                        'Mueve la High Line al día 3',
+                        'Quita el Tour de Contrastes',
+                        '¿Cómo llego al hotel desde JFK?',
+                      ].map(s => (
+                        <button key={s} onClick={() => setChatInput(s)}
+                          className="text-[10px] font-bold px-2.5 py-1 bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-400 rounded-lg hover:bg-violet-200 transition-all border border-violet-200 dark:border-violet-500/30">
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 space-y-3 overflow-y-auto max-h-[400px] pr-1">
+                {chatMessages.length === 0 && (
+                  <div className="flex flex-col items-center py-10 text-center text-slate-400">
+                    <div className="text-4xl mb-3">💬</div>
+                    <p className="text-sm font-bold text-slate-500 dark:text-slate-300">Sin mensajes aún</p>
+                    <p className="text-xs mt-1">Usa los accesos rápidos de arriba o escribe tu petición</p>
+                  </div>
+                )}
+                {chatMessages.map((msg, i) => (
+                  <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.role === 'assistant' && (
+                      <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shrink-0 mt-1 shadow-sm">
+                        <Bot size={12} className="text-white" />
+                      </div>
+                    )}
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-sky-500 text-white rounded-br-sm'
+                        : msg.isModification
+                          ? 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-200 rounded-bl-sm'
+                          : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-bl-sm'
+                    }`}>
+                      {msg.isModification && (
+                        <div className="flex items-center gap-1.5 mb-1.5 text-emerald-600 dark:text-emerald-400">
+                          <Check size={13} className="shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider">Itinerario actualizado</span>
+                        </div>
+                      )}
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                    {msg.role === 'user' && (
+                      <div className="w-7 h-7 bg-sky-100 dark:bg-sky-500/20 rounded-xl flex items-center justify-center shrink-0 mt-1">
+                        <Navigation size={12} className="text-sky-600" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {isChatting && (
+                  <div className="flex gap-2 justify-start">
+                    <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shrink-0">
+                      <Bot size={12} className="text-white" />
+                    </div>
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2">
+                      <Loader2 size={13} className="animate-spin text-violet-500" />
+                      <span className="text-xs text-slate-400">Pensando...</span>
+                      {[0,1,2].map(i => (
+                        <div key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay: `${i*0.12}s`}} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="flex gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-2 focus-within:border-violet-400/60 transition-all shadow-sm">
+                <textarea
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatWithItinerary(); } }}
+                  placeholder="¿Qué quieres cambiar o saber sobre el viaje? (Enter para enviar)"
+                  rows={2}
+                  className="flex-1 bg-transparent border-0 outline-none resize-none text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 px-2 py-1"
+                />
+                <button onClick={chatWithItinerary} disabled={isChatting || !chatInput.trim()}
+                  className="self-end p-2.5 bg-gradient-to-br from-violet-500 to-indigo-600 text-white rounded-xl hover:opacity-90 disabled:opacity-40 transition-all shadow-sm">
+                  {isChatting ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 text-center">
+                Los cambios al itinerario se aplican y guardan automáticamente · Enter para enviar
+              </p>
             </div>
           )}
 

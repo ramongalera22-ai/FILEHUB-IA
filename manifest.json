@@ -1,8 +1,14 @@
 {
-  "short_name": "FILEHUB",
+  "short_name": "FileHub",
   "name": "FILEHUB - Gestión Inteligente con IA",
-  "description": "Tu centro de control financiero, laboral y personal con integración de IA.",
+  "description": "Tu centro de control personal con IA. Funciona offline.",
   "icons": [
+    {
+      "src": "https://img.icons8.com/ios-filled/192/4f46e5/lightning-bolt.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
     {
       "src": "https://img.icons8.com/ios-filled/512/4f46e5/lightning-bolt.png",
       "type": "image/png",
@@ -10,9 +16,27 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/FILEHUB-IA/",
+  "scope": "/FILEHUB-IA/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "theme_color": "#4f46e5",
-  "background_color": "#f8fafc",
-  "orientation": "portrait"
+  "background_color": "#0f172a",
+  "orientation": "any",
+  "categories": ["productivity", "finance", "utilities"],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Tareas VIP",
+      "short_name": "VIP",
+      "url": "/FILEHUB-IA/",
+      "icons": [{ "src": "https://img.icons8.com/ios-filled/96/f59e0b/star.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Planificador IA",
+      "short_name": "Plan",
+      "url": "/FILEHUB-IA/",
+      "icons": [{ "src": "https://img.icons8.com/ios-filled/96/4f46e5/brain.png", "sizes": "96x96" }]
+    }
+  ]
 }
