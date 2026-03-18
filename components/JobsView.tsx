@@ -118,8 +118,8 @@ const JobsView: React.FC = () => {
     const [isScraping, setIsScraping] = useState(false);
     const [showScrapeConfig, setShowScrapeConfig] = useState(false);
     const [scrapeConfig, setScrapeConfig] = useState({
-        query: 'desarrollador',
-        city: 'barcelona',
+        query: 'enfermero',
+        city: 'murcia',
         maxItems: 20
     });
 
@@ -164,6 +164,51 @@ const JobsView: React.FC = () => {
                     const data = JSON.parse(event.data);
                     if (data.type === 'message') processMessage(data.message);
                     if (data.type === 'history' && data.messages) data.messages.forEach((m: any) => processMessage(m));
+                    // Scraping results via WS
+                    if (data.type === 'scrape_results' && data.target === 'jobs') {
+                        setIsScraping(false);
+                        const items: JobOffer[] = (data.items || []).map((item: any) => ({
+                            id: item.id || `ws_job_${Date.now()}_${Math.random()}`,
+                            title: item.title || 'Oferta detectada',
+                            company: item.company || '—',
+                            salary: item.salary || 'A consultar',
+                            location: item.location || '',
+                            type: item.type || 'No especificado',
+                            description: item.description || '',
+                            rawText: item.description || '',
+                            timestamp: item.timestamp || Date.now(),
+                            source: 'whatsapp', sent: false,
+                            url: item.url
+                        }));
+                        if (items.length > 0) {
+                            setJobs(prev => {
+                                const existingIds = new Set(prev.map(j => j.id));
+                                return [...items.filter(j => !existingIds.has(j.id)), ...prev];
+                            });
+                            notify(`✅ ${items.length} ofertas encontradas`, 'success');
+                        } else {
+                            notify('Sin resultados — prueba otro término', 'info');
+                        }
+                    }
+                    if (data.type === 'scrape_status' && data.target === 'jobs') {
+                        if (data.status === 'error') { setIsScraping(false); notify(`❌ ${data.message}`, 'error'); }
+                    }
+                    if (data.type === 'bot_scrape_results' && data.target === 'jobs') {
+                        const items: JobOffer[] = (data.items || []).map((item: any) => ({
+                            id: item.id || `bot_job_${Date.now()}_${Math.random()}`,
+                            title: item.title || 'Oferta', company: item.company || '—',
+                            salary: item.salary || 'A consultar', location: item.location || data.city || '',
+                            type: 'No especificado', description: '', rawText: '',
+                            timestamp: Date.now(), source: 'whatsapp', sent: false, url: item.url
+                        }));
+                        if (items.length > 0) {
+                            setJobs(prev => {
+                                const existingIds = new Set(prev.map(j => j.id));
+                                return [...items.filter(j => !existingIds.has(j.id)), ...prev];
+                            });
+                            notify(`🤖 Bot encontró ${items.length} ofertas de ${data.query}`, 'success');
+                        }
+                    }
                 } catch { }
             };
             ws.onclose = () => { setWsConnected(false); wsRef.current = null; reconnectRef.current = setTimeout(connectWS, 4000); };
@@ -204,28 +249,38 @@ const JobsView: React.FC = () => {
         }
     };
 
-    // ======== APIFY SCRAPING ========
+    // ======== SCRAPING (WS + REST fallback) ========
     const scrapeJobsFromApify = async () => {
+        if (!scrapeConfig.query.trim()) return;
         setIsScraping(true);
+        // Try WebSocket first (server-side scraping, no CORS)
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'scrape_jobs',
+                query: scrapeConfig.query,
+                city: scrapeConfig.city,
+                maxItems: scrapeConfig.maxItems
+            }));
+            setTimeout(() => setIsScraping(p => { if (p) notify('⏱️ Timeout — intentando REST...', 'info'); return p; }), 20000);
+            return;
+        }
+        // REST fallback
         try {
-            const res = await fetch(`${WA_SERVER}/scrape/jobs`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(scrapeConfig)
-            });
+            const params = new URLSearchParams({ query: scrapeConfig.query, city: scrapeConfig.city, limit: String(scrapeConfig.maxItems) });
+            const res = await fetch(`${WA_SERVER}/scrape/jobs?${params}`);
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Error de scraping');
-            if (data.jobs && data.jobs.length > 0) {
+            if (!res.ok) throw new Error(data.error || 'Error');
+            if (data.jobs?.length > 0) {
                 setJobs(prev => {
                     const newJobs = data.jobs.filter((j: JobOffer) => !prev.some(e => e.id === j.id));
                     return [...newJobs, ...prev];
                 });
-                notify(`✅ ${data.count} ofertas encontradas via web scraping`, 'success');
+                notify(`✅ ${data.jobs.length} ofertas encontradas`, 'success');
             } else {
-                notify('No se encontraron ofertas con esos filtros', 'info');
+                notify('Sin resultados — intenta otro término o ciudad', 'info');
             }
         } catch (err: any) {
-            notify(`Error scraping: ${err.message}`, 'error');
+            notify(`Error: ${err.message}`, 'error');
         } finally {
             setIsScraping(false);
         }
