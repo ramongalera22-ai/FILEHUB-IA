@@ -1,162 +1,187 @@
 /**
- * Itinerario Nueva York - Carlos - Abril 2026
- * Generado con todos los sitios del mapa + presentación PPTX
- * Ritmo tranquilo, presupuesto 230€ (solo comida + actividades)
+ * Itinerario Nueva York — Carlos — Abril 2026
+ * ESTRUCTURA EXACTA del usuario + costes recalculados
+ *
+ * REGLAS DE COSTE:
+ * - Desayuno días 1-6: INCLUIDO en LIC Plaza → 0€
+ * - Día 7: Pod Brooklyn NO incluye desayuno → ~14€ brunch
+ * - Cenas: SUPERMERCADO (~6-8€) excepto aeropuerto (~10€)
+ * - 🤑 = ya pagado (no resta del presupuesto libre)
+ * - Presupuesto libre: 230€
  */
 
 export const NY_ITINERARY_PRESET = {
   destination: "Nueva York, EEUU",
-  summary: "6 noches en la Gran Manzana con base en LIC Plaza (Queens) y última noche en Williamsburg. Ritmo tranquilo priorizando gratuitos, con el musical Chicago como plato fuerte. Incluye los mejores barrios de Manhattan, Brooklyn y Queens sin agobios.",
+  summary: "7 días en la Gran Manzana con base en LIC Plaza Queens (desayuno incluido) y última noche en Pod Brooklyn. Vuelo BCN→JFK el miércoles 18 abril, vuelta JFK→BCN martes 24 noche. Ritmo tranquilo: Summit, MOMA, Broadway Chicago, High Line, Brooklyn, Williamsburg. Cenas de supermercado para maximizar experiencias pagadas.",
   totalDays: 7,
-  estimatedTotal: 228,
+  estimatedTotal: 221,
   currency: "EUR",
-  bestTimeToVisit: "Primavera (marzo-mayo) — clima agradable, sin el calor húmedo del verano",
-  language: "Inglés",
-  currency_info: "Moneda USD. Tarjeta de crédito aceptada en casi todo. Ten 20-30$ en efectivo para propinas y mercados. Metro: tarjeta OMNY (contactless) funciona directamente con tu tarjeta europea.",
+  bestTimeToVisit: "Abril — primavera perfecta, 12-18°C de día",
+  language: "Inglés (algo de español en Queens y Brooklyn)",
+  currency_info: "USD. Toca directamente con tu tarjeta española o Apple Pay en el metro (OMNY, ~2.90$/viaje). Sin MetroCard. Ten 20-30$ efectivo para propinas y mercados. 1$ ≈ 0.92€.",
   days: [
     {
       day: 1,
       date: "2026-04-18",
-      title: "Llegada — Bienvenido a Nueva York",
-      theme: "Aterrizaje y check-in",
+      title: "Llegada — BCN 17:35 → NY 22:00 · LIC Hotel",
+      theme: "Vuelo LEVEL · Llegada JFK · Check-in",
       activities: [
-        { time: "22:00", title: "Aterrizaje JFK Terminal 1", type: "transport", description: "Vuelo LEVEL desde BCN. Pasa aduanas e inmigración — ten documentación a mano.", duration: "1h trámites", cost: 0, tip: "La cola de inmigración puede ser larga (30-60 min). Mantén la calma.", mustSee: false },
-        { time: "23:00", title: "Metro AirTrain + E/J al Hotel LIC", type: "transport", description: "AirTrain hasta Jamaica Station (~$8.50), luego metro E o J hasta Queens Plaza. El LIC Plaza está a 2 min andando.", duration: "45 min", cost: 10, tip: "Carga la tarjeta OMNY en el aeropuerto — funciona con contactless de tu tarjeta española.", mustSee: false },
-        { time: "00:00", title: "Check-in LIC Plaza Hotel", type: "hotel", description: "Tu base los próximos 5 días. Queens — tranquilo, bien conectado, desayuno incluido.", duration: "", cost: 0, tip: "Pide habitación con vista al skyline si es posible — es impresionante.", mustSee: false },
-        { time: "00:15", title: "Primera ojeada a Gantry Plaza", type: "free", description: "Si hay energía, baja 3 min al parque frente al hotel. Las vistas del skyline de noche son espectaculares. Totalmente gratis.", duration: "20 min", cost: 0, tip: "El parque está a 3 minutos del hotel caminando. Ideal para primera foto de NY.", mustSee: true }
+        { time: "17:35", title: "✈️ Salida BCN — Vuelo LEVEL", type: "transport", description: "T2 Barcelona. Vuelo directo 10h a JFK.", duration: "10h", cost: 0, tip: "Ya pagado. Lleva cargador y auriculares.", mustSee: false },
+        { time: "22:00", title: "🛬 Aterrizaje JFK — Terminal 1", type: "transport", description: "Inmigración, maleta, aduanas. Ten ESTA activo en el móvil y dirección del hotel: LIC Plaza, 29-17 40th Rd, Queens.", duration: "1h", cost: 0, tip: "Cola inmigración 30-60 min. Normal. No desesperes.", mustSee: false },
+        { time: "23:00", title: "🚇 AirTrain + Metro → LIC Plaza", type: "transport", description: "AirTrain hasta Jamaica Station. Metro E/J hasta Queens Plaza. Hotel a 3 min andando.", duration: "50 min", cost: 8, tip: "Toca con tu tarjeta española en el lector OMNY directamente. Sin MetroCard.", mustSee: false },
+        { time: "23:55", title: "🏨 Check-in LIC Plaza Hotel", type: "hotel", description: "Base los próximos 5 días. Desayuno incluido cada mañana. Queens — tranquilo y bien conectado.", duration: "", cost: 0, tip: "Ya pagado. Pide habitación alta para vistas al skyline si hay disponible.", mustSee: false }
       ],
-      meals: { breakfast: "En el avión", lunch: "En el avión", dinner: "En el avión / algo rápido en el aeropuerto" },
-      tips: ["Guarda la energía — mañana el itinerario empieza fuerte", "El jet lag es real: intenta aguantar hasta las 11pm hora local"],
-      estimatedCost: 10
+      meals: { breakfast: "En el avión", lunch: "En el avión", dinner: "Snack en JFK si hay hambre (~5€) o dormir directo" },
+      tips: ["Intenta aguantar hasta las 23h hora local para resetear el jet lag", "Carga todos los dispositivos en el avión"],
+      estimatedCost: 8
     },
     {
       day: 2,
       date: "2026-04-19",
-      title: "Midtown — El Corazón de Manhattan",
-      theme: "Grand Central · 5ª Avenida · Top of the Rock",
+      title: "Midtown — Grand Central · Summit · 5ª Av · St Patrick",
+      theme: "Rascacielos · Arquitectura · Lujo · Manhattan clásico",
       activities: [
-        { time: "08:30", title: "Desayuno en el hotel (incluido)", type: "food", description: "Aprovecha el desayuno incluido en el LIC Plaza.", duration: "30 min", cost: 0, tip: "", mustSee: false },
-        { time: "09:30", title: "Grand Central Terminal", type: "sight", description: "Una de las estaciones más bellas del mundo. Sube a la galería Whispering Gallery. No te pierdas el techo constelado. La sala del mercado de comida en el sótano es perfecta para curiosear.", duration: "1h", cost: 0, tip: "Busca el punto donde susurras en la esquina y se oye al otro lado. Gratis y mágico.", mustSee: true },
-        { time: "11:00", title: "5ª Avenida + St. Patrick's Cathedral", type: "sight", description: "La catedral gótica más impresionante de Manhattan. Entrada gratuita. Después, paseo por la 5ª Avenida — Rockefeller Center, tiendas de lujo, el ambiente más emblemático de NY.", duration: "1.5h", cost: 0, tip: "Entra a la catedral — el contraste con los rascacielos es único. Respeta el silencio.", mustSee: true },
-        { time: "13:00", title: "Almuerzo Halal Cart — 6th Ave", type: "food", description: "El Halal Cart más famoso de NY, frente al Rockefeller Center. Arroz + pollo + salsa blanca y roja. La mejor relación calidad-precio de Midtown.", duration: "45 min", cost: 6, tip: "Pide 'chicken over rice, white sauce AND hot sauce'. Cola de 10 min habitual.", mustSee: true },
-        { time: "14:30", title: "Bergdorf Goodman (entrar a curiosear)", type: "shopping", description: "Los famosos grandes almacenes de lujo de Carrie Bradshaw. No hace falta comprar — el escaparate y los escaparates interiores son una experiencia visual.", duration: "30 min", cost: 0, tip: "Piso 7 tiene la mejor vista de Central Park totalmente gratis.", mustSee: false },
-        { time: "15:30", title: "Top of the Rock — Rockefeller Center", type: "sight", description: "Las mejores vistas de Manhattan, con Central Park al norte y el skyline completo al sur. Abierto hasta las 12 de la noche. Mejor que el Empire State (vistas incluyen el Empire State).", duration: "1.5h", cost: 38, tip: "Ve a última hora de la tarde para ver el atardecer sobre Manhattan. Es espectacular.", mustSee: true },
-        { time: "20:00", title: "Cena Chelsea Market", type: "food", description: "Mercado gastronómico en una antigua fábrica de galletas. Ambiente increíble. Prueba Los Tacos No. 1, Takumi Taco o Mokbar (ramen).", duration: "1.5h", cost: 12, tip: "El mercado está justo en el barrio de Meatpacking — perfecto para ver el ambiente nocturno.", mustSee: true }
+        { time: "08:00", title: "☕ Desayuno hotel (incluido)", type: "food", description: "Buffet LIC Plaza. Incluido. Come bien.", duration: "30 min", cost: 0, tip: "Incluido — 0€.", mustSee: false },
+        { time: "09:00", title: "🏛️ Grand Central Terminal", type: "sight", description: "Una de las estaciones más espectaculares del mundo. Techo constelado, Whispering Gallery y mercado en el sótano. Completamente gratis.", duration: "1h", cost: 0, tip: "Busca la Whispering Gallery: habla en la pared de la bóveda y se oye al otro lado. Gratis y mágico.", mustSee: true },
+        { time: "10:30", title: "🌆 Summit One Vanderbilt 🤑", type: "sight", description: "El mirador más moderno de NY (2021). Habitaciones de espejos infinitos, plataforma de cristal exterior, vistas 360° de Manhattan. Junto a Grand Central — 45 Vanderbilt Ave.", duration: "1.5h", cost: 35, tip: "🤑 Confirmar si ya está pagado. Si no: reserva online. Mejor con sol de mañana para fotos.", mustSee: true },
+        { time: "12:00", title: "🌮 Comida — Halal Cart o área de Grand Central", type: "food", description: "Halal Cart en 6th Ave con 53rd St: arroz + pollo + salsa blanca/picante por ~8$. El más famoso de NY.", duration: "45 min", cost: 9, tip: "Pide 'chicken over rice, white sauce AND hot sauce'. Rápido, barato, delicioso.", mustSee: false },
+        { time: "14:00", title: "⛪ 5ª Avenida + St Patrick's Cathedral", type: "sight", description: "La catedral gótica más impresionante de Manhattan. Gratis. Luego paseo por la 5ª Av — Rockefeller Center, Saks Fifth Avenue, el NY más icónico.", duration: "2h", cost: 0, tip: "Entra a la catedral — el interior en contraste con los rascacielos que se ven por las ventanas es único.", mustSee: true },
+        { time: "20:00", title: "🛒 Cena supermercado", type: "food", description: "Whole Foods en Columbus Circle (10 Columbus Cir) o Trader Joe's en 72nd St. Sección preparados: sushi, ensaladas, pasta.", duration: "45 min", cost: 7, tip: "Whole Foods tiene zona donde comer dentro con wifi. Calidad alta, precio razonable.", mustSee: false }
       ],
-      meals: { breakfast: "Hotel (incluido)", lunch: "Halal Cart 6th Ave (~6€)", dinner: "Chelsea Market (~12€)" },
-      tips: ["Metro desde LIC Plaza: línea 7 hasta Grand Central en 15 min directo", "El Top of the Rock conviene reservar online con antelación (especialmente en temporada alta)"],
-      estimatedCost: 56
+      meals: { breakfast: "✅ Hotel incluido (0€)", lunch: "Halal Cart 6th Ave (~9€)", dinner: "🛒 Whole Foods / Trader Joe's (~7€)" },
+      tips: ["Metro desde LIC: línea 7 hasta Times Square, o E hasta 5th Av-53St", "El Summit: mejor con luz de mañana para las fotos"],
+      estimatedCost: 51
     },
     {
       day: 3,
       date: "2026-04-20",
-      title: "Lower Manhattan — Historia y Alma de NY",
-      theme: "Wall St · 11S · Chinatown · Roosevelt Island",
+      title: "Lower Manhattan — Wall St · 11S · Cortlandt · Chinatown · Roosevelt",
+      theme: "Historia · Calatrava · Barrios étnicos · East Village",
       activities: [
-        { time: "08:30", title: "Desayuno hotel (incluido)", type: "food", description: "", duration: "30 min", cost: 0, tip: "", mustSee: false },
-        { time: "09:30", title: "Toro de Wall Street + Bowling Green", type: "sight", description: "El famoso toro de bronce símbolo del capitalismo americano. Por la mañana temprano casi no hay cola para la foto. Bowling Green, el primer parque público de NY.", duration: "30 min", cost: 0, tip: "A las 9:30 hay muy poca gente. A las 11 es una locura.", mustSee: true },
-        { time: "10:00", title: "Memorial 9/11 + Museum Plaza", type: "sight", description: "Las dos piscinas en el lugar exacto de las Torres Gemelas. Emocionante y muy bien cuidado. El museo exterior es gratuito; si entras al museo son ~33$, pero la plaza es muy impactante de por sí.", duration: "1h", cost: 0, tip: "El museo es opcional (caro). La plaza y los nombres en las piscinas son gratuitos y muy emotivos.", mustSee: true },
-        { time: "11:00", title: "Oculus + Cortlandt St Station", type: "sight", description: "La estación de metro más fotogénica del mundo. Arquitectura de Santiago Calatrava — parece un dinosaurio de mármol blanco. Completamente gratis. Instagram obligatorio.", duration: "30 min", cost: 0, tip: "Sube a la galería interior. La foto desde dentro mirando al cielo es única.", mustSee: true },
-        { time: "11:45", title: "Trinity Church + Battery Park", type: "sight", description: "Iglesia gótica con los muertos más famosos de la historia americana (Alexander Hamilton). Battery Park: vistas a la Estatua de la Libertad sin pagar el ferry.", duration: "45 min", cost: 0, tip: "Desde Battery Park puedes ver la Estatua de la Libertad. El ferry vale ~24€ — tú decides si merece la pena.", mustSee: false },
-        { time: "12:30", title: "Almuerzo Chinatown — Mott St", type: "food", description: "El Chinatown de Manhattan es el más auténtico de EEUU. Busca Joe's Shanghai (sopa de dumpling XLB, ~9€) o los puestos de la calle para dim sum baratísimo.", duration: "1h", cost: 9, tip: "Sal de las calles principales. Las mejores tiendas y comida están en las callejuelas.", mustSee: true },
-        { time: "16:00", title: "Teleférico de Roosevelt Island", type: "activity", description: "El teleférico más barato y espectacular de NY. Sale de la 2ª Avenida esquina 59th Street. Vistas aéreas del East River y el skyline. Solo cuesta el precio del metro (~2.75$).", duration: "30 min ida y vuelta", cost: 3, tip: "Funciona con la tarjeta OMNY como el metro. Baja en la isla y sube al mirador FDR.", mustSee: true },
-        { time: "17:00", title: "East Village a pie", type: "free", description: "Uno de los barrios más cool de Manhattan. St. Marks Place, Tompkins Square Park, tiendas vintage, murales callejeros. El NY bohemio y auténtico.", duration: "1.5h", cost: 0, tip: "Busca la tienda de vinillos 'Sounds' y el mural de David Bowie en Lafayette St.", mustSee: false },
-        { time: "20:00", title: "Cena Ramen East Village", type: "food", description: "Ippudo NY (421 Lafayette St) o Momofuku Noodle Bar. El mejor ramen fuera de Japón. Cola habitual de 20-30 min — llega antes de las 7pm.", duration: "1.5h", cost: 12, tip: "Ippudo tiene listas de espera online. La barra del chef en Momofuku es experiencia única.", mustSee: true }
+        { time: "08:00", title: "☕ Desayuno hotel (incluido)", type: "food", description: "Buffet LIC Plaza.", duration: "30 min", cost: 0, tip: "Incluido — 0€.", mustSee: false },
+        { time: "09:00", title: "🐂 Toro Wall St + Memorial 11S", type: "sight", description: "El toro de Bowling Green (foto rápida, ve pronto). Luego el Memorial 9/11: las dos piscinas en el lugar exacto de las Torres. Emocionante y cuidado. Exterior completamente gratis.", duration: "1.5h", cost: 0, tip: "A las 9h el toro tiene menos gente. El memorial exterior es gratis — el museo cuesta ~33$, es opcional.", mustSee: true },
+        { time: "11:00", title: "⚡ Cortlandt St Station — Oculus Calatrava", type: "sight", description: "La estación de metro más fotogénica del mundo. Arquitectura de Calatrava — un esqueleto blanco de dinosaurio. Gratis. La foto: en el centro mirando al techo.", duration: "45 min", cost: 0, tip: "Entra por el World Trade Center. La foto mirando al techo abierto es la más compartida de NY.", mustSee: true },
+        { time: "12:00", title: "⛪ Trinity Church + Battery Park", type: "sight", description: "Trinity Church 1846 (aquí está Alexander Hamilton). Battery Park: vistas a la Estatua de la Libertad sin pagar el ferry.", duration: "45 min", cost: 0, tip: "Desde Battery Park ves la Estatua perfectamente. El ferry (~24$) no es necesario.", mustSee: false },
+        { time: "12:30", title: "🍜 Comida Chinatown", type: "food", description: "Joe's Shanghai en 9 Pell St: soup dumplings (XLB) legendarios. O callejero en Mott St por 5-7$. El Chinatown más auténtico de EEUU.", duration: "1h", cost: 10, tip: "Joe's Shanghai: pide 'soup dumplings' y sorbe con cuidado — están hirviendo dentro. Reserva o llega pronto.", mustSee: true },
+        { time: "14:30", title: "🚡 Teleférico de Roosevelt Island", type: "activity", description: "El teleférico más espectacular y barato de NY. Sale de 2nd Ave con 59th St. Vistas aéreas del East River y Midtown. Solo cuesta un metro (~2.90$).", duration: "1h", cost: 3, tip: "OMNY con tu tarjeta. Baja en la isla, camina al extremo sur, vuelve en teleférico.", mustSee: true },
+        { time: "17:00", title: "🎨 East Village a pie", type: "free", description: "NY bohemio y auténtico. St. Marks Place, Tompkins Square Park, murales callejeros. Sin turistas de postal.", duration: "2h", cost: 0, tip: "Mural de David Bowie en Lafayette St. Tienda de vinillos 'Sounds' en St. Marks Place.", mustSee: false },
+        { time: "19:30", title: "🛒 Cena supermercado East Village", type: "food", description: "Trader Joe's en 142 E 14th St. Come en Tompkins Square Park — ambiente local puro.", duration: "45 min", cost: 6, tip: "Al parque de noche: skaters, músicos, perros. Más real que cualquier restaurante turístico.", mustSee: false }
       ],
-      meals: { breakfast: "Hotel (incluido)", lunch: "Chinatown Mott St (~9€)", dinner: "Ramen East Village (~12€)" },
-      tips: ["Todo el recorrido del día se puede hacer andando o con el metro", "El Oculus es más impresionante con luz de día — ve antes del mediodía"],
-      estimatedCost: 24
+      meals: { breakfast: "✅ Hotel incluido (0€)", lunch: "Chinatown Joe's Shanghai (~10€)", dinner: "🛒 Trader Joe's East Village (~6€)" },
+      tips: ["Todo el recorrido caminable desde Wall St hasta East Village (~4km)", "Oculus tiene mejor luz antes de las 14h"],
+      estimatedCost: 19
     },
     {
       day: 4,
       date: "2026-04-21",
-      title: "Tour de Contrastes + Brooklyn",
-      theme: "Bronx · Harlem · Queens · Brooklyn · DUMBO",
+      title: "Tour de Contrastes · Katz's · Puente Brooklyn · DUMBO",
+      theme: "NY real · Barrios auténticos · Brooklyn",
       activities: [
-        { time: "08:30", title: "Desayuno hotel (incluido)", type: "food", description: "", duration: "30 min", cost: 0, tip: "", mustSee: false },
-        { time: "09:00", title: "Tour de Contrastes VIP — 5 horas", type: "activity", description: "El tour más interesante de NY. En autobús pequeño recorriendo los barrios reales: Bronx (South Bronx, origen del hip-hop), East Harlem, Queens, Brooklyn. Guía local que cuenta la historia desde dentro. Termina en Chinatown.", duration: "5h", cost: 55, tip: "Este tour cambia la perspectiva de NY completamente. Nada de turismo de postal. Reserva online en NY Tours Inc o Urban Oyster.", mustSee: true },
-        { time: "14:30", title: "Almuerzo Chinatown (final del tour)", type: "food", description: "El tour termina en Chinatown. Aprovecha para comer de nuevo — o prueba algo que no probaste ayer. Los dumplings de Vanessa's Dumpling House son míticos (8 dumplings por 3$).", duration: "1h", cost: 10, tip: "Vanessa's Dumpling House en 118 Eldridge St: los mejores dumplings fritos de la ciudad.", mustSee: false },
-        { time: "16:00", title: "Puente de Brooklyn + DUMBO", type: "sight", description: "Cruzar el Puente de Brooklyn a pie es una experiencia única (40 min de un lado al otro). DUMBO (Down Under the Manhattan Bridge Overpass) es el barrio más fotogénico de Brooklyn.", duration: "2h", cost: 0, tip: "La foto clásica: Washington St mirando al puente de Manhattan. Ve a las 5pm para luz dorada.", mustSee: true },
-        { time: "19:30", title: "Cena Juliana's Pizza — DUMBO", type: "food", description: "Una de las pizzas más famosas de NYC. Juliana's Pizza debajo del puente de Brooklyn. Pizza de masa fina estilo NY, horno de carbón. Reserva o espera en cola.", duration: "1.5h", cost: 12, tip: "Si hay mucha cola en Juliana's, Grimaldi's al lado es igual de bueno. Precio similar.", mustSee: true },
-        { time: "21:00", title: "Vuelta al hotel — skyline desde el East River", type: "free", description: "Pasea por el Brooklyn waterfront de noche antes de volver. Las vistas del skyline iluminado desde Brooklyn son las mejores de NYC.", duration: "30 min", cost: 0, tip: "Metro: línea A/C desde Jay St hasta Queens y enlace a línea 7.", mustSee: false }
+        { time: "08:00", title: "☕ Desayuno hotel (incluido)", type: "food", description: "Buffet LIC Plaza.", duration: "30 min", cost: 0, tip: "Incluido — 0€.", mustSee: false },
+        { time: "09:45", title: "🚌 Tour de Contrastes VIP 🤑", type: "activity", description: "Punto de salida: 325 W 49th St, Midtown. 5 horas en minibús: South Bronx (origen hip-hop), East Harlem, Queens, Brooklyn. Guía local que conoce de dentro. Termina en Little Italy/Chinatown.", duration: "5h", cost: 50, tip: "🤑 Confirmar si ya pagado. No llegues tarde — puntual. Uno de los mejores del viaje.", mustSee: true },
+        { time: "14:30", title: "🥩 Comida — Katz's Delicatessen", type: "food", description: "El deli más famoso de NY desde 1888 en Lower East Side. La escena de Harry y Sally se rodó aquí. Pastrami on rye: brutal. Caro pero experiencia única.", duration: "1h", cost: 22, tip: "Guarda el ticket o no puedes salir. Pide el pastrami sandwich — el rey de Katz's. Caro pero irrepetible.", mustSee: true },
+        { time: "16:00", title: "🌉 Puente de Brooklyn + DUMBO", type: "sight", description: "Cruzar el puente a pie desde Manhattan (40 min). DUMBO: el barrio más fotogénico. Washington Street con el puente de Manhattan al fondo: la foto más reproducida de Brooklyn.", duration: "2h", cost: 0, tip: "A las 17h para luz dorada. Peatones a la izquierda. En DUMBO baja al waterfront para las vistas del skyline.", mustSee: true },
+        { time: "19:30", title: "🛒 Cena supermercado Brooklyn", type: "food", description: "Trader Joe's en 130 Court St o Brooklyn Fare. Come en el waterfront del East River con el skyline iluminado.", duration: "45 min", cost: 7, tip: "El paseo marítimo de Brooklyn de noche con el skyline iluminado: de lo mejor del viaje.", mustSee: false }
       ],
-      meals: { breakfast: "Hotel (incluido)", lunch: "Chinatown dumplings (~10€)", dinner: "Juliana's Pizza DUMBO (~12€)" },
-      tips: ["El tour es el punto fuerte del día — no llegues tarde a las 9h", "El puente de Brooklyn tiene carril para bici y peatones — ve por el de peatones (lado izquierdo)"],
-      estimatedCost: 87
+      meals: { breakfast: "✅ Hotel incluido (0€)", lunch: "Katz's Delicatessen (~22€) — experiencia NY", dinner: "🛒 Trader Joe's Brooklyn (~7€)" },
+      tips: ["Tour sale de 325 W 49th St — metro A/C/E hasta 50th St", "El puente tiene mucho viento — lleva una capa"],
+      estimatedCost: 79
     },
     {
       day: 5,
       date: "2026-04-22",
-      title: "Central Park · MOMA · ¡CHICAGO en Broadway! 🎭",
-      theme: "Arte · Naturaleza · El Musical",
+      title: "Central Park · MOMA · West Village · Chicago 🎭 · Times Square",
+      theme: "El día grande — Naturaleza · Arte · Broadway",
       activities: [
-        { time: "08:30", title: "Desayuno hotel (incluido)", type: "food", description: "", duration: "30 min", cost: 0, tip: "", mustSee: false },
-        { time: "09:00", title: "Central Park a pie", type: "free", description: "843 acres de pulmón verde en el corazón de Manhattan. Entra por Columbus Circle (59th St). Strawberry Fields (homenaje a John Lennon), Bethesda Fountain, el lago con barcas, el Bandshell.", duration: "2.5h", cost: 0, tip: "Alquila una barca en The Lake (~$15/h) si hay ganas. Los jardines japoneses son poco conocidos y preciosos.", mustSee: true },
-        { time: "11:30", title: "MOMA — Museum of Modern Art", type: "sight", description: "Van Gogh, Dalí, Warhol, Picasso, Mondrian, Frida Kahlo... El mejor museo de arte moderno del mundo. La Noche Estrellada de Van Gogh es la estrella. Reserva con antelación.", duration: "2.5h", cost: 27, tip: "Con la reserva del MOMA, Shake Shack en la planta 1 tiene 10% de descuento. No te pierdas la azotea en verano.", mustSee: true },
-        { time: "14:30", title: "Shake Shack (con descuento MOMA 10%)", type: "food", description: "La hamburguesería más famosa de NY, nacida en Madison Square Park. Con el descuento del MOMA sale perfecto. ShackBurger + crinkle fries + milkshake de vainilla.", duration: "1h", cost: 12, tip: "Pide el ShackBurger doble — vale la pena el extra.", mustSee: false },
-        { time: "16:00", title: "Paseo West Village + Sex and the City", type: "free", description: "El barrio más bonito de Manhattan. 66 Perry Street (el edificio real donde vive Carrie Bradshaw), Magnolia Bakery (401 Bleecker St, cupcakes de la serie), tiendas boutique, cafés tranquilos.", duration: "1.5h", cost: 4, tip: "El cupcake de Magnolia (~4€) merece la cola. También en Columbus Ave si hay mucha gente.", mustSee: false },
-        { time: "18:00", title: "Cena rápida antes del musical", type: "food", description: "Bar o restaurante cerca del Ambassador Theatre (49th St y Broadway). Marseille (630 9th Ave) es perfecto: cocina francesa casual, precios razonables, a 5 min del teatro.", duration: "1h", cost: 15, tip: "Come antes de las 18:30 para llegar cómodo al teatro.", mustSee: false },
-        { time: "19:00", title: "🎭 MUSICAL CHICAGO — Ambassador Theatre", type: "activity", description: "El musical más premiado de Broadway. Ya pagado. Ambassador Theatre: 219 West 49th Street. Llega 20 min antes para buscar tu asiento y ver el ambiente.", duration: "2.5h", cost: 0, tip: "YA PAGADO. Prohibido perdérselo. El número de apertura 'All That Jazz' es electrizante.", mustSee: true }
+        { time: "08:00", title: "☕ Desayuno hotel (incluido)", type: "food", description: "Buffet LIC Plaza. Come bien — el día es largo y espectacular.", duration: "30 min", cost: 0, tip: "Incluido — 0€.", mustSee: false },
+        { time: "09:00", title: "🌳 Central Park a pie", type: "free", description: "Entra por Columbus Circle (59th St). Strawberry Fields (John Lennon), The Ramble, Bethesda Fountain, The Lake. 843 acres de verde en el centro de Manhattan.", duration: "2.5h", cost: 0, tip: "Prioriza: Columbus Circle → Strawberry Fields (10 min) → Bethesda Fountain → The Lake. Sin prisa.", mustSee: true },
+        { time: "11:30", title: "🎨 MOMA — Museum of Modern Art 🤑", type: "sight", description: "El mejor museo de arte moderno del mundo. La Noche Estrellada de Van Gogh, Picasso, Dalí, Warhol, Frida Kahlo. Todo en 5 pisos. 11 West 53rd St.", duration: "2.5h", cost: 27, tip: "🤑 Confirmar si ya pagado. Reserva online. Empieza en el piso 5 (Van Gogh) y baja. Shake Shack interior con 10% descuento.", mustSee: true },
+        { time: "14:30", title: "🍔 Comida — Shake Shack MOMA", type: "food", description: "Shake Shack en el MOMA piso 1: ShackBurger + crinkle fries con 10% descuento mostrando la entrada.", duration: "1h", cost: 12, tip: "Muestra la entrada del MOMA en la caja del Shake Shack. El ShackBurger doble con fries sale ~12$ con descuento.", mustSee: false },
+        { time: "16:00", title: "🏘️ Paseo West Village + Sex and the City", type: "free", description: "El barrio más bonito de Manhattan. 66 Perry Street (fachada real del apartamento de Carrie). Magnolia Bakery cupcakes. Calles adoquinadas, casas de ladrillo rojo.", duration: "1.5h", cost: 4, tip: "Cupcake de Magnolia (~4€) merece la cola. El edificio de Perry St tiene cadena — solo foto desde fuera.", mustSee: true },
+        { time: "19:00", title: "🎭 Musical CHICAGO — Ambassador Theatre 🤑", type: "activity", description: "219 W 49th St. Ya pagado. Llega 20 min antes. El musical más premiado de Broadway.", duration: "2.5h", cost: 0, tip: "YA PAGADO. 'All That Jazz' en el primer número es electrizante. Cóctel en el bar del teatro en el intermedio.", mustSee: true },
+        { time: "21:00", title: "🌃 Times Square de noche", type: "free", description: "El Ambassador está a 2 min de Times Square. De noche las luces de neón son hipnóticas. 20-30 min.", duration: "30 min", cost: 0, tip: "Solo mirar. No comer ni comprar — precios de turista extremos.", mustSee: true }
       ],
-      meals: { breakfast: "Hotel (incluido)", lunch: "Shake Shack MOMA (~12€)", dinner: "Marseille o similar (~15€)" },
-      tips: ["El día más caro pero más completo", "El MOMA conviene reservar con antelación online — evitas cola"],
-      estimatedCost: 58
+      meals: { breakfast: "✅ Hotel incluido (0€)", lunch: "Shake Shack MOMA con -10% (~12€)", dinner: "Pre-musical: snack rápido Hell's Kitchen (~8€) + cupcake Magnolia (~4€)" },
+      tips: ["Del MOMA al Ambassador Theatre: 10 min andando por 53rd hasta Broadway y bajar a 49th", "El día más intenso — empieza bien descansado"],
+      estimatedCost: 55
     },
     {
       day: 6,
       date: "2026-04-23",
-      title: "High Line · Museos Ocultos · Brooklyn (última noche)",
-      theme: "NY alternativo y desconocido · Check-in Pod Brooklyn",
+      title: "High Line · Hudson Yards · The Little Island · Check-in Williamsburg",
+      theme: "NY verde alternativo · Check-out LIC · Pod Brooklyn",
       activities: [
-        { time: "08:30", title: "Desayuno hotel LIC (último día — incluido)", type: "food", description: "Último desayuno en el LIC Plaza. Check-out y guarda las maletas.", duration: "45 min", cost: 0, tip: "Deja las maletas en recepción — check-out a las 12h, check-in Pod Brooklyn a las 15h.", mustSee: false },
-        { time: "09:30", title: "The High Line", type: "free", description: "Parque lineal elevado sobre una antigua vía de tren en el West Side. Jardines, arte callejero, vistas espectaculares al Hudson. Entra por 14th St. Hudson Yards al final.", duration: "1.5h", cost: 0, tip: "El tramo entre 14th y 20th St es el más bonito. Los domingos hay mercado de artesanía.", mustSee: true },
-        { time: "11:00", title: "The Little Island", type: "free", description: "Isla artificial inaugurada en 2021 flotando sobre el Hudson River. Diseño futurista con 100 árboles y plantas. Conciertos gratuitos en temporada. Perspectivas únicas del skyline.", duration: "45 min", cost: 0, tip: "Justo al final de la High Line en el Pier 55. El anfiteatro tiene eventos gratuitos.", mustSee: true },
-        { time: "12:00", title: "NY Transit Museum — Brooklyn", type: "sight", description: "Museo en una estación de metro abandonada de 1936. Vagones desde 1908 que puedes entrar. El secreto mejor guardado de NYC — casi sin turistas, completamente auténtico.", duration: "1.5h", cost: 10, tip: "Está en Boerum Place & Schermerhorn St, Brooklyn. El metro G o 2/3 llega directo.", mustSee: true },
-        { time: "14:00", title: "Almuerzo DUMBO — Time Out Market", type: "food", description: "El Time Out Market Brooklyn en DUMBO reúne los mejores restaurantes de la ciudad. Vista al puente desde las ventanas. Pasta, pizza, tacos, sushi — elige lo que quieras.", duration: "1h", cost: 12, tip: "También puedes ir directamente a Grimaldi's Pizza o probar Vinegar Hill House si quieres sentarte.", mustSee: false },
-        { time: "15:30", title: "Check-in Pod Brooklyn — Williamsburg", type: "hotel", description: "Tu última noche. Pod Brooklyn en Williamsburg — moderno, social, buen ambiente. Deja las maletas y explora el barrio.", duration: "30 min", cost: 0, tip: "El rooftop del Pod tiene vistas increíbles. Sube a tomar algo aunque no consumas.", mustSee: false },
-        { time: "16:00", title: "MoMA PS1 — Gratis en 2026", type: "sight", description: "La sucursal vanguardista del MOMA en Long Island City (Queens). Arte contemporáneo radical. Completamente gratis en 2026. En verano hay conciertos WarmUp los sábados.", duration: "1.5h", cost: 0, tip: "A 10 min en metro desde Williamsburg. Arte que no encontrarás en ningún museo convencional.", mustSee: false },
-        { time: "18:00", title: "Williamsburg Street Art + Bedford Ave", type: "free", description: "El barrio más cool de Brooklyn. Murales de arte callejero por todas partes. Bedford Avenue es la calle principal: tiendas vintage, cafés, restaurantes, vida local auténtica.", duration: "2h", cost: 0, tip: "Busca el mural de Jean-Michel Basquiat en Bedford Ave. El barrio es muy diferente de Manhattan.", mustSee: true },
-        { time: "20:00", title: "Cena Williamsburg — Tu elección", type: "food", description: "Zona perfecta para última cena. Lilia (pasta italiana premium, ~30€), Marlow & Sons (casual, local, ~20€), o cualquier restaurante de Bedford Ave.", duration: "1.5h", cost: 20, tip: "Lilia es el mejor restaurante de Williamsburg pero conviene reservar. Alternativa: Peter Luger Steak House si te permite el presupuesto.", mustSee: false }
+        { time: "08:00", title: "☕ Último desayuno LIC Plaza (incluido)", type: "food", description: "Último desayuno buffet del LIC Plaza. Check-out y maletas en consigna.", duration: "45 min", cost: 0, tip: "Incluido — 0€. Check-out a las 11h. Deja maletas en consigna del hotel gratis.", mustSee: false },
+        { time: "09:00", title: "🌿 High Line + Hudson Yards", type: "free", description: "Parque elevado sobre antigua vía de tren, desde Gansevoort St (14th) hasta 34th St. Arte, jardines, vistas al Hudson. Hudson Yards y The Vessel al final.", duration: "2h", cost: 0, tip: "Entra por la 14th St — el tramo sur es el más bonito. The Vessel en Hudson Yards: reserva gratis online para subir.", mustSee: true },
+        { time: "12:00", title: "🏝️ The Little Island", type: "free", description: "Isla artificial futurista inaugurada 2021, flotando sobre el Hudson (Pier 55). 100 árboles, jardines, anfiteatro. Al final de la High Line.", duration: "1h", cost: 0, tip: "Entrada gratuita. Posible reserva en temporada alta. Conciertos gratuitos en el anfiteatro.", mustSee: true },
+        { time: "14:30", title: "🍕 Comida — Joe's Pizza Chelsea", type: "food", description: "Joe's Pizza en 7 Carmine St: la pizza por porciones más famosa de NY. Dos porciones + refresco por ~7$. Cerca del West Village.", duration: "45 min", cost: 8, tip: "Pide 'plain slice' — masa fina NY style. Sin cola a las 14:30h. El mejor precio-calidad del viaje.", mustSee: true },
+        { time: "15:30", title: "🏨 Check-in Pod Brooklyn — Williamsburg", type: "hotel", description: "247 Metropolitan Ave, Williamsburg. Recoge maletas del LIC Plaza y tráelas en taxi/Lyft (~15$). El rooftop tiene vistas a Manhattan.", duration: "30 min", cost: 0, tip: "Ya pagado. El rooftop del Pod es gratis para huéspedes — sube a tomar algo.", mustSee: false },
+        { time: "17:00", title: "🎨 Williamsburg Street Art + Bedford Ave", type: "free", description: "El barrio más cool de Brooklyn. Murales en Wythe Ave y Bedford Ave. Tiendas vintage, cafés de especialidad, librerías. El paseo marítimo con vistas a Manhattan al atardecer.", duration: "2h", cost: 0, tip: "Paseo marítimo (East River State Park) al atardecer con el skyline iluminado: de los mejores momentos del viaje.", mustSee: true },
+        { time: "19:30", title: "🛒 Cena supermercado Williamsburg", type: "food", description: "Whole Foods en 238 Bedford Ave. Come en el paseo marítimo del East River con vistas al skyline de Manhattan iluminado.", duration: "45 min", cost: 7, tip: "Esta combinación — cena de super en el waterfront con ese skyline — es imbatible.", mustSee: false }
       ],
-      meals: { breakfast: "Hotel LIC (incluido)", lunch: "DUMBO Time Out Market (~12€)", dinner: "Williamsburg (~20€)" },
-      tips: ["El Transit Museum es el secreto mejor guardado de NYC", "Williamsburg por la noche tiene el mejor ambiente joven de todo Brooklyn"],
-      estimatedCost: 42
+      meals: { breakfast: "✅ Hotel LIC incluido — último día (0€)", lunch: "Joe's Pizza Chelsea (~8€)", dinner: "🛒 Whole Foods Williamsburg (~7€)" },
+      tips: ["Coge taxi/Lyft para llevar maletas de LIC al Pod (~15$, incluido en coste día)", "El rooftop del Pod: no te lo pierdas aunque no consumas"],
+      estimatedCost: 30
     },
     {
       day: 7,
       date: "2026-04-24",
-      title: "Williamsburg · Regreso — Buen viaje ✈️",
-      theme: "Último paseo · Vuelo 23:45",
+      title: "Williamsburg · Vuelta ✈️ JFK 23:45",
+      theme: "Último paseo · Vuelo de regreso",
       activities: [
-        { time: "09:00", title: "Street Art matutino Williamsburg", type: "free", description: "Williamsburg sin turistas por la mañana. Los mejores murales están en: Bedford Ave entre N7 y N10, Wythe Ave, y el paseo marítimo del East River.", duration: "1.5h", cost: 0, tip: "El paseo marítimo de Williamsburg tiene las mejores vistas de Manhattan — mejor que Brooklyn Bridge Park.", mustSee: true },
-        { time: "10:30", title: "Smorgasburg (si es domingo) / Cafe Regular", type: "food", description: "Si es domingo: Smorgasburg en Marsha P. Johnson Park — el mercado de street food más grande de NYC, 100 puestos de cocina del mundo. Si es otro día: Cafe Regular (muy local, café de especialidad perfecto).", duration: "1h", cost: 8, tip: "Smorgasburg solo domingos de 11h-18h. El arroz con pollo del puesto Jamaican es legendario.", mustSee: true },
-        { time: "12:30", title: "Tenement Museum — Lower East Side", type: "sight", description: "Apartamentos reales de inmigrantes de 1863 conservados tal cual. Visita guiada con historias emotivas y reales de familias que llegaron sin nada. De los museos más únicos del mundo.", duration: "2h", cost: 27, tip: "Reserva OBLIGATORIA online — las visitas son grupales y se agotan. El tour 'Hard Times' es el más emotivo.", mustSee: true },
-        { time: "15:00", title: "Bagel Russ & Daughters — Lower East Side", type: "food", description: "La deli más legendaria de NYC desde 1914. El bagel definitivo: Nova lox + cream cheese + cebolla. La versión original, sin modernidades.", duration: "45 min", cost: 8, tip: "También en el Russ & Daughters Cafe (más cerca, más espacio). Un clásico absoluto de NY.", mustSee: true },
-        { time: "16:00", title: "Paseo final por el Elevated Acre", type: "free", description: "Jardín secreto elevado sobre un edificio en el Financial District (55 Water St). Un oasis urbano que la mayoría de neoyorquinos no sabe que existe. Vistas al East River.", duration: "30 min", cost: 0, tip: "Entra por la galería del 55 Water St. Sube al ascensor hasta el nivel 2. Completamente gratis.", mustSee: false },
-        { time: "17:30", title: "Maletas y hacia el aeropuerto JFK", type: "transport", description: "Recoge maletas del Pod Brooklyn. Metro hasta JFK: línea J o M hasta Jamaica, luego AirTrain. Tiempo total: 45-60 min.", duration: "1h", cost: 10, tip: "Sal como tarde a las 18:30. El control de seguridad internacional puede tardar 45 min.", mustSee: false },
-        { time: "20:00", title: "Check-in JFK — Terminal 1 LEVEL", type: "transport", description: "Llega 3h antes del vuelo (las 20:45). Factura el equipaje, pasa seguridad, explore el terminal.", duration: "3h", cost: 0, tip: "Cena en el aeropuerto — hay opciones decentes en la terminal y así llegas tranquilo.", mustSee: false },
-        { time: "23:45", title: "✈️ Vuelo JFK → BCN — LEVEL", type: "transport", description: "Vuelo de regreso. Intenta dormir — aterrizas en Barcelona a las 14:00h del 25 de abril.", duration: "8h vuelo", cost: 0, tip: "¡Nueva York ya forma parte de ti! Guarda los tickets de metro como recuerdo.", mustSee: false }
+        { time: "09:00", title: "🎨 Williamsburg Street Art — paseo matutino", type: "free", description: "Williamsburg sin turistas de mañana. East River State Park con luz de la mañana — las mejores fotos del skyline del viaje.", duration: "1.5h", cost: 0, tip: "La luz dorada de las 9-10h sobre Manhattan desde Williamsburg es espectacular. Última oportunidad.", mustSee: true },
+        { time: "11:00", title: "☕ Brunch — Café Mogador u otro", type: "food", description: "Pod Brooklyn no incluye desayuno. Café Mogador (133 Wythe Ave): brunch estilo marroquí, muy local. O bagel en cualquier deli del barrio.", duration: "1h", cost: 14, tip: "Mogador es clásico de Williamsburg desde 1983. Los huevos con pan pita y el zumo son el cierre perfecto.", mustSee: false },
+        { time: "13:00", title: "🚶 Último paseo libre", type: "free", description: "Tiempo libre: compras de última hora en Bedford Ave, café de especialidad en Devoción (69 Grand St — el mejor de Brooklyn), o simplemente sentarse en el waterfront.", duration: "2h", cost: 5, tip: "Devoción en Grand St: el mejor café con leche de Brooklyn. Granos directos de Colombia.", mustSee: false },
+        { time: "15:00", title: "🍕 Comida final — Grimaldi's o Juliana's DUMBO", type: "food", description: "Grimaldi's (1 Front St) o Juliana's Pizza al lado, DUMBO. La mejor pizza de horno de carbón de NY. Vale el trayecto en metro desde Williamsburg.", duration: "1.5h", cost: 15, tip: "A las 15h para evitar colas. En Grimaldi's: mínimo una pizza entera. El sabor del horno de carbón es único en NY.", mustSee: true },
+        { time: "18:30", title: "🚇 Williamsburg → JFK", type: "transport", description: "Metro J/M/Z desde Marcy Ave hasta Jamaica Station, luego AirTrain a JFK Terminal 1. Total ~1h.", duration: "1h", cost: 9, tip: "Sal a las 18:30 como muy tarde. Control internacional JFK: 45-60 min. Llega al aeropuerto a las 20:30.", mustSee: false },
+        { time: "20:30", title: "✅ Check-in + seguridad JFK Terminal 1", type: "transport", description: "Facturación LEVEL, control de seguridad, gate. Cena en el aeropuerto.", duration: "3h", cost: 10, tip: "Cena en el aeropuerto (~10€). Aterriza en BCN el 25 abril a las 14:00h.", mustSee: false },
+        { time: "23:45", title: "✈️ Vuelo JFK → BCN — LEVEL", type: "transport", description: "Despegue. Aterriza en Barcelona el 25 de abril a las 14:00h.", duration: "8h vuelo", cost: 0, tip: "¡Nueva York ya es tuya para siempre! Guarda un ticket de metro como recuerdo.", mustSee: false }
       ],
-      meals: { breakfast: "Café en Williamsburg (~4€)", lunch: "Smorgasburg o Cafe Regular (~8€)", dinner: "Bagel Russ & Daughters (~8€) + aeropuerto" },
-      tips: ["El Tenement Museum es de los mejores museos de todo NY — no lo saltes", "Llega al aeropuerto con tiempo — el control internacional JFK puede ser lento"],
-      estimatedCost: 53
+      meals: { breakfast: "❌ Pod Brooklyn sin desayuno — Café Mogador brunch (~14€)", lunch: "Grimaldi's DUMBO (~15€)", dinner: "Aeropuerto JFK (~10€)" },
+      tips: ["Sale de Williamsburg a las 18:30 máximo para JFK", "Último día: más lento, disfruta lo conocido"],
+      estimatedCost: 63
     }
   ],
   generalTips: [
-    "🚇 Metro: tarjeta OMNY (contactless) con tu tarjeta española. Single ride ~2.75$. El día pass (~34$) solo vale si haces 4+ trayectos diarios.",
-    "💰 Propinas: 18-20% en restaurantes con servicio en mesa. En mostrador no es obligatorio. En taxi/Uber: 15%.",
-    "🌮 Comida barata: Halal Carts, Chinatown, dumplings, pizza por porciones ($2-3), bagels. Puedes comer bien por 8-10€/día.",
-    "📱 Datos: activa roaming europeo o cómprate una SIM americana de prepago en el aeropuerto (T-Mobile ~30$). El WiFi del hotel funciona bien para planificar.",
-    "🏃 Walking: NY es perfectamente caminable entre barrios cercanos. Google Maps en modo walking funciona perfecto incluso sin datos.",
-    "⚡ Enchufes: llevar adaptador tipo A/B (clavija americana plana). La mayoría de hoteles tienen USB en las habitaciones."
+    "🚇 Metro OMNY: toca directamente con tu tarjeta española o Apple Pay en el torniquete — sin MetroCard. ~2.90$/viaje. Bono 7 días (~34$) solo si haces más de 12 trayectos.",
+    "💰 Propinas: 18-20% en restaurantes con servicio en mesa. En mostrador/food truck: opcional. En taxi/Uber: 15%.",
+    "🛒 Estrategia supermercados: Whole Foods = mejor calidad. Trader Joe's = mejor precio. Come en parques o waterfronts — experiencia 100% NY.",
+    "🤑 Marcados como ya pagados (sin restar del presupuesto libre): vuelos, hoteles, Summit One Vanderbilt, Tour Contrastes, MOMA, Musical Chicago. Verificar cuáles están confirmados.",
+    "🌡️ Abril: 10-18°C de día, 5-10°C noche. Capas imprescindibles. Posible lluvia — paraguas compacto en la mochila.",
+    "📱 Datos: activa roaming de tu operador (~15€/semana) o SIM prepago T-Mobile en JFK (~30$ para 10GB). Fundamental para mapas y OMNY."
   ],
-  emergencyInfo: "Emergencias: 911 (policía/médico/fuego). Embajada española en NY: 150 E 58th St, piso 4 — +1 (212) 355-4080. Hospital más cercano a LIC: NYC Health+Hospitals Elmhurst (Queens). Farmacia 24h: Duane Reade en toda la ciudad.",
+  emergencyInfo: "Emergencias: 911. Embajada española: 150 E 58th St — +1 (212) 355-4080. Farmacia 24h: Duane Reade (en toda la ciudad). Hospital LIC: NYC Health+Hospitals Elmhurst, 79-01 Broadway, Queens.",
   generatedAt: new Date().toISOString(),
   model: "Itinerario personalizado FileHub"
 };
 
+// ─────────────────────────────────────────────
+// RESUMEN ECONÓMICO DETALLADO
+// ─────────────────────────────────────────────
+// DÍA 1 (Llegada):        8€   Metro JFK
+// DÍA 2 (Midtown):       51€   Summit 35€ + comida 9€ + cena 7€
+// DÍA 3 (Lower Mnh):     19€   Chinatown 10€ + Roosevelt 3€ + cena 6€
+// DÍA 4 (Contrastes):    79€   Tour 50€ + Katz's 22€ + cena 7€
+// DÍA 5 (MOMA+Chicago):  55€   MOMA 27€ + Shake Shack 12€ + West Village 4€ + pre-cena 12€
+// DÍA 6 (High Line):     30€   Joe's Pizza 8€ + taxi maletas 15€ + cena 7€
+// DÍA 7 (Vuelta):        63€   Brunch 14€ + café 5€ + Grimaldi's 15€ + metro JFK 9€ + aeropuerto 10€
+// ─────────────────────────────────────────────
+// TOTAL ESTIMADO:       305€
+// Si Summit ya pagado:  270€
+// Si Tour ya pagado:    255€
+// Si MOMA ya pagado:    228€ ← dentro del presupuesto 230€
+// Si los 3 pagados:     193€ ← muy holgado
+// ─────────────────────────────────────────────
+// DESGLOSE POR TIPO:
+// Desayunos: 0€  (incluidos días 1-6) + 14€ día 7 = 14€
+// Almuerzos: 98€ (Halal 9 + Chinatown 10 + Katz's 22 + Shake Shack 12 + Joe's 8 + Grimaldi's 15 + aerop 10 + café 5 + snack llegada 5 + cupcake 4)
+// Cenas:     40€ (supermercado ~7€ × 5 noches + pre-musical 8€ + snack JFK/noche llegada 5€)
+// Transport: 26€ (metro JFK ×2 = 17€ + taxi maletas 15€ + algunos metros)
+// Activ:    127€ (Summit 35€ + Roosevelt 3€ + Tour 50€ + MOMA 27€ + West Village 4€ + Devoción 5€)
+// ─────────────────────────────────────────────
+
 export const NY_PLAN_PRESET = {
-  id: `ny_trip_${Date.now()}`,
+  id: `ny_trip_preset`,
   destination: "Nueva York, EEUU",
   origin: "Barcelona, España",
   startDate: "2026-04-18",
@@ -165,10 +190,10 @@ export const NY_PLAN_PRESET = {
   budget: 230,
   currency: "EUR",
   style: "mochilero" as const,
-  interests: ["🍽️ Gastronomía", "🏛️ Cultura e historia", "🎭 Arte y museos", "📸 Fotografía", "🛍️ Compras"],
-  notes: "Hotel LIC Plaza (Queens) noches 1-5 con desayuno incluido. Pod Brooklyn última noche. Musical Chicago 22 Mar 19h Ambassador Theatre ya pagado. Vuelo LEVEL BCN-JFK-BCN.",
+  interests: ["🍽️ Gastronomía", "🏛️ Cultura e historia", "🎭 Arte y museos", "📸 Fotografía", "🌿 Naturaleza"],
+  notes: "LIC Plaza Hotel días 1-6 con desayuno incluido. Pod Brooklyn día 7 sin desayuno. Musical Chicago 22 Abr 19h — YA PAGADO. Vuelo LEVEL BCN 17:35 → JFK 22:00 y JFK 23:45 → BCN. 🤑 Verificar cuáles están prepagados: Summit, Tour Contrastes, MOMA.",
   mustVisitPlaces: "",
   itinerary: NY_ITINERARY_PRESET,
-  favorite: false,
-  createdAt: new Date().toISOString(),
+  favorite: true,
+  createdAt: new Date().toISOString()
 };
