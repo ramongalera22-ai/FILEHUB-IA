@@ -664,185 +664,337 @@ INSTRUCCIONES:
   if (!selectedPlan) { setView('list'); return null; }
   const it = selectedPlan.itinerary;
 
+  // Budget breakdown helpers
+  const budgetScenarios = it ? [
+    { label: 'Gasto total estimado', amount: it.estimatedTotal, color: 'text-slate-800 dark:text-white' },
+    { label: `Tu presupuesto libre`, amount: selectedPlan.budget, color: selectedPlan.budget >= it.estimatedTotal ? 'text-emerald-600' : 'text-amber-500' },
+  ] : [];
+
+  // Cost by category from activities
+  const costByType = it ? it.days.reduce((acc: Record<string,number>, day) => {
+    (day.activities || []).forEach((act: any) => {
+      if (act.cost && act.cost > 0) {
+        const cat = act.type === 'food' ? '🍽️ Comida' : act.type === 'transport' ? '🚇 Transporte' : act.type === 'hotel' ? '🏨 Alojamiento' : '🎭 Actividades';
+        acc[cat] = (acc[cat] || 0) + act.cost;
+      }
+    });
+    return acc;
+  }, {}) : {};
+
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">
-            <X size={18} className="text-slate-600" />
-          </button>
-          <div>
-            <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
-              🌍 {selectedPlan.destination}
-              {selectedPlan.favorite && <Heart size={14} className="text-pink-500 fill-pink-500" />}
-            </h2>
-            <p className="text-xs text-slate-500">{selectedPlan.startDate} → {selectedPlan.endDate} · {selectedPlan.travelers} viajero{selectedPlan.travelers > 1 ? 's' : ''} · {STYLE_LABELS[selectedPlan.style]}</p>
+    <div className="space-y-4">
+      {/* ── HEADER ───────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-6 text-white shadow-2xl">
+        {/* Background decoration */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl -ml-16 -mb-16 pointer-events-none" />
+        <div className="relative z-10">
+          <div className="flex items-start justify-between mb-4">
+            <button onClick={() => setView('list')} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all">
+              <X size={16} />
+            </button>
+            <div className="flex gap-2">
+              <button onClick={() => toggleFavorite(selectedPlan.id)} className="p-2 bg-white/10 hover:bg-pink-500/40 rounded-xl transition-all">
+                {selectedPlan.favorite ? <Heart size={16} className="text-pink-400 fill-pink-400" /> : <HeartOff size={16} className="text-white/60" />}
+              </button>
+              {it && <button onClick={copyItinerary} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all">
+                {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} className="text-white/60" />}
+              </button>}
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => toggleFavorite(selectedPlan.id)} className="p-2 hover:bg-pink-50 dark:hover:bg-pink-500/10 rounded-xl transition-colors">
-            {selectedPlan.favorite ? <Heart size={16} className="text-pink-500 fill-pink-500" /> : <HeartOff size={16} className="text-slate-400" />}
-          </button>
-          {it && <button onClick={copyItinerary} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">
-            {copied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} className="text-slate-400" />}
-          </button>}
+          <div className="mb-4">
+            <p className="text-sky-300 text-[10px] font-black uppercase tracking-widest mb-1">Próximo viaje</p>
+            <h2 className="text-3xl font-black tracking-tight leading-none">🗽 {selectedPlan.destination}</h2>
+            <div className="flex flex-wrap gap-3 mt-3">
+              <span className="bg-white/10 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"><Calendar size={11}/>{selectedPlan.startDate} → {selectedPlan.endDate}</span>
+              <span className="bg-white/10 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"><Euro size={11}/>Presupuesto libre: {selectedPlan.budget}€</span>
+              <span className="bg-white/10 px-3 py-1.5 rounded-xl text-xs font-bold">{STYLE_LABELS[selectedPlan.style]}</span>
+            </div>
+          </div>
+          {it && (
+            <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+              <p className="text-xs text-white/70 leading-relaxed">{it.summary}</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {it.bestTimeToVisit && <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-lg font-bold">☀️ {it.bestTimeToVisit}</span>}
+                <span className="text-[10px] bg-emerald-400/20 text-emerald-300 px-2 py-0.5 rounded-lg font-bold">🌍 {it.language}</span>
+                <span className="text-[10px] bg-sky-400/20 text-sky-300 px-2 py-0.5 rounded-lg font-bold">✈️ {it.totalDays} días</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Generate button or summary */}
+      {/* ── GENERATE (if no itinerary) ───────────────────────── */}
       {!it ? (
-        <div className="bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-500/10 dark:to-blue-500/5 rounded-3xl border border-sky-200 dark:border-sky-500/20 p-8 text-center">
+        <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-8 text-center shadow-sm">
           <div className="text-5xl mb-4">✨</div>
           <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">Generar itinerario con IA</h3>
-          <p className="text-sm text-slate-500 mb-6">La IA diseñará un itinerario detallado día a día con actividades, restaurantes y consejos locales.</p>
-
-          <div className="flex gap-2 justify-center mb-4">
-            <button onClick={() => setSelectedModel('kimi')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${selectedModel === 'kimi' ? 'bg-violet-500 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'}`}>
-              🌙 Kimi k2
-            </button>
-            <button onClick={() => setSelectedModel('haiku')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${selectedModel === 'haiku' ? 'bg-orange-500 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'}`}>
-              ⚡ Claude Haiku 4.5
-            </button>
+          <p className="text-sm text-slate-500 mb-6">La IA diseñará un itinerario detallado día a día con actividades, restaurantes y consejos.</p>
+          <div className="flex gap-2 justify-center mb-5">
+            {(['kimi','haiku'] as const).map(m => (
+              <button key={m} onClick={() => setSelectedModel(m)}
+                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${selectedModel===m?(m==='kimi'?'bg-violet-500 text-white':'bg-orange-500 text-white'):'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                {m==='kimi'?'🌙 Kimi k2':'⚡ Haiku 4.5'}
+              </button>
+            ))}
           </div>
-
           {genError && <p className="text-sm text-red-500 mb-3">❌ {genError}</p>}
-
           <button onClick={() => generateItinerary(selectedPlan)} disabled={generating}
-            className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-black rounded-2xl shadow-lg shadow-sky-500/20 hover:opacity-90 disabled:opacity-50 transition-all mx-auto">
-            {generating ? <><Loader2 size={20} className="animate-spin" /> Generando itinerario...</> : <><Sparkles size={20} /> Generar con {selectedModel === 'kimi' ? 'Kimi k2' : 'Claude Haiku 4.5'}</>}
+            className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-black rounded-2xl shadow-lg hover:opacity-90 disabled:opacity-50 transition-all mx-auto">
+            {generating ? <><Loader2 size={18} className="animate-spin"/>Generando...</> : <><Sparkles size={18}/>Generar itinerario</>}
           </button>
-          {generating && <p className="text-xs text-slate-400 mt-3">Esto puede tardar 15-30 segundos...</p>}
+          {generating && <p className="text-xs text-slate-400 mt-3">Esto puede tardar 20-30 segundos...</p>}
         </div>
       ) : (
         <>
-          {/* Summary card */}
-          <div className="bg-gradient-to-r from-sky-500 to-blue-600 rounded-2xl p-5 text-white">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <p className="text-sky-100 text-xs font-bold uppercase tracking-wider mb-1">Itinerario generado con {it.model}</p>
-                <p className="text-sm leading-relaxed">{it.summary}</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-3 mt-3">
-              <span className="bg-white/20 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1"><Calendar size={10}/>{it.totalDays} días</span>
-              <span className="bg-white/20 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1"><Euro size={10}/>~{it.estimatedTotal}{it.currency}</span>
-              <span className="bg-white/20 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1"><Globe size={10}/>{it.language}</span>
-              {it.bestTimeToVisit && <span className="bg-white/20 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1"><Sun size={10}/>{it.bestTimeToVisit}</span>}
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl w-fit">
+          {/* ── TABS ─────────────────────────────────────────── */}
+          <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl overflow-x-auto">
             {[
-              { id: 'itinerary', label: '📋 Itinerario' },
-              { id: 'chat', label: `🤖 Chat IA${chatMessages.length > 0 ? ` (${chatMessages.length})` : ''}` },
-              { id: 'tips', label: '💡 Consejos' },
+              { id: 'itinerary', label: '📋 Días' },
               { id: 'budget', label: '💰 Presupuesto' },
+              { id: 'chat', label: `🤖 Chat IA${chatMessages.length > 0 ? ` (${chatMessages.length})` : ''}` },
+              { id: 'tips', label: '💡 Tips' },
             ].map(t => (
               <button key={t.id} onClick={() => setActiveTab(t.id as any)}
-                className={`px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-white dark:bg-slate-700 text-sky-600 shadow-sm' : 'text-slate-500'}`}>
+                className={`px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap flex-shrink-0 ${activeTab===t.id ? 'bg-white dark:bg-slate-700 text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 {t.label}
               </button>
             ))}
           </div>
 
-          {/* ITINERARY TAB */}
+          {/* ── TAB: ITINERARIO ──────────────────────────────── */}
           {activeTab === 'itinerary' && (
             <div className="space-y-3">
-              {it.days.map((day, idx) => (
-                <div key={day.day} className={`bg-white dark:bg-slate-800 rounded-2xl border overflow-hidden transition-all ${expandedDay === idx ? 'border-sky-400/50 shadow-md' : 'border-slate-200 dark:border-slate-700'}`}>
-                  <button onClick={() => setExpandedDay(expandedDay === idx ? null : idx)}
-                    className="w-full flex items-center justify-between p-4 text-left">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center text-xs font-black shadow-sm shrink-0 ${expandedDay === idx ? 'bg-sky-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                        <span className="text-[9px] uppercase">Día</span>
-                        <span className="text-sm leading-none">{day.day}</span>
-                      </div>
-                      <div>
-                        <p className="font-black text-sm text-slate-800 dark:text-white">{day.title}</p>
-                        <p className="text-xs text-slate-400">{day.theme} · {day.activities.length} actividades · ~{day.estimatedCost}{it.currency}</p>
-                      </div>
-                    </div>
-                    {expandedDay === idx ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
-                  </button>
+              {it.days.map((day: any, idx: number) => {
+                const dayDate = new Date(day.date + 'T12:00:00');
+                const weekday = dayDate.toLocaleDateString('es-ES', { weekday: 'long' });
+                const dateStr = dayDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
+                const isOpen = expandedDay === idx;
+                const paidActs = (day.activities || []).filter((a:any) => a.title?.includes('🤑'));
+                const totalFreeDay = (day.activities||[]).reduce((s:number,a:any)=>s+(a.cost||0),0);
 
-                  {expandedDay === idx && (
-                    <div className="border-t border-slate-100 dark:border-slate-700 p-4 space-y-3">
-                      {/* Activities */}
-                      <div className="space-y-2">
-                        {day.activities.map((act, i) => (
-                          <div key={i} className="flex gap-3 items-start">
-                            <div className="text-xs font-mono text-slate-400 w-10 shrink-0 mt-1">{act.time}</div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start gap-2 flex-wrap">
-                                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg ${ACTIVITY_COLORS[act.type]}`}>
-                                  {ACTIVITY_ICONS[act.type]} {act.type}
-                                </span>
-                                {act.mustSee && <span className="text-[10px] font-black text-amber-600 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-lg">⭐ imprescindible</span>}
+                return (
+                  <div key={day.day} className={`rounded-2xl border overflow-hidden transition-all duration-200 ${isOpen ? 'border-sky-400/60 shadow-lg' : 'border-slate-200 dark:border-slate-700'}`}>
+                    {/* Day header button */}
+                    <button onClick={() => setExpandedDay(isOpen ? null : idx)}
+                      className={`w-full flex items-center gap-3 p-4 text-left transition-all ${isOpen ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white' : 'bg-white dark:bg-slate-800'}`}>
+                      {/* Date badge */}
+                      <div className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center font-black shrink-0 shadow-sm ${isOpen ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200'}`}>
+                        <span className="text-[9px] uppercase tracking-wider">{weekday.slice(0,3)}</span>
+                        <span className="text-xl leading-tight">{dayDate.getDate()}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-black text-sm leading-snug ${isOpen ? 'text-white' : 'text-slate-800 dark:text-white'}`}>{day.title}</p>
+                        <p className={`text-[11px] mt-0.5 truncate ${isOpen ? 'text-sky-100' : 'text-slate-400'}`}>{dateStr} · {(day.activities||[]).length} paradas · {totalFreeDay > 0 ? `~${totalFreeDay}€` : 'Gratis'}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {paidActs.length > 0 && <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${isOpen?'bg-white/20 text-white':'bg-amber-50 dark:bg-amber-500/10 text-amber-600'}`}>🤑 ×{paidActs.length}</span>}
+                        {isOpen ? <ChevronUp size={15} className="text-white/70"/> : <ChevronDown size={15} className="text-slate-400"/>}
+                      </div>
+                    </button>
+
+                    {/* Day content */}
+                    {isOpen && (
+                      <div className="bg-white dark:bg-slate-800 border-t border-sky-100 dark:border-slate-700 divide-y divide-slate-50 dark:divide-slate-700/50">
+                        {/* Activities timeline */}
+                        <div className="p-4 space-y-0">
+                          {(day.activities||[]).map((act: any, ai: number) => (
+                            <div key={ai} className="flex gap-3 py-2.5 first:pt-0 last:pb-0">
+                              {/* Time + line */}
+                              <div className="flex flex-col items-center shrink-0 w-10">
+                                <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 font-mono">{act.time}</span>
+                                {ai < (day.activities.length-1) && <div className="w-px flex-1 bg-slate-100 dark:bg-slate-700 mt-1"/>}
                               </div>
-                              <p className="font-bold text-sm text-slate-800 dark:text-white mt-0.5">{act.title}</p>
-                              <p className="text-xs text-slate-500 dark:text-slate-400">{act.description}</p>
-                              <div className="flex gap-3 mt-1 text-xs text-slate-400">
-                                {act.duration && <span>⏱️ {act.duration}</span>}
-                                {act.cost != null && act.cost > 0 && <span>💶 ~{act.cost}{it.currency}</span>}
+                              {/* Content */}
+                              <div className="flex-1 min-w-0 pb-1">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                  <span className={`inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-md ${ACTIVITY_COLORS[act.type] || 'bg-slate-100 text-slate-500'}`}>
+                                    {ACTIVITY_ICONS[act.type]}{act.type}
+                                  </span>
+                                  {act.mustSee && <span className="text-[9px] font-black text-amber-600 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded-md">⭐ must-see</span>}
+                                  {act.title?.includes('🤑') && <span className="text-[9px] font-black text-violet-600 bg-violet-50 dark:bg-violet-500/10 px-1.5 py-0.5 rounded-md">🤑 pagado</span>}
+                                </div>
+                                <p className="font-bold text-sm text-slate-800 dark:text-white leading-snug">{act.title}</p>
+                                {act.description && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{act.description}</p>}
+                                <div className="flex items-center gap-3 mt-1">
+                                  {act.duration && <span className="text-[10px] text-slate-400 flex items-center gap-0.5">⏱ {act.duration}</span>}
+                                  {act.cost > 0 && <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">💶 ~{act.cost}€</span>}
+                                  {act.cost === 0 && act.type !== 'hotel' && <span className="text-[10px] font-bold text-emerald-600">✓ Gratis</span>}
+                                </div>
+                                {act.tip && (
+                                  <div className="mt-1.5 flex gap-1.5 items-start bg-sky-50 dark:bg-sky-500/10 rounded-lg px-2 py-1.5">
+                                    <span className="text-sky-500 text-[10px] shrink-0 mt-px">💡</span>
+                                    <p className="text-[10px] text-sky-700 dark:text-sky-300 leading-relaxed">{act.tip}</p>
+                                  </div>
+                                )}
                               </div>
-                              {act.tip && <p className="text-xs text-sky-600 dark:text-sky-400 mt-1 italic">💡 {act.tip}</p>}
                             </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Meals */}
-                      {(day.meals.breakfast || day.meals.lunch || day.meals.dinner) && (
-                        <div className="bg-orange-50 dark:bg-orange-500/10 rounded-xl p-3 space-y-1.5">
-                          <p className="text-xs font-black uppercase tracking-wider text-orange-600 dark:text-orange-400 mb-2">🍽️ Dónde comer</p>
-                          {day.meals.breakfast && <p className="text-xs text-slate-600 dark:text-slate-300"><span className="font-bold">Desayuno:</span> {day.meals.breakfast}</p>}
-                          {day.meals.lunch && <p className="text-xs text-slate-600 dark:text-slate-300"><span className="font-bold">Almuerzo:</span> {day.meals.lunch}</p>}
-                          {day.meals.dinner && <p className="text-xs text-slate-600 dark:text-slate-300"><span className="font-bold">Cena:</span> {day.meals.dinner}</p>}
-                        </div>
-                      )}
-
-                      {/* Day tips */}
-                      {day.tips?.length > 0 && (
-                        <div className="space-y-1">
-                          {day.tips.map((tip, i) => (
-                            <p key={i} className="text-xs text-slate-500 dark:text-slate-400 flex gap-2"><span>💡</span>{tip}</p>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+
+                        {/* Meals strip */}
+                        {(day.meals?.breakfast || day.meals?.lunch || day.meals?.dinner) && (
+                          <div className="px-4 py-3 bg-orange-50/50 dark:bg-orange-500/5">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-orange-500 mb-2">🍽️ Comidas del día</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {[{label:'Desayuno',emoji:'☕',val:day.meals.breakfast},{label:'Almuerzo',emoji:'🍜',val:day.meals.lunch},{label:'Cena',emoji:'🌙',val:day.meals.dinner}].map(m => m.val && (
+                                <div key={m.label} className="bg-white dark:bg-slate-800 rounded-xl p-2 border border-orange-100 dark:border-orange-500/10">
+                                  <p className="text-[9px] font-black text-orange-400 uppercase tracking-wider">{m.emoji} {m.label}</p>
+                                  <p className="text-[10px] text-slate-600 dark:text-slate-300 mt-0.5 leading-snug">{m.val}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Day tips */}
+                        {day.tips?.length > 0 && (
+                          <div className="px-4 py-3 space-y-1">
+                            {day.tips.map((tip: string, ti: number) => (
+                              <p key={ti} className="text-[11px] text-slate-500 dark:text-slate-400 flex gap-2 leading-relaxed">
+                                <span className="text-violet-400 shrink-0">→</span>{tip}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Day cost footer */}
+                        <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">Coste estimado día {day.day}</span>
+                          <span className="font-black text-sm text-slate-700 dark:text-slate-200">{day.estimatedCost}€</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
-          {/* CHAT TAB */}
+          {/* ── TAB: PRESUPUESTO ─────────────────────────────── */}
+          {activeTab === 'budget' && (
+            <div className="space-y-4">
+              {/* Hero total */}
+              <div className="bg-gradient-to-br from-slate-900 to-blue-950 rounded-3xl p-6 text-white">
+                <p className="text-[10px] font-black uppercase tracking-widest text-sky-300 mb-1">Gasto total estimado</p>
+                <p className="text-5xl font-black tracking-tight">{it.estimatedTotal}€</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${selectedPlan.budget >= it.estimatedTotal ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
+                  <p className="text-sm text-white/70">
+                    Tu presupuesto libre: <span className={`font-black ${selectedPlan.budget >= it.estimatedTotal ? 'text-emerald-400' : 'text-amber-400'}`}>{selectedPlan.budget}€</span>
+                    {selectedPlan.budget >= it.estimatedTotal ? ' ✅ cubierto' : ' ⚠️ excedido'}
+                  </p>
+                </div>
+                <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${selectedPlan.budget >= it.estimatedTotal ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                    style={{ width: `${Math.min((it.estimatedTotal / Math.max(selectedPlan.budget, it.estimatedTotal)) * 100, 100)}%` }}/>
+                </div>
+              </div>
+
+              {/* Info nota presupuesto */}
+              <div className="bg-sky-50 dark:bg-sky-500/10 rounded-2xl border border-sky-200 dark:border-sky-500/20 p-4">
+                <p className="text-xs font-black text-sky-700 dark:text-sky-400 mb-1">ℹ️ Sobre el presupuesto</p>
+                <p className="text-xs text-sky-600 dark:text-sky-300 leading-relaxed">
+                  <strong>Desayunos incluidos (0€)</strong> en LIC Plaza días 1-6. Día 7 (Pod Brooklyn) no incluye — brunch ~14€.<br/>
+                  <strong>Cenas supermercado</strong> ~7€/noche. Las actividades 🤑 ya están pagadas y no restan del presupuesto libre.<br/>
+                  Si Summit + Tour + MOMA ya pagados: gasto libre real ≈ <strong>193€</strong> ✅
+                </p>
+              </div>
+
+              {/* Day by day bars */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700">
+                  <h3 className="font-black text-slate-800 dark:text-white text-sm">Desglose por días</h3>
+                </div>
+                <div className="p-5 space-y-3">
+                  {it.days.map((day: any) => {
+                    const pct = Math.min((day.estimatedCost / Math.max(...it.days.map((d:any)=>d.estimatedCost))) * 100, 100);
+                    const dayDate = new Date(day.date + 'T12:00:00');
+                    const label = dayDate.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+                    return (
+                      <div key={day.day} className="flex items-center gap-3">
+                        <div className="w-20 shrink-0">
+                          <p className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase">{label}</p>
+                          <p className="text-[9px] text-slate-400 truncate">{day.title.split('·')[0].trim().replace(/[🗽✈️🌃🎭🌿🏛️]/g,'').trim().slice(0,18)}...</p>
+                        </div>
+                        <div className="flex-1 h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${day.estimatedCost > 60 ? 'bg-gradient-to-r from-red-400 to-rose-500' : day.estimatedCost > 30 ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gradient-to-r from-sky-400 to-blue-500'}`}
+                            style={{ width: `${pct}%` }}/>
+                        </div>
+                        <span className="text-xs font-black text-slate-700 dark:text-slate-200 w-10 text-right shrink-0">{day.estimatedCost}€</span>
+                      </div>
+                    );
+                  })}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                    <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider">Total</span>
+                    <span className="text-2xl font-black text-slate-800 dark:text-white">{it.estimatedTotal}€</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* By category */}
+              {Object.keys(costByType).length > 0 && (
+                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700">
+                    <h3 className="font-black text-slate-800 dark:text-white text-sm">Por categoría</h3>
+                  </div>
+                  <div className="p-5 grid grid-cols-2 gap-3">
+                    {Object.entries(costByType).map(([cat, total]) => (
+                      <div key={cat} className="bg-slate-50 dark:bg-slate-900 rounded-xl p-3">
+                        <p className="text-xs font-black text-slate-600 dark:text-slate-300">{cat}</p>
+                        <p className="text-xl font-black text-slate-800 dark:text-white">{Math.round(total as number)}€</p>
+                        <p className="text-[10px] text-slate-400">{Math.round(((total as number)/it.estimatedTotal)*100)}% del total</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Scenarios if paid */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700">
+                  <h3 className="font-black text-slate-800 dark:text-white text-sm">Escenarios según 🤑 pagados</h3>
+                </div>
+                <div className="divide-y divide-slate-50 dark:divide-slate-700">
+                  {[
+                    { label: 'Todo de pago libre', amount: it.estimatedTotal, note: '' },
+                    { label: 'Summit ya pagado (-35€)', amount: it.estimatedTotal - 35, note: '' },
+                    { label: '+ Tour ya pagado (-50€)', amount: it.estimatedTotal - 35 - 50, note: '✅ Dentro del presupuesto' },
+                    { label: '+ MOMA ya pagado (-27€)', amount: it.estimatedTotal - 35 - 50 - 27, note: '💚 Muy holgado' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-center justify-between px-5 py-3">
+                      <div>
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{s.label}</p>
+                        {s.note && <p className="text-[10px] text-emerald-600">{s.note}</p>}
+                      </div>
+                      <span className={`text-sm font-black ${s.amount <= selectedPlan.budget ? 'text-emerald-600' : 'text-slate-700 dark:text-slate-200'}`}>{s.amount}€</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Regenerate */}
+              <button onClick={() => generateItinerary(selectedPlan)} disabled={generating}
+                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-sky-300 dark:border-sky-500/40 rounded-2xl text-sm font-bold text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-500/5 transition-all disabled:opacity-50">
+                {generating ? <Loader2 size={15} className="animate-spin"/> : <RefreshCw size={15}/>}
+                {generating ? 'Regenerando...' : 'Regenerar itinerario con IA'}
+              </button>
+            </div>
+          )}
+
+          {/* ── TAB: CHAT IA ─────────────────────────────────── */}
           {activeTab === 'chat' && (
-            <div className="flex flex-col gap-3" style={{ minHeight: '500px' }}>
-              {/* Intro */}
+            <div className="flex flex-col gap-3" style={{ minHeight: '480px' }}>
               <div className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-500/10 dark:to-indigo-500/5 rounded-2xl border border-violet-200 dark:border-violet-500/20 p-4">
                 <div className="flex items-start gap-3">
                   <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shrink-0 shadow-md">
-                    <Bot size={16} className="text-white" />
+                    <Bot size={16} className="text-white"/>
                   </div>
-                  <div>
-                    <p className="font-black text-sm text-violet-700 dark:text-violet-400">IA sobre tu itinerario</p>
-                    <p className="text-xs text-violet-600/70 dark:text-violet-400/60 mt-0.5 leading-relaxed">
-                      Pídeme cambios y los aplico directamente. También puedo responder preguntas sobre el viaje.
-                    </p>
+                  <div className="flex-1">
+                    <p className="font-black text-sm text-violet-700 dark:text-violet-400">Chat IA — modifica el itinerario</p>
+                    <p className="text-xs text-violet-600/70 dark:text-violet-400/60 mt-0.5">Los cambios se aplican y guardan automáticamente</p>
                     <div className="flex flex-wrap gap-1.5 mt-2">
-                      {[
-                        'Cambia el restaurante del día 3',
-                        'Añade el Cloisters al día 6',
-                        '¿Cuánto cuesta el MOMA?',
-                        'Mueve la High Line al día 3',
-                        'Quita el Tour de Contrastes',
-                        '¿Cómo llego al hotel desde JFK?',
-                      ].map(s => (
+                      {['Cambia el restaurante del día 3','Añade el Cloisters al día 6','¿Cuánto cuesta el MOMA?','Mueve la High Line al día 3','Quita el Tour de Contrastes','¿Cómo llego desde JFK?'].map(s => (
                         <button key={s} onClick={() => setChatInput(s)}
                           className="text-[10px] font-bold px-2.5 py-1 bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-400 rounded-lg hover:bg-violet-200 transition-all border border-violet-200 dark:border-violet-500/30">
                           {s}
@@ -852,149 +1004,79 @@ INSTRUCCIONES:
                   </div>
                 </div>
               </div>
-
-              {/* Messages */}
-              <div className="flex-1 space-y-3 overflow-y-auto max-h-[400px] pr-1">
+              <div className="flex-1 space-y-3 overflow-y-auto max-h-[380px] pr-1">
                 {chatMessages.length === 0 && (
                   <div className="flex flex-col items-center py-10 text-center text-slate-400">
                     <div className="text-4xl mb-3">💬</div>
                     <p className="text-sm font-bold text-slate-500 dark:text-slate-300">Sin mensajes aún</p>
-                    <p className="text-xs mt-1">Usa los accesos rápidos de arriba o escribe tu petición</p>
+                    <p className="text-xs mt-1">Usa los accesos rápidos o escribe tu petición</p>
                   </div>
                 )}
                 {chatMessages.map((msg, i) => (
-                  <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    {msg.role === 'assistant' && (
-                      <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shrink-0 mt-1 shadow-sm">
-                        <Bot size={12} className="text-white" />
-                      </div>
-                    )}
-                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                      msg.role === 'user'
-                        ? 'bg-sky-500 text-white rounded-br-sm'
-                        : msg.isModification
-                          ? 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-200 rounded-bl-sm'
-                          : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-bl-sm'
-                    }`}>
-                      {msg.isModification && (
-                        <div className="flex items-center gap-1.5 mb-1.5 text-emerald-600 dark:text-emerald-400">
-                          <Check size={13} className="shrink-0" />
-                          <span className="text-[10px] font-black uppercase tracking-wider">Itinerario actualizado</span>
-                        </div>
-                      )}
+                  <div key={i} className={`flex gap-2 ${msg.role==='user'?'justify-end':'justify-start'}`}>
+                    {msg.role==='assistant' && <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shrink-0 mt-1 shadow-sm"><Bot size={12} className="text-white"/></div>}
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role==='user'?'bg-sky-500 text-white rounded-br-sm':msg.isModification?'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-200 rounded-bl-sm':'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-bl-sm'}`}>
+                      {msg.isModification && <div className="flex items-center gap-1.5 mb-1.5 text-emerald-600 dark:text-emerald-400"><Check size={12}/><span className="text-[10px] font-black uppercase tracking-wider">Itinerario actualizado ✅</span></div>}
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                     </div>
-                    {msg.role === 'user' && (
-                      <div className="w-7 h-7 bg-sky-100 dark:bg-sky-500/20 rounded-xl flex items-center justify-center shrink-0 mt-1">
-                        <Navigation size={12} className="text-sky-600" />
-                      </div>
-                    )}
+                    {msg.role==='user' && <div className="w-7 h-7 bg-sky-100 dark:bg-sky-500/20 rounded-xl flex items-center justify-center shrink-0 mt-1"><Navigation size={12} className="text-sky-600"/></div>}
                   </div>
                 ))}
                 {isChatting && (
-                  <div className="flex gap-2 justify-start">
-                    <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shrink-0">
-                      <Bot size={12} className="text-white" />
-                    </div>
+                  <div className="flex gap-2">
+                    <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shrink-0"><Bot size={12} className="text-white"/></div>
                     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2">
-                      <Loader2 size={13} className="animate-spin text-violet-500" />
+                      <Loader2 size={12} className="animate-spin text-violet-500"/>
                       <span className="text-xs text-slate-400">Pensando...</span>
-                      {[0,1,2].map(i => (
-                        <div key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay: `${i*0.12}s`}} />
-                      ))}
+                      {[0,1,2].map(i=><div key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:`${i*0.12}s`}}/>)}
                     </div>
                   </div>
                 )}
-                <div ref={chatEndRef} />
+                <div ref={chatEndRef}/>
               </div>
-
-              {/* Input */}
               <div className="flex gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-2 focus-within:border-violet-400/60 transition-all shadow-sm">
-                <textarea
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatWithItinerary(); } }}
-                  placeholder="¿Qué quieres cambiar o saber sobre el viaje? (Enter para enviar)"
-                  rows={2}
-                  className="flex-1 bg-transparent border-0 outline-none resize-none text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 px-2 py-1"
-                />
-                <button onClick={chatWithItinerary} disabled={isChatting || !chatInput.trim()}
+                <textarea value={chatInput} onChange={e=>setChatInput(e.target.value)}
+                  onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();chatWithItinerary();}}}
+                  placeholder="¿Qué quieres cambiar? (Enter para enviar)" rows={2}
+                  className="flex-1 bg-transparent border-0 outline-none resize-none text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 px-2 py-1"/>
+                <button onClick={chatWithItinerary} disabled={isChatting||!chatInput.trim()}
                   className="self-end p-2.5 bg-gradient-to-br from-violet-500 to-indigo-600 text-white rounded-xl hover:opacity-90 disabled:opacity-40 transition-all shadow-sm">
-                  {isChatting ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                  {isChatting?<Loader2 size={15} className="animate-spin"/>:<Send size={15}/>}
                 </button>
               </div>
-              <p className="text-[10px] text-slate-400 text-center">
-                Los cambios al itinerario se aplican y guardan automáticamente · Enter para enviar
-              </p>
             </div>
           )}
 
-          {/* TIPS TAB */}
+          {/* ── TAB: TIPS ────────────────────────────────────── */}
           {activeTab === 'tips' && (
             <div className="space-y-4">
-              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
-                <h3 className="font-black text-slate-800 dark:text-white mb-3 flex items-center gap-2"><Star size={16} className="text-amber-500" /> Consejos generales</h3>
-                <div className="space-y-2">
-                  {it.generalTips?.map((tip, i) => (
-                    <div key={i} className="flex gap-3 items-start p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl">
-                      <span className="text-sky-500 font-black text-sm shrink-0">{i+1}.</span>
-                      <p className="text-sm text-slate-600 dark:text-slate-300">{tip}</p>
-                    </div>
-                  ))}
+              {it.generalTips?.length > 0 && (
+                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700 bg-amber-50 dark:bg-amber-500/5">
+                    <h3 className="font-black text-slate-800 dark:text-white text-sm flex items-center gap-2">⭐ Consejos esenciales</h3>
+                  </div>
+                  <div className="divide-y divide-slate-50 dark:divide-slate-700">
+                    {it.generalTips.map((tip: string, i: number) => (
+                      <div key={i} className="flex gap-3 items-start px-5 py-3">
+                        <span className="w-5 h-5 bg-amber-100 dark:bg-amber-500/20 text-amber-600 rounded-lg flex items-center justify-center shrink-0 text-[10px] font-black mt-0.5">{i+1}</span>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{tip}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
               {it.emergencyInfo && (
                 <div className="bg-red-50 dark:bg-red-500/10 rounded-2xl border border-red-200 dark:border-red-500/20 p-5">
-                  <h3 className="font-black text-red-700 dark:text-red-400 mb-2 flex items-center gap-2">🚨 Información de emergencia</h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">{it.emergencyInfo}</p>
+                  <h3 className="font-black text-red-700 dark:text-red-400 text-sm mb-2">🚨 Emergencias y datos útiles</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{it.emergencyInfo}</p>
                 </div>
               )}
               {it.currency_info && (
                 <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-200 dark:border-emerald-500/20 p-5">
-                  <h3 className="font-black text-emerald-700 dark:text-emerald-400 mb-2">💳 Moneda y pagos</h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">{it.currency_info}</p>
+                  <h3 className="font-black text-emerald-700 dark:text-emerald-400 text-sm mb-2">💳 Dinero y pagos</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{it.currency_info}</p>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* BUDGET TAB */}
-          {activeTab === 'budget' && (
-            <div className="space-y-3">
-              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
-                <h3 className="font-black text-slate-800 dark:text-white mb-4">💰 Desglose por días</h3>
-                <div className="space-y-2">
-                  {it.days.map(day => {
-                    const pct = Math.min((day.estimatedCost / it.estimatedTotal) * 100, 100);
-                    return (
-                      <div key={day.day} className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-slate-500 w-10 shrink-0">Día {day.day}</span>
-                        <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-sky-500 to-blue-600 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="text-xs font-black text-slate-700 dark:text-slate-200 w-16 text-right shrink-0">{day.estimatedCost}{it.currency}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-between">
-                  <span className="text-sm font-black text-slate-600 dark:text-slate-300">Total estimado</span>
-                  <span className="text-xl font-black text-sky-600">{it.estimatedTotal}{it.currency}</span>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-xs text-slate-400">Tu presupuesto</span>
-                  <span className={`text-sm font-bold ${selectedPlan.budget >= it.estimatedTotal ? 'text-emerald-600' : 'text-red-500'}`}>
-                    {selectedPlan.budget}{it.currency} {selectedPlan.budget >= it.estimatedTotal ? '✅' : '⚠️'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Regenerate button */}
-              <button onClick={() => generateItinerary(selectedPlan)} disabled={generating}
-                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-sky-300 dark:border-sky-500/40 rounded-2xl text-sm font-bold text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-500/5 transition-all disabled:opacity-50">
-                {generating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                {generating ? 'Regenerando...' : 'Regenerar itinerario'}
-              </button>
             </div>
           )}
         </>
