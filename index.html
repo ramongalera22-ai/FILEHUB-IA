@@ -83,10 +83,23 @@
             }
           });
 
-          // Request notification permission for shift reminders
-          if ('Notification' in window && Notification.permission === 'default') {
-            // Don't ask immediately — let the app request when needed
-          }
+          // Listen for SW_UPDATED message → reload to get fresh content
+          navigator.serviceWorker.addEventListener('message', event => {
+            if (event.data?.type === 'SW_UPDATED') {
+              console.log('[App] New SW active, reloading...');
+              window.location.reload();
+            }
+          });
+
+          // Also reload when controller changes (SW took over)
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+              refreshing = true;
+              window.location.reload();
+            }
+          });
+
         } catch (err) {
           console.warn('[SW] Registration failed:', err);
         }

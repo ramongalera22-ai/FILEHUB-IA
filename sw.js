@@ -6,7 +6,7 @@
  * - Push notifications para guardias y presupuesto
  */
 
-const CACHE_VERSION = 'filehub-v4';
+const CACHE_VERSION = 'filehub-v5-202603181015';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const OFFLINE_PAGE = '/FILEHUB-IA/index.html';
@@ -56,13 +56,25 @@ self.addEventListener('install', event => {
 // ── ACTIVATE ─────────────────────────────────────────────────────
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
+    caches.keys().then(keys => {
+      console.log('[SW] Active caches:', keys);
+      return Promise.all(
         keys
-          .filter(k => k !== STATIC_CACHE && k !== DYNAMIC_CACHE && k !== 'filehub-data')
-          .map(k => { console.log('[SW] Deleting old cache:', k); return caches.delete(k); })
-      )
-    ).then(() => self.clients.claim())
+          .filter(k => !k.startsWith(CACHE_VERSION) && k !== 'filehub-data')
+          .map(k => {
+            console.log('[SW] Deleting stale cache:', k);
+            return caches.delete(k);
+          })
+      );
+    }).then(() => {
+      console.log('[SW] Claiming all clients...');
+      return self.clients.claim();
+    }).then(() => {
+      // Tell all clients to reload so they get fresh content
+      return self.clients.matchAll({ type: 'window' }).then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'SW_UPDATED' }));
+      });
+    })
   );
 });
 
