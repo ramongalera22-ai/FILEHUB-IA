@@ -61,6 +61,7 @@ import {
   User,
   Moon,
   Sun,
+  RefreshCw,
   Wifi
 } from 'lucide-react';
 
@@ -1401,6 +1402,20 @@ const App: React.FC = () => {
                 title="Cambiar Tema"
               >
                 {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (typeof (window as any).filehubClearCache === 'function') {
+                    (window as any).filehubClearCache();
+                  } else {
+                    window.location.reload();
+                  }
+                }}
+                className="hidden sm:flex p-2.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-amber-500 transition-colors"
+                title="Limpiar caché y actualizar app"
+              >
+                <RefreshCw size={18} />
               </button>
 
               <div
