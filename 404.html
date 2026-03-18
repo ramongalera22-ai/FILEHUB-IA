@@ -2,21 +2,26 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
   <title>FILEHUB - Inteligencia de Gestión</title>
-  
-  <!-- PWA Meta Tags -->
+
+  <!-- PWA -->
   <meta name="theme-color" content="#4f46e5">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="/FILEHUB-IA/assets/manifest-DLrt3_Y6.json">
+  <meta name="apple-mobile-web-app-title" content="FileHub">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="FileHub">
+  <link rel="manifest" href="/FILEHUB-IA/assets/manifest-zYwcPJfn.json">
   <link rel="apple-touch-icon" href="https://img.icons8.com/ios-filled/512/FFFFFF/lightning-bolt.png">
   <link rel="icon" type="image/png" href="https://img.icons8.com/ios-filled/512/4f46e5/lightning-bolt.png">
 
+  <!-- Fonts -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
   <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -27,27 +32,67 @@
     .custom-scrollbar::-webkit-scrollbar { width: 4px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-    
-    @media (display-mode: standalone) {
-      .pwa-only { display: none; }
-    }
+    button, nav { user-select: none; }
 
-    /* Prevent text selection on UI elements */
-    button, nav {
-      user-select: none;
+    /* Offline banner */
+    #offline-banner {
+      display: none;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+      background: #f59e0b; color: #1c1917; text-align: center;
+      padding: 8px 16px; font-size: 12px; font-weight: 700;
+      font-family: 'Inter', sans-serif;
     }
+    #offline-banner.show { display: block; }
   </style>
-  <script type="module" crossorigin src="/FILEHUB-IA/assets/index-xl5nVPKu.js"></script>
+  <script type="module" crossorigin src="/FILEHUB-IA/assets/index-BjjCvyzr.js"></script>
 </head>
 <body class="bg-[#f8fafc]">
+  <!-- Offline indicator -->
+  <div id="offline-banner">⚡ Sin conexión — FileHub funciona offline con tus datos guardados</div>
+
   <div id="root"></div>
+
   <script>
+    // Offline detection
+    function updateOnlineStatus() {
+      const banner = document.getElementById('offline-banner');
+      if (!navigator.onLine) banner.classList.add('show');
+      else banner.classList.remove('show');
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    // Service Worker registration
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
+      window.addEventListener('load', async () => {
         const swBase = location.pathname.startsWith('/FILEHUB-IA') ? '/FILEHUB-IA' : '';
-        navigator.serviceWorker.register(swBase + '/sw.js').catch(err => console.log('SW registration failed:', err));
+        try {
+          const reg = await navigator.serviceWorker.register(swBase + '/sw.js', { scope: swBase + '/' });
+          console.log('[SW] Registered:', reg.scope);
+
+          // Check for updates
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New version available — send SKIP_WAITING
+                  newWorker.postMessage({ type: 'SKIP_WAITING' });
+                }
+              });
+            }
+          });
+
+          // Request notification permission for shift reminders
+          if ('Notification' in window && Notification.permission === 'default') {
+            // Don't ask immediately — let the app request when needed
+          }
+        } catch (err) {
+          console.warn('[SW] Registration failed:', err);
+        }
       });
     }
   </script>
 </body>
-</html><!-- redeploy 2026-03-18 08:18:09 -->
+</html>
