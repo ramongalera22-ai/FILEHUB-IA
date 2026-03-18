@@ -28,6 +28,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'vip-tasks',      label: '⭐ Tareas VIP',         icon: Star },
     { id: 'work-planner',   label: '🧠 Planificador IA',    icon: Brain },
     { id: 'habits',         label: '🔥 Hábitos',            icon: Flame },
+    { id: 'travel-planner', label: '✈️ Viajes IA',           icon: Plane },
     { id: 'shifts',         label: '🛡️ Guardias',           icon: Shield },
     { id: 'budget-alerts',  label: '💰 Alertas Presupuesto',icon: Target },
     { id: 'cron-jobs',      label: '⏰ Cron Jobs Bot',      icon: Activity },

@@ -3,9 +3,9 @@ import React from 'react';
 import { QrCode, Smartphone, Download, Share2, Info, CheckCircle2, Zap } from 'lucide-react';
 
 const QRView: React.FC = () => {
-   const productionUrl = 'https://filehub-demo-carlos.web.app/';
-   const currentUrl = window.location.hostname === 'localhost' ? productionUrl : window.location.href;
-   const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(currentUrl)}&margin=20&bgcolor=ffffff&color=0f172a&ecc=H`;
+   const githubPagesUrl = 'https://ramongalera22-ai.github.io/FILEHUB-IA/';
+   const currentUrl = window.location.hostname === 'localhost' ? githubPagesUrl : window.location.href.split('?')[0];
+   const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(currentUrl)}&margin=20&bgcolor=ffffff&color=0f172a&ecc=H`;
 
    return (
       <div className="max-w-5xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-20">

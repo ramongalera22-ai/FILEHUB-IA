@@ -33,6 +33,7 @@ import ShiftsCalendarView from './components/ShiftsCalendarView';
 import WorkPlannerView from './components/WorkPlannerView';
 import HabitsView from './components/HabitsView';
 import BudgetAlertsView from './components/BudgetAlertsView';
+import TravelPlannerView from './components/TravelPlannerView';
 import JobsView from './components/JobsView';
 import RealEstateView from './components/RealEstateView';
 import WhatsAppPisosView from './components/WhatsAppPisosView';
@@ -1297,6 +1298,7 @@ const App: React.FC = () => {
       );
       case 'habits': return <HabitsView session={session} />;
       case 'budget-alerts': return <BudgetAlertsView expenses={expenses} session={session} />;
+      case 'travel-planner': return <TravelPlannerView />;
       default: return (
         <Dashboard
           expenses={expenses}

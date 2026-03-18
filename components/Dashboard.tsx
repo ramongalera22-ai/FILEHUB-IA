@@ -73,18 +73,33 @@ const Dashboard: React.FC<DashboardProps> = ({
    // Dashboard AI Briefing
    const [briefing, setBriefing] = useState('');
    const [loadingBriefing, setLoadingBriefing] = useState(false);
-   const [weather, setWeather] = useState<{temp: string; desc: string; icon: string} | null>(null);
+   const [weatherCity, setWeatherCity] = useState<'murcia' | 'barcelona' | 'custom'>('murcia');
+   const [customCity, setCustomCity] = useState('');
+   const [weather, setWeather] = useState<Record<string, {temp: string; desc: string; icon: string}>>({});
    const currentHour = new Date().getHours();
    const greeting = currentHour < 12 ? '☀️ Buenos días' : currentHour < 18 ? '🌤️ Buenas tardes' : '🌙 Buenas noches';
 
-   useEffect(() => {
-     // Load weather
-     fetch('https://wttr.in/Murcia?format=%t|%C|%w')
+   const fetchWeather = (city: string) => {
+     if (weather[city]) return; // already loaded
+     fetch(`https://wttr.in/${encodeURIComponent(city)}?format=%t|%C|%h`)
        .then(r => r.text())
        .then(text => {
-         const [temp, desc, wind] = text.split('|');
-         setWeather({ temp: temp?.trim() || '--', desc: desc?.trim() || '', icon: '🌤️' });
-       }).catch(() => {});
+         const [temp, desc, humidity] = text.split('|');
+         const t = temp?.trim() || '--';
+         const icon = desc?.toLowerCase().includes('sun') || desc?.toLowerCase().includes('clear') ? '☀️' :
+                      desc?.toLowerCase().includes('cloud') ? '⛅' :
+                      desc?.toLowerCase().includes('rain') ? '🌧️' :
+                      desc?.toLowerCase().includes('snow') ? '❄️' :
+                      desc?.toLowerCase().includes('storm') ? '⛈️' : '🌤️';
+         setWeather(prev => ({ ...prev, [city]: { temp: t, desc: desc?.trim() || '', icon } }));
+       }).catch(() => {
+         setWeather(prev => ({ ...prev, [city]: { temp: '--', desc: 'Sin datos', icon: '🌤️' } }));
+       });
+   };
+
+   useEffect(() => {
+     fetchWeather('murcia');
+     fetchWeather('barcelona');
    }, []);
 
    const handleGenerateBriefing = async () => {
@@ -330,21 +345,49 @@ const Dashboard: React.FC<DashboardProps> = ({
                          </div>
                        </div>
 
-                       {/* Weather + Time */}
-                       <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/60 dark:border-white/5 flex flex-col justify-between">
-                         <div className="flex items-center justify-between mb-2">
-                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Murcia ahora</span>
-                           <span className="text-lg">🌤️</span>
+                       {/* Weather Multi-Ciudad */}
+                       <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-white/5 flex flex-col gap-2">
+                         {/* City tabs */}
+                         <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl">
+                           {(['murcia', 'barcelona'] as const).map(city => (
+                             <button key={city} onClick={() => { setWeatherCity(city); fetchWeather(city); }}
+                               className={`flex-1 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${weatherCity === city ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>
+                               {city === 'murcia' ? '🌅 Murcia' : '🏙️ Bcn'}
+                             </button>
+                           ))}
+                           <button onClick={() => setWeatherCity('custom')}
+                             className={`flex-1 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${weatherCity === 'custom' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>
+                             ✏️
+                           </button>
                          </div>
-                         {weather ? (
-                           <>
-                             <div className="text-3xl font-black text-slate-800 dark:text-white">{weather.temp}</div>
-                             <div className="text-xs text-slate-500 truncate">{weather.desc}</div>
-                           </>
-                         ) : (
-                           <div className="text-3xl font-black text-slate-300 dark:text-slate-700">--°C</div>
+                         {/* Custom city input */}
+                         {weatherCity === 'custom' && (
+                           <input value={customCity} onChange={e => setCustomCity(e.target.value)}
+                             onKeyDown={e => { if (e.key === 'Enter' && customCity.trim()) fetchWeather(customCity.trim()); }}
+                             placeholder="Ciudad... (Enter)" className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 focus:outline-none focus:border-indigo-400" />
                          )}
-                         <div className="text-[10px] text-slate-400 mt-2 font-mono">{new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</div>
+                         {/* Weather display */}
+                         {(() => {
+                           const activeCity = weatherCity === 'custom' ? customCity.trim() : weatherCity;
+                           const w = weather[activeCity];
+                           return w ? (
+                             <div className="flex items-end justify-between">
+                               <div>
+                                 <div className="text-3xl font-black text-slate-800 dark:text-white">{w.temp}</div>
+                                 <div className="text-xs text-slate-500 truncate max-w-[100px]">{w.desc}</div>
+                               </div>
+                               <div className="text-right">
+                                 <div className="text-2xl">{w.icon}</div>
+                                 <div className="text-[10px] text-slate-400 font-mono">{new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</div>
+                               </div>
+                             </div>
+                           ) : (
+                             <div className="flex items-center gap-2 py-1">
+                               <div className="text-2xl animate-pulse">⌛</div>
+                               <div className="text-sm text-slate-400">Cargando...</div>
+                             </div>
+                           );
+                         })()}
                        </div>
                      </div>
 
