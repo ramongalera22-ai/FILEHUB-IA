@@ -7,6 +7,7 @@ import {
   ExternalLink, Heart, HeartOff, Bot
 } from 'lucide-react';
 import { chatWithKimi } from '../services/kimiService';
+import { NY_PLAN_PRESET } from '../data/nyItinerary';
 
 // ─── TYPES ───────────────────────────────────────────────────────
 interface TravelPlan {
@@ -21,6 +22,7 @@ interface TravelPlan {
   style: 'mochilero' | 'comfort' | 'lujo' | 'familia' | 'romantico' | 'aventura';
   interests: string[];
   notes: string;
+  mustVisitPlaces?: string;  // lista de sitios obligatorios del usuario
   itinerary?: GeneratedItinerary;
   favorite: boolean;
   createdAt: string;
@@ -96,6 +98,9 @@ const INTERESTS_OPTIONS = [
 // ─── PROMPT BUILDER ──────────────────────────────────────────────
 function buildItineraryPrompt(plan: TravelPlan): string {
   const days = Math.ceil((new Date(plan.endDate).getTime() - new Date(plan.startDate).getTime()) / 86400000) + 1;
+  const mustVisitSection = plan.mustVisitPlaces?.trim()
+    ? `\nSITIOS QUE EL USUARIO QUIERE VISITAR (OBLIGATORIO incluirlos todos distribuidos por días):\n${plan.mustVisitPlaces}\n`
+    : '';
   return `Crea un itinerario de viaje detallado y práctico en JSON.
 
 DATOS DEL VIAJE:
@@ -107,7 +112,7 @@ DATOS DEL VIAJE:
 - Estilo: ${STYLE_LABELS[plan.style]}
 - Intereses: ${plan.interests.join(', ')}
 - Notas especiales: ${plan.notes || 'ninguna'}
-
+${mustVisitSection}
 Devuelve ÚNICAMENTE este JSON (sin texto extra, sin markdown, sin \`\`\`):
 {
   "destination": "${plan.destination}",
@@ -148,13 +153,14 @@ Devuelve ÚNICAMENTE este JSON (sin texto extra, sin markdown, sin \`\`\`):
   "generalTips": ["tip1", "tip2", "tip3", "tip4", "tip5"],
   "emergencyInfo": "Número emergencias, embajada española si aplica, hospitales principales",
   "generatedAt": "${new Date().toISOString()}",
-  "model": "Kimi k2"
+  "model": "Claude Haiku 4.5"
 }
 
 Instrucciones:
 - Sé muy específico: nombres reales de lugares, restaurantes, museos
 - Adapta al estilo ${STYLE_LABELS[plan.style]} y presupuesto ${plan.budget}${plan.currency}
 - Incluye horarios realistas con tiempo de desplazamiento
+- ${plan.mustVisitPlaces ? 'INTEGRA TODOS los sitios listados arriba de forma inteligente, sin sobrecargar cada día. Ritmo tranquilo.' : 'Selecciona los mejores lugares del destino'}
 - Costes aproximados en ${plan.currency}
 - Consejos locales que no están en las guías típicas
 - Marca con mustSee:true los imprescindibles`;
@@ -163,7 +169,16 @@ Instrucciones:
 // ─── COMPONENT ───────────────────────────────────────────────────
 const TravelPlannerView: React.FC = () => {
   const [plans, setPlans] = useState<TravelPlan[]>(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      // Auto-load NY preset if no plans yet
+      if (saved.length === 0) {
+        const preset = { ...NY_PLAN_PRESET, id: `ny_trip_${Date.now()}` };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([preset]));
+        return [preset];
+      }
+      return saved;
+    } catch { return []; }
   });
   const [view, setView] = useState<'list' | 'create' | 'detail'>('list');
   const [selectedPlan, setSelectedPlan] = useState<TravelPlan | null>(null);
@@ -179,6 +194,7 @@ const TravelPlannerView: React.FC = () => {
     travelers: 1, budget: 1000, currency: 'EUR',
     style: 'comfort' as TravelPlan['style'],
     interests: [] as string[], notes: '',
+    mustVisitPlaces: '',
   });
 
   const savePlans = (updated: TravelPlan[]) => {
@@ -200,38 +216,59 @@ const TravelPlannerView: React.FC = () => {
     setGenError('');
     try {
       const prompt = buildItineraryPrompt(plan);
-
       let responseText = '';
 
-      if (selectedModel === 'haiku') {
-        // Use Claude Haiku via Anthropic API artifact pattern
+      // Try Anthropic API directly (works in browser with correct header)
+      const tryAnthropic = async (modelId: string): Promise<string> => {
         const resp = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' },
+          headers: {
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
           body: JSON.stringify({
-            model: 'claude-haiku-4-5-20251001',
+            model: modelId,
             max_tokens: 4096,
             messages: [{ role: 'user', content: prompt }],
           }),
         });
-        if (!resp.ok) throw new Error(`Haiku API ${resp.status}`);
+        if (!resp.ok) throw new Error(`Anthropic API ${resp.status}`);
         const data = await resp.json();
-        responseText = data.content?.[0]?.text || '';
+        return data.content?.[0]?.text || '';
+      };
+
+      // Try Open WebUI / Kimi
+      const tryOpenWebUI = async (): Promise<string> => {
+        const savedConfig = localStorage.getItem('filehub_kimi_config');
+        const cfg = savedConfig ? JSON.parse(savedConfig) : {};
+        return chatWithKimi([{ role: 'user', content: prompt }], cfg, { maxTokens: 4096, temperature: 0.7 });
+      };
+
+      if (selectedModel === 'haiku') {
+        try {
+          responseText = await tryAnthropic('claude-haiku-4-5-20251001');
+        } catch {
+          // fallback to sonnet
+          try { responseText = await tryAnthropic('claude-sonnet-4-6'); }
+          catch { responseText = await tryOpenWebUI(); }
+        }
       } else {
-        // Use Kimi
-        responseText = await chatWithKimi(
-          [{ role: 'user', content: prompt }],
-          {}, { maxTokens: 4096, temperature: 0.7 }
-        );
+        // Kimi mode — try Open WebUI first, then Anthropic as fallback
+        try {
+          responseText = await tryOpenWebUI();
+        } catch {
+          try { responseText = await tryAnthropic('claude-haiku-4-5-20251001'); }
+          catch (e2: any) { throw new Error('No se pudo conectar con ningún modelo IA. Configura la API key de Kimi en el Notebook IA → ⚙️'); }
+        }
       }
 
-      // Parse JSON
-      const jsonStr = responseText
-        .replace(/```json\n?/g, '').replace(/```\n?/g, '')
-        .trim();
-      const startIdx = jsonStr.indexOf('{');
-      const endIdx = jsonStr.lastIndexOf('}');
-      const itinerary: GeneratedItinerary = JSON.parse(jsonStr.slice(startIdx, endIdx + 1));
+      // Parse JSON — extract first valid JSON object
+      const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const startIdx = cleaned.indexOf('{');
+      const endIdx = cleaned.lastIndexOf('}');
+      if (startIdx === -1 || endIdx === -1) throw new Error('La IA no devolvió JSON válido. Inténtalo de nuevo.');
+      const itinerary: GeneratedItinerary = JSON.parse(cleaned.slice(startIdx, endIdx + 1));
       itinerary.model = selectedModel === 'haiku' ? 'Claude Haiku 4.5' : 'Kimi k2';
 
       const updated = plans.map(p =>
@@ -455,6 +492,15 @@ const TravelPlannerView: React.FC = () => {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Must-visit places */}
+        <div>
+          <label className="text-xs font-black uppercase tracking-wider text-slate-500 mb-1.5 block">📍 Sitios que quiero visitar</label>
+          <textarea value={form.mustVisitPlaces} onChange={e => setForm(f => ({ ...f, mustVisitPlaces: e.target.value }))}
+            placeholder="Pega aquí tu lista de sitios (uno por línea):&#10;- Times Square&#10;- Central Park&#10;- MOMA&#10;- Brooklyn Bridge..."
+            rows={5} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 font-mono" />
+          <p className="text-[10px] text-slate-400 mt-1">La IA los distribuirá en los días de forma equilibrada y sin agobios</p>
         </div>
 
         {/* Notes */}
