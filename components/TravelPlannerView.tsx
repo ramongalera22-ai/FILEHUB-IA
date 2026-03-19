@@ -7,6 +7,7 @@ import {
   ExternalLink, Heart, HeartOff, Bot, Send
 } from 'lucide-react';
 import { chatWithKimi } from '../services/kimiService';
+import { callAI } from '../services/aiProxy';
 import { NY_PLAN_PRESET } from '../data/nyItinerary';
 
 // ─── TYPES ───────────────────────────────────────────────────────
@@ -220,64 +221,22 @@ const TravelPlannerView: React.FC = () => {
     setGenError('');
     try {
       const prompt = buildItineraryPrompt(plan);
-      let responseText = '';
 
-      // Try Anthropic API directly (works in browser with correct header)
-      const tryAnthropic = async (modelId: string): Promise<string> => {
-        const resp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-          },
-          body: JSON.stringify({
-            model: modelId,
-            max_tokens: 4096,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        });
-        if (!resp.ok) throw new Error(`Anthropic API ${resp.status}`);
-        const data = await resp.json();
-        return data.content?.[0]?.text || '';
-      };
+      // callAI: Railway proxy → Anthropic direct → Kimi fallback
+      const responseText = await callAI(
+        [{ role: 'user', content: prompt }],
+        { model: 'claude-haiku-4-5-20251001', maxTokens: 4096 }
+      );
 
-      // Try Open WebUI / Kimi
-      const tryOpenWebUI = async (): Promise<string> => {
-        const savedConfig = localStorage.getItem('filehub_kimi_config');
-        const cfg = savedConfig ? JSON.parse(savedConfig) : {};
-        return chatWithKimi([{ role: 'user', content: prompt }], cfg, { maxTokens: 4096, temperature: 0.7 });
-      };
-
-      if (selectedModel === 'haiku') {
-        try {
-          responseText = await tryAnthropic('claude-haiku-4-5-20251001');
-        } catch {
-          // fallback to sonnet
-          try { responseText = await tryAnthropic('claude-sonnet-4-6'); }
-          catch { responseText = await tryOpenWebUI(); }
-        }
-      } else {
-        // Kimi mode — try Open WebUI first, then Anthropic as fallback
-        try {
-          responseText = await tryOpenWebUI();
-        } catch {
-          try { responseText = await tryAnthropic('claude-haiku-4-5-20251001'); }
-          catch (e2: any) { throw new Error('No se pudo conectar con ningún modelo IA. Configura la API key de Kimi en el Notebook IA → ⚙️'); }
-        }
-      }
-
-      // Parse JSON — extract first valid JSON object
+      // Parse JSON
       const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const startIdx = cleaned.indexOf('{');
       const endIdx = cleaned.lastIndexOf('}');
       if (startIdx === -1 || endIdx === -1) throw new Error('La IA no devolvió JSON válido. Inténtalo de nuevo.');
       const itinerary: GeneratedItinerary = JSON.parse(cleaned.slice(startIdx, endIdx + 1));
-      itinerary.model = selectedModel === 'haiku' ? 'Claude Haiku 4.5' : 'Kimi k2';
+      itinerary.model = 'Claude Haiku 4.5';
 
-      const updated = plans.map(p =>
-        p.id === plan.id ? { ...p, itinerary } : p
-      );
+      const updated = plans.map(p => p.id === plan.id ? { ...p, itinerary } : p);
       savePlans(updated);
       setSelectedPlan({ ...plan, itinerary });
     } catch (err: any) {
@@ -333,45 +292,14 @@ INSTRUCCIONES:
 - Preserva TODOS los días y actividades que no se modifican.`;
 
     try {
-      const tryAnthropic = async (model: string) => {
-        const resp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-          },
-          body: JSON.stringify({
-            model,
-            max_tokens: isModification ? 8000 : 1024,
-            system: systemPrompt,
-            messages: [
-              ...newMessages.slice(-6).map(m => ({ role: m.role, content: m.content })),
-            ],
-          }),
-        });
-        if (!resp.ok) throw new Error(`${resp.status}`);
-        const data = await resp.json();
-        return data.content?.[0]?.text || '';
-      };
-
-      const tryKimi = async () => {
-        const savedConfig = localStorage.getItem('filehub_kimi_config');
-        const cfg = savedConfig ? JSON.parse(savedConfig) : {};
-        return chatWithKimi(
-          [...newMessages.slice(-6).map(m => ({ role: m.role as 'user'|'assistant', content: m.content }))],
-          cfg,
-          { systemPrompt, maxTokens: isModification ? 8000 : 1024 }
-        );
-      };
-
-      let responseText = '';
-      try {
-        responseText = await tryAnthropic('claude-haiku-4-5-20251001');
-      } catch {
-        try { responseText = await tryAnthropic('claude-sonnet-4-6'); }
-        catch { responseText = await tryKimi(); }
-      }
+      const responseText = await callAI(
+        newMessages.slice(-6).map(m => ({ role: m.role as 'user'|'assistant', content: m.content })),
+        {
+          system: systemPrompt,
+          model: 'claude-haiku-4-5-20251001',
+          maxTokens: isModification ? 8000 : 1024,
+        }
+      );
 
       // Check if response contains itinerary update
       const updateMatch = responseText.match(/<ITINERARY_UPDATE>([\s\S]*?)<\/ITINERARY_UPDATE>/);
@@ -411,7 +339,7 @@ INSTRUCCIONES:
     } catch (err: any) {
       setChatMessages(prev => [...prev, {
         role: 'assistant',
-        content: `❌ Error: ${err.message}. Configura la API key de Kimi en Notebook → ⚙️`
+        content: `❌ ${err.message}`
       }]);
     }
     setIsChatting(false);

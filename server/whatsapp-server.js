@@ -670,6 +670,44 @@ app.delete('/favorites/pisos/:id', async (req, res) => {
 
 // ── EMAIL ────────────────────────────────────────────────────────
 const nodemailer = require('nodemailer');
+
+// ── ANTHROPIC PROXY ───────────────────────────────────────────────
+// Soluciona el bloqueo CORS en Safari/iOS — el servidor llama a Anthropic
+// en lugar del navegador. Sin API key propia usa la del env.
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+
+app.post('/ai/chat', async (req, res) => {
+  const { messages, system, model = 'claude-haiku-4-5-20251001', max_tokens = 4096 } = req.body;
+  if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'messages requerido' });
+
+  // Si no hay API key en el servidor, intentar reenviar sin key
+  // (funciona si el cliente ya la envía en headers)
+  const apiKey = ANTHROPIC_API_KEY || req.headers['x-anthropic-key'] || '';
+
+  try {
+    const body = { model, max_tokens, messages };
+    if (system) body.system = system;
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    };
+    if (apiKey) headers['x-api-key'] = apiKey;
+
+    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000)
+    });
+
+    const data = await upstream.json();
+    if (!upstream.ok) return res.status(upstream.status).json(data);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.post('/send-email', async (req, res) => {
     const { to, subject, html, gmailUser, gmailAppPassword } = req.body;
     if (!to||!subject||!html) return res.status(400).json({ error:'Faltan to, subject, html' });

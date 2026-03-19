@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Task, CalendarEvent } from '../types';
 import { chatWithKimi } from '../services/kimiService';
+import { callAI } from '../services/aiProxy';
 
 // ─── TYPES ────────────────────────────────────────────────────────
 interface PlannedSlot { id: string; taskId: string; date: string; startTime: string; duration: number; done: boolean; }
@@ -266,19 +267,10 @@ Tienes acceso a:
 Ayúdale a organizar su tiempo de forma inteligente. Sé conciso y práctico. Responde en español.`;
 
     try {
-      const tryAnthropic = async (model: string) => {
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-          body: JSON.stringify({ model, max_tokens: 1024, system: systemPrompt, messages: newMsgs.slice(-6).map(m => ({ role: m.role, content: m.content })) }),
-        });
-        if (!r.ok) throw new Error(`${r.status}`);
-        return (await r.json()).content?.[0]?.text || '';
-      };
-
-      let response = '';
-      try { response = await tryAnthropic('claude-haiku-4-5-20251001'); }
-      catch { try { response = await tryAnthropic('claude-sonnet-4-6'); } catch { response = await chatWithKimi(newMsgs.slice(-6).map(m => ({ role: m.role as any, content: m.content })), {}, { systemPrompt, maxTokens: 1024 }); } }
+      const response = await callAI(
+        newMsgs.slice(-6).map(m => ({ role: m.role as 'user'|'assistant', content: m.content })),
+        { system: systemPrompt, model: 'claude-haiku-4-5-20251001', maxTokens: 1024 }
+      );
       setAiChatMessages(prev => [...prev, { role: 'assistant', content: response }]);
     } catch (e: any) {
       setAiChatMessages(prev => [...prev, { role: 'assistant', content: `❌ ${e.message}` }]);
