@@ -191,7 +191,7 @@ const TravelPlannerView: React.FC = () => {
   const [chatInput, setChatInput] = useState('');
   const [isChatting, setIsChatting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const [selectedModel, setSelectedModel] = useState<'kimi' | 'haiku'>('kimi');
+  const [selectedModel, setSelectedModel] = useState<'kimi' | 'haiku'>('haiku');
 
   const [form, setForm] = useState({
     destination: '', origin: 'Murcia, España', startDate: '', endDate: '',
