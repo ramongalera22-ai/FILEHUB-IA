@@ -1,0 +1,48 @@
+name: Deploy FileHub IA
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          VITE_GROQ_KEY: ${{ secrets.VITE_GROQ_KEY }}
+          VITE_OPENROUTER_KEY: ${{ secrets.VITE_OPENROUTER_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_OPEN_WEBUI_URL: ${{ secrets.VITE_OPEN_WEBUI_URL }}
+          VITE_OPEN_WEBUI_API_KEY: ${{ secrets.VITE_OPEN_WEBUI_API_KEY }}
+          VITE_WA_SERVER_URL: ${{ secrets.VITE_WA_SERVER_URL }}
+          VITE_WA_WS_URL: ${{ secrets.VITE_WA_WS_URL }}
+        run: |
+          npm run build -- --base=/FILEHUB-IA/
+          cp dist/index.html dist/404.html
+          cp sw.js dist/sw.js
+          cp manifest.json dist/manifest.json
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
