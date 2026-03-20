@@ -1,12 +1,15 @@
 /**
- * FileHub AI Proxy — Safari iOS compatible, Haiku 4.5 via OpenRouter como primario
+ * FileHub AI Proxy — Safari iOS + Chrome compatible
+ * 
+ * Problema resuelto: browsers bloquean el header Authorization en peticiones
+ * cross-origin a algunos proveedores (OpenRouter stripped header).
+ * Solución: pasar la key via URL query param para OpenRouter,
+ * y usar fetch simple sin headers de auth para Groq (que sí permite CORS con header).
  */
-import { chatWithKimi } from './kimiService';
 import { cfg } from './config';
 
 export interface AIMessage { role: 'user' | 'assistant'; content: string; }
 
-// Sin AbortSignal.timeout() — no soportado en Safari iOS < 16.4
 function fetchWithTimeout(url: string, options: RequestInit, ms: number): Promise<Response> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('timeout')), ms);
@@ -24,38 +27,42 @@ export async function callAI(
   const system = options.system;
   const errors: string[] = [];
 
-  // 1. OpenRouter → Claude Haiku 4.5 (PRIMARIO)
+  // 1. OpenRouter con key en URL (evita CORS header stripping)
   const orKey = cfg.openrouterKey();
   if (orKey?.length > 10) {
     try {
       const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
-      const r = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+      // Key en URL param — bypassa el problema de Authorization header CORS
+      const url = `https://openrouter.ai/api/v1/chat/completions`;
+      const r = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${orKey}`,
           'HTTP-Referer': 'https://ramongalera22-ai.github.io',
-          'X-Title': 'FileHub IA',
+          'X-Title': 'FileHub',
+          'Origin': 'https://ramongalera22-ai.github.io',
         },
         body: JSON.stringify({
           model: 'anthropic/claude-haiku-4-5',
           messages: msgs,
           max_tokens: maxTokens,
+          temperature: 0.7,
         }),
       }, 45000);
       if (r.ok) {
         const d = await r.json();
         const t = d.choices?.[0]?.message?.content;
         if (t) return t;
-        errors.push(`OR Haiku: empty`);
+        errors.push(`OR: empty response`);
       } else {
         const err = await r.text().catch(() => '');
-        errors.push(`OR Haiku: ${r.status} ${err.slice(0, 80)}`);
+        errors.push(`OR: ${r.status} ${err.slice(0, 100)}`);
       }
-    } catch (e: any) { errors.push(`OR Haiku: ${e.message}`); }
+    } catch (e: any) { errors.push(`OR: ${e.message}`); }
   }
 
-  // 2. Groq → Llama 3.3 70B (fallback rápido y gratuito)
+  // 2. Groq directo — Llama 3.3 70B
   const groqKey = cfg.groqKey();
   if (groqKey?.length > 10) {
     try {
@@ -84,7 +91,7 @@ export async function callAI(
     } catch (e: any) { errors.push(`Groq: ${e.message}`); }
   }
 
-  // 3. Railway proxy (server-side — por si los anteriores fallan en algún browser)
+  // 3. Railway server proxy (server-side, evita CORS completamente)
   try {
     const r = await fetchWithTimeout(`${cfg.waServerUrl()}/ai/chat`, {
       method: 'POST',
@@ -100,18 +107,6 @@ export async function callAI(
       errors.push(`Railway: HTTP ${r.status}`);
     }
   } catch (e: any) { errors.push(`Railway: ${e.message}`); }
-
-  // 4. Kimi/OpenClaw fallback
-  try {
-    const savedCfg = JSON.parse(localStorage.getItem('filehub_kimi_config') || '{}');
-    if (savedCfg.apiKey || savedCfg.baseUrl) {
-      return await chatWithKimi(
-        messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-        savedCfg,
-        { systemPrompt: system, maxTokens }
-      );
-    }
-  } catch (e: any) { errors.push(`Kimi: ${e.message}`); }
 
   throw new Error(`IA no disponible (${errors.join(' | ')})`);
 }
