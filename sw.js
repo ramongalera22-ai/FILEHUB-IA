@@ -6,7 +6,7 @@
  * - Push notifications para guardias y presupuesto
  */
 
-const CACHE_VERSION = 'filehub-v17-1773981342';
+const CACHE_VERSION = 'filehub-v18-1773981371';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const OFFLINE_PAGE = '/FILEHUB-IA/index.html';
@@ -32,6 +32,8 @@ const CACHEABLE_HOSTS = [
 const NO_CACHE_PATTERNS = [
   'api.anthropic.com',
   'api.moonshot.cn',
+  'api.groq.com',
+  'openrouter.ai',
   'supabase.co',
   'railway.app',
   'wttr.in',
