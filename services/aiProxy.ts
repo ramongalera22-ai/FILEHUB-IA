@@ -1,19 +1,18 @@
 /**
- * FileHub AI Proxy — multi-provider, compatible con Safari iOS 14+
- * Sin AbortSignal.timeout() — usa setTimeout manual para compatibilidad
+ * FileHub AI Proxy — Safari iOS compatible
+ * fetchWithTimeout: sin AbortSignal.timeout() (no soportado iOS<16.4)
  */
 import { chatWithKimi } from './kimiService';
 import { cfg } from './config';
 
 export interface AIMessage { role: 'user' | 'assistant'; content: string; }
 
-// Safari-safe timeout wrapper
 function fetchWithTimeout(url: string, options: RequestInit, ms: number): Promise<Response> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
     fetch(url, options)
-      .then(r => { clearTimeout(timer); resolve(r); })
-      .catch(e => { clearTimeout(timer); reject(e); });
+      .then(r => { clearTimeout(t); resolve(r); })
+      .catch(e => { clearTimeout(t); reject(e); });
   });
 }
 
@@ -25,7 +24,7 @@ export async function callAI(
   const system = options.system;
   const errors: string[] = [];
 
-  // 1. Railway proxy (server-side — resuelve CORS iOS/Safari)
+  // 1. Railway proxy (server-side — no CORS, usa Groq/OpenRouter server-side)
   try {
     const r = await fetchWithTimeout(`${cfg.waServerUrl()}/ai/chat`, {
       method: 'POST',
@@ -36,92 +35,76 @@ export async function callAI(
       const d = await r.json();
       const t = d.content?.[0]?.text;
       if (t) return t;
-      errors.push(`Railway: no text in response`);
+      errors.push(`Railway: empty response`);
     } else {
       errors.push(`Railway: HTTP ${r.status}`);
     }
   } catch (e: any) { errors.push(`Railway: ${e.message}`); }
 
-  // 2. Groq directo (Llama 3.3 70B — CORS abierto, gratis)
-  try {
-    const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
-    const r = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.groqKey()}` },
-      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: msgs, max_tokens: maxTokens }),
-    }, 30000);
-    if (r.ok) {
-      const d = await r.json();
-      const t = d.choices?.[0]?.message?.content;
-      if (t) return t;
-      errors.push(`Groq: no text`);
-    } else {
-      const err = await r.text().catch(() => '');
-      errors.push(`Groq: HTTP ${r.status} ${err.slice(0, 80)}`);
-    }
-  } catch (e: any) { errors.push(`Groq: ${e.message}`); }
+  // 2. Groq directo — NUEVO KEY (ver console.groq.com)
+  const groqKey = cfg.groqKey();
+  if (groqKey && groqKey.length > 10) {
+    try {
+      const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
+      const r = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: msgs, max_tokens: maxTokens }),
+      }, 30000);
+      if (r.ok) {
+        const d = await r.json();
+        const t = d.choices?.[0]?.message?.content;
+        if (t) return t;
+      } else {
+        const err = await r.text().catch(() => '');
+        errors.push(`Groq: ${r.status} ${err.slice(0, 60)}`);
+      }
+    } catch (e: any) { errors.push(`Groq: ${e.message}`); }
+  }
 
-  // 3. OpenRouter (CORS abierto, múltiples modelos)
-  try {
-    const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
-    const r = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cfg.openrouterKey()}`,
-        'HTTP-Referer': 'https://ramongalera22-ai.github.io',
-        'X-Title': 'FileHub IA',
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
-        messages: msgs,
-        max_tokens: maxTokens,
-      }),
-    }, 45000);
-    if (r.ok) {
-      const d = await r.json();
-      const t = d.choices?.[0]?.message?.content;
-      if (t) return t;
-      errors.push(`OpenRouter: no text`);
-    } else {
-      const err = await r.text().catch(() => '');
-      errors.push(`OpenRouter: HTTP ${r.status} ${err.slice(0, 80)}`);
-    }
-  } catch (e: any) { errors.push(`OpenRouter: ${e.message}`); }
+  // 3. OpenRouter — con x-api-key header (evita que el browser lo strip)
+  const orKey = cfg.openrouterKey();
+  if (orKey && orKey.length > 10) {
+    try {
+      const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
+      const r = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${orKey}`,
+          'x-api-key': orKey,
+          'HTTP-Referer': 'https://ramongalera22-ai.github.io',
+          'X-Title': 'FileHub',
+        },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          messages: msgs,
+          max_tokens: maxTokens,
+        }),
+      }, 45000);
+      if (r.ok) {
+        const d = await r.json();
+        const t = d.choices?.[0]?.message?.content;
+        if (t) return t;
+      } else {
+        const err = await r.text().catch(() => '');
+        errors.push(`OpenRouter: ${r.status} ${err.slice(0, 60)}`);
+      }
+    } catch (e: any) { errors.push(`OpenRouter: ${e.message}`); }
+  }
 
-  // 4. Anthropic directo (header especial para browser)
-  try {
-    const body: any = { model: 'claude-haiku-4-5-20251001', max_tokens: maxTokens, messages };
-    if (system) body.system = system;
-    const r = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify(body),
-    }, 60000);
-    if (r.ok) {
-      const d = await r.json();
-      const t = d.content?.[0]?.text;
-      if (t) return t;
-      errors.push(`Anthropic: no text`);
-    } else {
-      errors.push(`Anthropic: HTTP ${r.status}`);
-    }
-  } catch (e: any) { errors.push(`Anthropic: ${e.message}`); }
-
-  // 5. Kimi fallback
+  // 4. Kimi/OpenClaw fallback
   try {
     const savedCfg = JSON.parse(localStorage.getItem('filehub_kimi_config') || '{}');
-    return await chatWithKimi(
-      messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-      savedCfg,
-      { systemPrompt: system, maxTokens }
-    );
+    if (savedCfg.apiKey || savedCfg.baseUrl) {
+      return await chatWithKimi(
+        messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+        savedCfg,
+        { systemPrompt: system, maxTokens }
+      );
+    }
+    errors.push('Kimi: no config');
   } catch (e: any) { errors.push(`Kimi: ${e.message}`); }
 
-  // Show specific errors to help debug
-  throw new Error(`IA no disponible. Errores: ${errors.join(' | ')}`);
+  throw new Error(`IA no disponible (${errors.join(' | ')})`);
 }
