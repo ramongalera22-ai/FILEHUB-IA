@@ -75,25 +75,33 @@ const Dashboard: React.FC<DashboardProps> = ({
    const [loadingBriefing, setLoadingBriefing] = useState(false);
    const [weatherCity, setWeatherCity] = useState<'murcia' | 'barcelona' | 'custom'>('murcia');
    const [customCity, setCustomCity] = useState('');
-   const [weather, setWeather] = useState<Record<string, {temp: string; desc: string; icon: string}>>({});
+   const [weather, setWeather] = useState<Record<string, {temp: string; desc: string; icon: string; cityName?: string}>>({});
    const currentHour = new Date().getHours();
    const greeting = currentHour < 12 ? '☀️ Buenos días' : currentHour < 18 ? '🌤️ Buenas tardes' : '🌙 Buenas noches';
 
    const fetchWeather = (city: string) => {
-     if (weather[city]) return; // already loaded
-     fetch(`https://wttr.in/${encodeURIComponent(city)}?format=%t|%C|%h`)
-       .then(r => r.text())
-       .then(text => {
-         const [temp, desc, humidity] = text.split('|');
-         const t = temp?.trim() || '--';
-         const icon = desc?.toLowerCase().includes('sun') || desc?.toLowerCase().includes('clear') ? '☀️' :
-                      desc?.toLowerCase().includes('cloud') ? '⛅' :
-                      desc?.toLowerCase().includes('rain') ? '🌧️' :
-                      desc?.toLowerCase().includes('snow') ? '❄️' :
-                      desc?.toLowerCase().includes('storm') ? '⛈️' : '🌤️';
-         setWeather(prev => ({ ...prev, [city]: { temp: t, desc: desc?.trim() || '', icon } }));
+     if (weather[city]) return;
+     // Use wttr.in JSON API — more reliable, gives proper city name
+     fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`)
+       .then(r => r.json())
+       .then(data => {
+         const current = data?.current_condition?.[0];
+         const area = data?.nearest_area?.[0];
+         const temp = current?.temp_C ? `${current.temp_C}°C` : '--';
+         const desc = current?.weatherDesc?.[0]?.value || '';
+         const cityName = area?.areaName?.[0]?.value || city;
+         const country = area?.country?.[0]?.value || '';
+         const d = desc.toLowerCase();
+         const icon = d.includes('sun') || d.includes('clear') ? '☀️' :
+                      d.includes('partly') ? '⛅' :
+                      d.includes('cloud') || d.includes('overcast') ? '☁️' :
+                      d.includes('rain') || d.includes('drizzle') ? '🌧️' :
+                      d.includes('snow') ? '❄️' :
+                      d.includes('storm') || d.includes('thunder') ? '⛈️' :
+                      d.includes('fog') || d.includes('mist') ? '🌫️' : '🌤️';
+         setWeather(prev => ({ ...prev, [city]: { temp, desc, icon, cityName: cityName + (country ? `, ${country}` : '') } }));
        }).catch(() => {
-         setWeather(prev => ({ ...prev, [city]: { temp: '--', desc: 'Sin datos', icon: '🌤️' } }));
+         setWeather(prev => ({ ...prev, [city]: { temp: '--', desc: 'Sin datos', icon: '🌤️', cityName: city } }));
        });
    };
 
@@ -374,7 +382,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                              <div className="flex items-end justify-between">
                                <div>
                                  <div className="text-3xl font-black text-slate-800 dark:text-white">{w.temp}</div>
-                                 <div className="text-xs text-slate-500 truncate max-w-[100px]">{w.desc}</div>
+                                 <div className="text-xs text-slate-500 truncate max-w-[110px]">{w.desc}</div>
+                                 {w.cityName && <div className="text-[10px] text-slate-400 truncate max-w-[110px] mt-0.5">📍 {w.cityName}</div>}
                                </div>
                                <div className="text-right">
                                  <div className="text-2xl">{w.icon}</div>

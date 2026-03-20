@@ -172,9 +172,6 @@ const AIHubView: React.FC<AIHubViewProps> = ({
         responseText = await chatWithKimi([{ role: 'user', content: input }], kimiCfg, {
           systemPrompt: globalContext ? `Contexto del usuario:\n${JSON.stringify(globalContext).substring(0, 2000)}\n\nEres el asistente IA de FileHub para Carlos. Responde siempre en español.` : undefined
         });
-      } else if (mode === 'cloud') {
-        const res = await chatWithGemini(input, globalContext);
-        responseText = res.text;
       } else if (mode === 'local') {
         responseText = await chatWithOllama(input, ollamaConfig, globalContext);
       } else if (mode === 'openwebui') {
@@ -244,7 +241,6 @@ const AIHubView: React.FC<AIHubViewProps> = ({
         <div className="flex bg-white dark:bg-slate-900 p-2 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-sm overflow-x-auto no-scrollbar gap-2">
           {[
             { id: 'kimi', label: '🌙 Kimi 2.5', icon: Zap, color: 'bg-violet-600' },
-            { id: 'cloud', label: 'Cloud', icon: Cloud, color: 'bg-indigo-600' },
             { id: 'local', label: 'Ollama', icon: Server, color: 'bg-cyan-500' },
             { id: 'notebook', label: 'Knowledge', icon: Library, color: 'bg-amber-500' },
             { id: 'anything', label: 'AnythingLLM', icon: Sparkles, color: 'bg-purple-600' },
@@ -341,7 +337,7 @@ const AIHubView: React.FC<AIHubViewProps> = ({
 
             <div className="space-y-4 relative z-10">
               {[
-                { label: 'Gemini Cloud', status: 'online', icon: Cloud, color: 'text-indigo-400' },
+                { label: 'Kimi 2.5 (Groq)', status: 'online', icon: Zap, color: 'text-violet-400' },
                 { label: 'Ollama Node', status: localStatus, icon: Server, color: 'text-cyan-400' },
                 { label: 'OpenNotebook', status: notebookStatus, icon: Library, color: 'text-amber-400' },
                 { label: 'AnythingLLM', status: anythingStatus, icon: Sparkles, color: 'text-purple-400' },

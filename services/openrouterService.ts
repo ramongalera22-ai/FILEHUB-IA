@@ -1,46 +1,28 @@
 /**
  * openrouterService.ts
- * Drop-in replacement for geminiService using OpenRouter / Claude Haiku 4.5
+ * Drop-in replacement for geminiService using OpenRouter / Groq via aiProxy
  * All functions maintain the same signatures as geminiService for compatibility
  */
 
 import { CalendarEvent, DayPlan, Task } from '../types';
+import { callAI } from './aiProxy';
 
-const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
-const MODEL = 'moonshotai/kimi-k2.5';
-const BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const REFERER = 'https://ramongalera22-ai.github.io/FILEHUB-IA';
+const MODEL = 'llama-3.3-70b-versatile';
 
-// ── Core fetch helper ─────────────────────────────────────────────────────────
+// ── Core fetch helper — uses aiProxy chain (Railway→Groq→OpenRouter→Anthropic) ──
 async function orFetch(
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
   maxTokens = 1200,
   temperature = 0.7
 ): Promise<string> {
-  if (!OPENROUTER_KEY) {
-    console.warn('VITE_OPENROUTER_KEY not set');
-    return 'Configura tu API key de OpenRouter en Settings (VITE_OPENROUTER_KEY).';
-  }
   try {
-    const res = await fetch(BASE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENROUTER_KEY}`,
-        'HTTP-Referer': REFERER,
-        'X-Title': 'FILEHUB IA',
-      },
-      body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, temperature, messages }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      console.error('OpenRouter error:', err);
-      return `Error de API (${res.status}). Verifica tu API key de OpenRouter.`;
-    }
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || 'Sin respuesta.';
+    const system = messages.find(m => m.role === 'system')?.content;
+    const userMsgs = messages.filter(m => m.role !== 'system').map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+    return await callAI(userMsgs, { system, maxTokens });
   } catch (e: any) {
-    console.error('OpenRouter fetch error:', e);
     return `Error de conexión: ${e?.message || e}`;
   }
 }
