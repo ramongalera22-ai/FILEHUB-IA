@@ -674,40 +674,95 @@ const nodemailer = require('nodemailer');
 // ── ANTHROPIC PROXY ───────────────────────────────────────────────
 // Soluciona el bloqueo CORS en Safari/iOS — el servidor llama a Anthropic
 // en lugar del navegador. Sin API key propia usa la del env.
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+// ── API KEYS ──────────────────────────────────────────────────────
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
+const GROQ_KEY       = process.env.GROQ_API_KEY       || '';
+const ANTHROPIC_KEY  = process.env.ANTHROPIC_API_KEY  || '';
 
+// ── AI CHAT PROXY ─────────────────────────────────────────────────
+// Orden de preferencia: Groq (gratis+rápido) → OpenRouter → Anthropic directa
 app.post('/ai/chat', async (req, res) => {
-  const { messages, system, model = 'claude-haiku-4-5-20251001', max_tokens = 4096 } = req.body;
+  const { messages, system, model, max_tokens = 2048 } = req.body;
   if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'messages requerido' });
 
-  // Si no hay API key en el servidor, intentar reenviar sin key
-  // (funciona si el cliente ya la envía en headers)
-  const apiKey = ANTHROPIC_API_KEY || req.headers['x-anthropic-key'] || '';
+  const errors = [];
 
+  // ── 1. GROQ (gratuito, muy rápido, llama a llama-3.3-70b o mixtral) ──
   try {
-    const body = { model, max_tokens, messages };
-    if (system) body.system = system;
+    const groqModel = model?.includes('haiku') || !model ? 'llama-3.3-70b-versatile' : 'llama-3.3-70b-versatile';
+    const groqMessages = system
+      ? [{ role: 'system', content: system }, ...messages]
+      : messages;
 
-    const headers = {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-    };
-    if (apiKey) headers['x-api-key'] = apiKey;
-
-    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(60000)
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_KEY}` },
+      body: JSON.stringify({ model: groqModel, messages: groqMessages, max_tokens, temperature: 0.7 }),
+      signal: AbortSignal.timeout(30000)
     });
+    if (r.ok) {
+      const data = await r.json();
+      const text = data.choices?.[0]?.message?.content;
+      if (text) {
+        // Return in Anthropic format so client code works unchanged
+        return res.json({ content: [{ type: 'text', text }], provider: 'groq', model: groqModel });
+      }
+    }
+    const err = await r.text().catch(() => r.status);
+    errors.push(`Groq ${r.status}: ${String(err).slice(0,100)}`);
+  } catch (e) { errors.push(`Groq: ${e.message}`); }
 
-    const data = await upstream.json();
-    if (!upstream.ok) return res.status(upstream.status).json(data);
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  // ── 2. OPENROUTER (acceso a Claude, GPT-4o, Llama, Mistral...) ──
+  try {
+    const orModel = model || 'anthropic/claude-haiku-4-5';
+    const orMessages = system
+      ? [{ role: 'system', content: system }, ...messages]
+      : messages;
+
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENROUTER_KEY}`,
+        'HTTP-Referer': 'https://ramongalera22-ai.github.io',
+        'X-Title': 'FileHub IA'
+      },
+      body: JSON.stringify({ model: orModel, messages: orMessages, max_tokens, temperature: 0.7 }),
+      signal: AbortSignal.timeout(45000)
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const text = data.choices?.[0]?.message?.content;
+      if (text) {
+        return res.json({ content: [{ type: 'text', text }], provider: 'openrouter', model: orModel });
+      }
+    }
+    const err = await r.text().catch(() => r.status);
+    errors.push(`OpenRouter ${r.status}: ${String(err).slice(0,100)}`);
+  } catch (e) { errors.push(`OpenRouter: ${e.message}`); }
+
+  // ── 3. ANTHROPIC directa (si hay key configurada) ──────────────
+  if (ANTHROPIC_KEY) {
+    try {
+      const body = { model: model || 'claude-haiku-4-5-20251001', max_tokens, messages };
+      if (system) body.system = system;
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'x-api-key': ANTHROPIC_KEY },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60000)
+      });
+      if (r.ok) {
+        const data = await r.json();
+        return res.json({ ...data, provider: 'anthropic' });
+      }
+      errors.push(`Anthropic ${r.status}`);
+    } catch (e) { errors.push(`Anthropic: ${e.message}`); }
   }
+
+  res.status(502).json({ error: 'Todos los proveedores fallaron', details: errors });
 });
+
 app.post('/send-email', async (req, res) => {
     const { to, subject, html, gmailUser, gmailAppPassword } = req.body;
     if (!to||!subject||!html) return res.status(400).json({ error:'Faltan to, subject, html' });
