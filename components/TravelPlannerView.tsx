@@ -929,10 +929,14 @@ INSTRUCCIONES:
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <p className="font-black text-sm text-violet-700 dark:text-violet-400">Chat IA — modifica el itinerario</p>
-                      <button onClick={() => setShowProxySettings(p => !p)}
-                        className="text-[10px] font-bold px-2 py-1 bg-violet-100 dark:bg-violet-500/20 text-violet-600 rounded-lg hover:bg-violet-200 transition-all">
-                        ⚙️ {proxyUrl ? '✅ Proxy' : 'Config IA'}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-black px-2 py-0.5 bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg">Groq</span>
+                        <span className="text-[9px] font-black px-2 py-0.5 bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 rounded-lg">Haiku 4.5</span>
+                        <button onClick={() => setShowProxySettings(p => !p)}
+                          className="text-[10px] font-bold px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-lg hover:bg-slate-200 transition-all">
+                          ⚙️
+                        </button>
+                      </div>
                     </div>
                     <p className="text-xs text-violet-600/70 dark:text-violet-400/60 mt-0.5">Los cambios se aplican y guardan automáticamente</p>
                     {showProxySettings && (
@@ -988,6 +992,7 @@ INSTRUCCIONES:
                     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2">
                       <Loader2 size={12} className="animate-spin text-violet-500"/>
                       <span className="text-xs text-slate-400">Pensando...</span>
+                      <span className="text-[9px] font-black bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded">Groq · Haiku 4.5</span>
                       {[0,1,2].map(i=><div key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:`${i*0.12}s`}}/>)}
                     </div>
                   </div>
@@ -1003,6 +1008,12 @@ INSTRUCCIONES:
                   className="self-end p-2.5 bg-gradient-to-br from-violet-500 to-indigo-600 text-white rounded-xl hover:opacity-90 disabled:opacity-40 transition-all shadow-sm">
                   {isChatting?<Loader2 size={15} className="animate-spin"/>:<Send size={15}/>}
                 </button>
+              </div>
+              <div className="flex items-center justify-center gap-2 mt-1">
+                <span className="text-[9px] font-black px-2 py-0.5 bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg">⚡ Groq Llama 3.3</span>
+                <span className="text-[9px] text-slate-400">·</span>
+                <span className="text-[9px] font-black px-2 py-0.5 bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 rounded-lg">🤖 Claude Haiku 4.5</span>
+                <span className="text-[9px] text-slate-400">· Enter para enviar</span>
               </div>
             </div>
           )}
