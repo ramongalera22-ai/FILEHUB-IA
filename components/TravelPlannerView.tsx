@@ -193,6 +193,14 @@ const TravelPlannerView: React.FC = () => {
   const [isChatting, setIsChatting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [selectedModel, setSelectedModel] = useState<'kimi' | 'haiku'>('haiku');
+  const [showProxySettings, setShowProxySettings] = useState(false);
+  const [proxyUrl, setProxyUrl] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('filehub_ai_proxy') || '{}').url || ''; } catch { return ''; }
+  });
+  const saveProxyUrl = (url: string) => {
+    setProxyUrl(url);
+    localStorage.setItem('filehub_ai_proxy', JSON.stringify({ url }));
+  };
 
   const [form, setForm] = useState({
     destination: '', origin: 'Murcia, España', startDate: '', endDate: '',
@@ -919,8 +927,32 @@ INSTRUCCIONES:
                     <Bot size={16} className="text-white"/>
                   </div>
                   <div className="flex-1">
-                    <p className="font-black text-sm text-violet-700 dark:text-violet-400">Chat IA — modifica el itinerario</p>
+                    <div className="flex items-center justify-between">
+                      <p className="font-black text-sm text-violet-700 dark:text-violet-400">Chat IA — modifica el itinerario</p>
+                      <button onClick={() => setShowProxySettings(p => !p)}
+                        className="text-[10px] font-bold px-2 py-1 bg-violet-100 dark:bg-violet-500/20 text-violet-600 rounded-lg hover:bg-violet-200 transition-all">
+                        ⚙️ {proxyUrl ? '✅ Proxy' : 'Config IA'}
+                      </button>
+                    </div>
                     <p className="text-xs text-violet-600/70 dark:text-violet-400/60 mt-0.5">Los cambios se aplican y guardan automáticamente</p>
+                    {showProxySettings && (
+                      <div className="mt-2 bg-white dark:bg-slate-800 rounded-xl border border-violet-200 dark:border-violet-500/20 p-3 space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-violet-600">🔧 URL Proxy Cloudflare Worker</p>
+                        <input value={proxyUrl} onChange={e => saveProxyUrl(e.target.value)}
+                          placeholder="https://filehub-ai-proxy.TU-USUARIO.workers.dev"
+                          className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-violet-400"/>
+                        <div className="bg-amber-50 dark:bg-amber-500/10 rounded-lg p-2 text-[10px] text-amber-700 dark:text-amber-300 space-y-0.5">
+                          <p className="font-bold mb-1">Desde Terminal en tu Mac:</p>
+                          <p className="font-mono">npm install -g wrangler && wrangler login</p>
+                          <p className="font-mono">cd ~/Desktop/filehub/cloudflare-worker</p>
+                          <p className="font-mono">wrangler secret put GROQ_KEY</p>
+                          <p className="font-mono">wrangler secret put OR_KEY</p>
+                          <p className="font-mono">wrangler deploy → copia la URL aquí</p>
+                        </div>
+                        <button onClick={() => setShowProxySettings(false)}
+                          className="w-full py-1.5 bg-violet-500 text-white text-xs font-bold rounded-lg">✓ Guardar</button>
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {['Cambia el restaurante del día 3','Añade el Cloisters al día 6','¿Cuánto cuesta el MOMA?','Mueve la High Line al día 3','Quita el Tour de Contrastes','¿Cómo llego desde JFK?'].map(s => (
                         <button key={s} onClick={() => setChatInput(s)}
