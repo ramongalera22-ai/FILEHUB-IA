@@ -13,12 +13,21 @@ const _x = (s: string, k = 'filehub2026carlos'): string => {
 
 // Obfuscated config — not plaintext API keys
 const _c: Record<string, string> = {
-  G:  'ARoHOl4jN39FdGxQOSMWNQo1I1kjAS1bZXdWTwFSNDUlNQEMGlQxIgddaktxVxcrITpLJTkIVy0=',
-  O:  'FQJBChpYFAMdVwNbVxAKX0ICXwgBDENVCgkKDgVRRwhfEVIIXFILQQADVFAOB1BFXQpLAl9ZUl1MBwAEBFcCWUFaW0dVXllSXA==',
+  G:  'ARoHOjoWOANYeUAFGRkJX0A0BSgtETk0ZXdWTwFSNDU2JRwzJBdZITBmXUhQLiAAIS5ABFsPFj8=',
+  O:  'FQJBChpYFAMdUAYBA0oOXkMCDFtXWE1VAQQBBVIDRFxZS1FcWAMNRlcHAAoHUlVGXVgVX1kKB1EXWwNSBFMHVBNaWUQADQgADg==',
   W:  'Dh0YFRtPTR1HWlcXEhMcH14AAAAAAAAAH0BAWQcUERgGHAhHGRVGBwNbXEVXGk8THB8=',
   WS: 'ERofX0daFVpRRkUCEQJBCRoKDAQQClgSQF9WQwAVGwMBXRMZQhcJHA5FUUsYAhECQxgA',
   SU: 'Dh0YFRtPTR1IXlQXFhgUFgMOGAIPDQAFVEhWRU0SBxwOEQcaCUsLGg==',
   SK: 'FQszFR0XDltDWlcBDRczLDESPRUmMToOA3FUQxAlFhQrIjcBCzopQFZGdgoEUw==',
+};
+
+export const cfg = {
+  groqKey:        () => import.meta.env.VITE_GROQ_KEY        || _x(_c.G),
+  openrouterKey:  () => import.meta.env.VITE_OPENROUTER_KEY  || _x(_c.O),
+  waServerUrl:    () => import.meta.env.VITE_WA_SERVER_URL   || _x(_c.W),
+  waWsUrl:        () => import.meta.env.VITE_WA_WS_URL       || _x(_c.WS),
+  supabaseUrl:    () => import.meta.env.VITE_SUPABASE_URL    || _x(_c.SU),
+  supabaseKey:    () => import.meta.env.VITE_SUPABASE_ANON_KEY || _x(_c.SK),
 };
 
 export const cfg = {
