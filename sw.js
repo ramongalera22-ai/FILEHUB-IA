@@ -6,7 +6,7 @@
  * - Push notifications para guardias y presupuesto
  */
 
-const CACHE_VERSION = 'filehub-v23-1774011620';
+const CACHE_VERSION = 'filehub-v24-1774012364';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const OFFLINE_PAGE = '/FILEHUB-IA/index.html';
