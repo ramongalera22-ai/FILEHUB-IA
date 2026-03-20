@@ -357,7 +357,7 @@ export interface HubSection {
   updated_at?: string;
 }
 
-export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files' | 'shared-hub' | 'piso' | 'jobs' | 'activities' | 'whiteboard' | 'notebook' | 'openwebui' | 'car-mode' | 'news' | 'supermarkets' | 'whatsapp-bot' | 'whatsapp-pisos' | 'vip-tasks' | 'shifts' | 'work-planner' | 'habits' | 'budget-alerts' | 'cron-jobs' | 'time-block' | 'whatsapp-inbox' | 'travel-planner';
+export type ViewType = 'dashboard' | 'expenses' | 'calendar' | 'projects' | 'trips' | 'ai-coach' | 'fitness' | 'nutrition' | 'work' | 'tasks' | 'courses' | 'goals' | 'economy' | 'shopping' | 'qr' | 'ideas' | 'ai-hub' | 'settings' | 'shared-finances' | 'files' | 'shared-hub' | 'piso' | 'jobs' | 'activities' | 'whiteboard' | 'notebook' | 'openwebui' | 'car-mode' | 'news' | 'supermarkets' | 'whatsapp-bot' | 'whatsapp-pisos' | 'vip-tasks' | 'shifts' | 'work-planner' | 'habits' | 'budget-alerts' | 'cron-jobs' | 'time-block' | 'whatsapp-inbox' | 'travel-planner' | 'travel-notebook';
 
 export interface BudgetAlert {
   id: string;
