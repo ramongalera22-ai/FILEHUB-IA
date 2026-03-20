@@ -16,7 +16,6 @@ import IdeasView from './components/IdeasView';
 import PartnerHubView from './components/PartnerHubView';
 import AIHubView from './components/AIHubView';
 import CalendarView from './components/CalendarView';
-import OmniAssistant from './components/OmniAssistant';
 import EconomyView from './components/EconomyView';
 import TripsView from './components/TripsView';
 import ShoppingView from './components/ShoppingView';
@@ -1451,14 +1450,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <OmniAssistant
-          globalContext={globalContext}
-          ollamaConfig={ollamaConfig}
-          anythingLLMConfig={anythingLLMConfig}
-          onAddExpenses={(newExpenses) => {
-            newExpenses.forEach(e => handleAddExpense(e));
-          }}
-        />
+
       </main>
 
       {previewFile && (
