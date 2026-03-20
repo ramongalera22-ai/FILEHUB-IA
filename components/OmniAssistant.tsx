@@ -257,7 +257,11 @@ const OmniAssistant: React.FC<OmniAssistantProps> = ({ globalContext, onAddExpen
           onClick={() => setIsOpen(true)}
           className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center text-white shadow-2xl hover:scale-110 transition-transform group relative"
         >
-          <Sparkles className="group-hover:rotate-12 transition-transform" />
+          <span className="text-xs font-black leading-none text-center select-none flex flex-col items-center">
+            <span className="text-[8px] text-indigo-400 tracking-widest uppercase">Haiku</span>
+            <span className="text-base leading-tight">4.5</span>
+            <span className="text-[8px] text-emerald-400 tracking-widest">Groq</span>
+          </span>
           <div className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-500 rounded-full border-2 border-white animate-pulse"></div>
         </button>
       ) : (

@@ -52,7 +52,7 @@ const VoiceAssistant: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-8 right-8 z-[200]">
+    <div className="fixed bottom-28 right-8 z-[200]">
       {result ? (
         <div className="bg-white rounded-[2rem] p-6 shadow-2xl border border-slate-100 w-80 mb-4 animate-in slide-in-from-bottom-4 duration-300">
           <div className="flex justify-between items-center mb-4">
