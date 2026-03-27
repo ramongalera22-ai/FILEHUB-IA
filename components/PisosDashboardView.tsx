@@ -140,75 +140,76 @@ const PisosDashboardView: React.FC = () => {
 
   const autoContactViaServer=async(p:Piso)=>{
     setContactSending(true);
-    setContactStatus(`🤖 Capa 1: Intentando formulario automático...`);
+    try{await navigator.clipboard.writeText(MSG)}catch{}
 
-    // ═══ CAPA 1: Server-side scraping del formulario ═══
+    // Capa 1: Auto-form
+    setContactStatus(`🤖 Capa 1: Enviando formulario...`);
     try{
-      const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"})});
-      const data=await r.json();
-      if(data.success){
-        setContactStatus(`✅ Capa 1 OK: Formulario enviado para "${p.titulo.substring(0,25)}"`);
-        markContacted(p.id);setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return;
+      const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"}),signal:AbortSignal.timeout(8000)});
+      const d=await r.json();
+      if(d.success&&d.method!=='wa-fallback'){
+        setContactStatus(`✅ Formulario enviado: ${p.titulo.substring(0,25)}`);markContacted(p.id);setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return;
       }
     }catch{}
 
-    // ═══ CAPA 2: Enviar datos a WA para contacto semi-automático ═══
-    setContactStatus(`⚠️ Capa 2: Enviando datos a tu WhatsApp...`);
+    // Capa 2: WA
+    setContactStatus(`⚠️ Capa 2: Enviando a tu WA...`);
     try{
-      await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:`🏠 *CONTACTAR CASERO*\n📍 ${p.titulo}\n💰 ${p.precio}€ · ${p.m2}m² · ${p.zona}\n🔗 ${p.url}\n\n📋 *Mensaje para copiar y pegar en el anuncio:*\n\n${MSG}`})});
-      markContacted(p.id);
-      setContactStatus(`✅ Capa 2 OK: Datos + mensaje enviados a tu WA`);
-      setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return;
+      const r=await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:`🏠 *CONTACTAR:*\n${p.titulo}\n${p.precio}€ · ${p.m2}m² · ${p.zona}\n🔗 ${p.url}\n\n📋 Mensaje:\n${MSG}`}),signal:AbortSignal.timeout(5000)});
+      if(r.ok){setContactStatus(`✅ Datos enviados a tu WA — abre el link y pega`);markContacted(p.id);setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return}
     }catch{}
 
-    // ═══ CAPA 3: Abrir anuncio + copiar mensaje ═══
-    setContactStatus(`⚠️ Capa 3: Abriendo anuncio + copiando mensaje...`);
-    try{navigator.clipboard.writeText(MSG)}catch{}
+    // Capa 3: SIEMPRE funciona
     window.open(p.url,"_blank");
     markContacted(p.id);
-    setContactStatus(`✅ Capa 3: Anuncio abierto — mensaje en portapapeles, pégalo en el formulario`);
+    setContactStatus(`✅ Anuncio abierto — mensaje copiado, pégalo en el formulario`);
     setContactSending(false);setTimeout(()=>setContactStatus(""),6000);
   };
 
   const autoContactAll=async()=>{
     setContactSending(true);
     const pending=filtered.filter(x=>!contacted.has(x.id));
-    if(pending.length===0){setContactStatus("✅ Todos los pisos ya están contactados");setContactSending(false);setTimeout(()=>setContactStatus(""),3000);return}
+    if(pending.length===0){setContactStatus("✅ Todos ya contactados");setContactSending(false);setTimeout(()=>setContactStatus(""),3000);return}
 
-    let capa1=0,capa2=0,capa3=0;
+    // Copy message to clipboard first
+    try{await navigator.clipboard.writeText(MSG)}catch{}
+
+    let auto=0,wa=0,browser=0;
 
     for(let i=0;i<pending.length;i++){
       const p=pending[i];
-      setContactStatus(`🤖 Piso ${i+1}/${pending.length}: ${p.titulo.substring(0,20)}...`);
+      setContactStatus(`🤖 ${i+1}/${pending.length}: ${p.titulo.substring(0,25)}...`);
+      let done=false;
 
-      // Capa 1: Auto-formulario
-      let sent=false;
+      // Capa 1: Server auto-form
       try{
-        const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"})});
-        const d=await r.json();if(d.success){capa1++;sent=true;markContacted(p.id)}
+        const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"}),signal:AbortSignal.timeout(8000)});
+        const d=await r.json();if(d.success&&d.method!=='wa-fallback'){auto++;done=true;markContacted(p.id)}
       }catch{}
 
-      // Capa 2: Enviar a WA
-      if(!sent){
+      // Capa 2: WA con datos
+      if(!done){
         try{
-          await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:`🏠 *CONTACTAR #${i+1}*\n${p.titulo}\n${p.precio}€ · ${p.m2}m² · ${p.zona}\n${p.url}\n\n📋 Pega este mensaje en el anuncio:\n${MSG}`})});
-          capa2++;sent=true;markContacted(p.id);
+          const r=await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:`🏠 *#${i+1} CONTACTAR:*\n${p.titulo}\n${p.precio}€ · ${p.m2}m² · ${p.zona}\n🔗 ${p.url}\n\n📋 Mensaje:\n${MSG}`}),signal:AbortSignal.timeout(5000)});
+          if(r.ok){wa++;done=true;markContacted(p.id)}
         }catch{}
       }
 
-      // Capa 3: Copiar + log
-      if(!sent){capa3++;markContacted(p.id)}
+      // Capa 3: SIEMPRE funciona — abre el anuncio en el navegador
+      if(!done){
+        window.open(p.url,"_blank");
+        browser++;markContacted(p.id);
+      }
 
-      await new Promise(r=>setTimeout(r,2000));
+      await new Promise(r=>setTimeout(r,done?1500:800));
     }
 
-    const total=capa1+capa2+capa3;
     const parts=[];
-    if(capa1>0)parts.push(`${capa1} formularios enviados`);
-    if(capa2>0)parts.push(`${capa2} enviados a tu WA`);
-    if(capa3>0)parts.push(`${capa3} pendientes manual`);
-    setContactStatus(`✅ ${total} pisos procesados: ${parts.join(" · ")}`);
-    setContactSending(false);setTimeout(()=>setContactStatus(""),10000);
+    if(auto>0)parts.push(`${auto} auto-formulario`);
+    if(wa>0)parts.push(`${wa} vía WA`);
+    if(browser>0)parts.push(`${browser} abiertos en navegador`);
+    setContactStatus(`✅ ${pending.length} pisos: ${parts.join(" · ")}${browser>0?" — mensaje en portapapeles, pégalo en cada pestaña":""}`);
+    setContactSending(false);setTimeout(()=>setContactStatus(""),12000);
   };
 
   const sendAllWA=async()=>{
