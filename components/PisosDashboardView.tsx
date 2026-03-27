@@ -63,7 +63,7 @@ Somos personas responsables, no fumadores y sin mascotas. Al trabajar ambos en e
 
 Tenemos disponibilidad inmediata para realizar una visita y podemos aportar toda la documentación necesaria para formalizar el alquiler si nuestro perfil es de su interés.
 
-Quedamos a su disposición en este medio o en el correo: carlosgalera2roman@gmail.com
+Quedamos a su disposición en este medio, por teléfono en el 679 888 148, o en el correo: carlosgalera2roman@gmail.com
 
 Atentamente. Carlos Galera Román`;
 
@@ -140,29 +140,75 @@ const PisosDashboardView: React.FC = () => {
 
   const autoContactViaServer=async(p:Piso)=>{
     setContactSending(true);
-    setContactStatus(`🤖 Contactando casero de "${p.titulo.substring(0,30)}..."...`);
+    setContactStatus(`🤖 Capa 1: Intentando formulario automático...`);
+
+    // ═══ CAPA 1: Server-side scraping del formulario ═══
     try{
-      const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"+34679888148"})});
+      const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"})});
       const data=await r.json();
-      if(data.success){setContactStatus(`✅ Mensaje enviado al casero de "${p.titulo.substring(0,30)}"`);markContacted(p.id)}
-      else{setContactStatus(`⚠️ Auto-contacto no disponible — abriendo Idealista...`);contactViaIdealista(p)}
-    }catch{setContactStatus(`⚠️ Servidor no disponible — abriendo Idealista...`);contactViaIdealista(p)}
-    setContactSending(false);setTimeout(()=>setContactStatus(""),5000)
+      if(data.success){
+        setContactStatus(`✅ Capa 1 OK: Formulario enviado para "${p.titulo.substring(0,25)}"`);
+        markContacted(p.id);setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return;
+      }
+    }catch{}
+
+    // ═══ CAPA 2: Enviar datos a WA para contacto semi-automático ═══
+    setContactStatus(`⚠️ Capa 2: Enviando datos a tu WhatsApp...`);
+    try{
+      await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:`🏠 *CONTACTAR CASERO*\n📍 ${p.titulo}\n💰 ${p.precio}€ · ${p.m2}m² · ${p.zona}\n🔗 ${p.url}\n\n📋 *Mensaje para copiar y pegar en el anuncio:*\n\n${MSG}`})});
+      markContacted(p.id);
+      setContactStatus(`✅ Capa 2 OK: Datos + mensaje enviados a tu WA`);
+      setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return;
+    }catch{}
+
+    // ═══ CAPA 3: Abrir anuncio + copiar mensaje ═══
+    setContactStatus(`⚠️ Capa 3: Abriendo anuncio + copiando mensaje...`);
+    try{navigator.clipboard.writeText(MSG)}catch{}
+    window.open(p.url,"_blank");
+    markContacted(p.id);
+    setContactStatus(`✅ Capa 3: Anuncio abierto — mensaje en portapapeles, pégalo en el formulario`);
+    setContactSending(false);setTimeout(()=>setContactStatus(""),6000);
   };
 
   const autoContactAll=async()=>{
-    setContactSending(true);let ok=0,fail=0;
+    setContactSending(true);
     const pending=filtered.filter(x=>!contacted.has(x.id));
-    for(const p of pending){
-      setContactStatus(`🤖 Contactando ${ok+fail+1}/${pending.length}: ${p.titulo.substring(0,25)}...`);
+    if(pending.length===0){setContactStatus("✅ Todos los pisos ya están contactados");setContactSending(false);setTimeout(()=>setContactStatus(""),3000);return}
+
+    let capa1=0,capa2=0,capa3=0;
+
+    for(let i=0;i<pending.length;i++){
+      const p=pending[i];
+      setContactStatus(`🤖 Piso ${i+1}/${pending.length}: ${p.titulo.substring(0,20)}...`);
+
+      // Capa 1: Auto-formulario
+      let sent=false;
       try{
-        const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"+34679888148"})});
-        const data=await r.json();if(data.success){ok++;markContacted(p.id)}else{fail++}
-      }catch{fail++}
+        const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"})});
+        const d=await r.json();if(d.success){capa1++;sent=true;markContacted(p.id)}
+      }catch{}
+
+      // Capa 2: Enviar a WA
+      if(!sent){
+        try{
+          await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:`🏠 *CONTACTAR #${i+1}*\n${p.titulo}\n${p.precio}€ · ${p.m2}m² · ${p.zona}\n${p.url}\n\n📋 Pega este mensaje en el anuncio:\n${MSG}`})});
+          capa2++;sent=true;markContacted(p.id);
+        }catch{}
+      }
+
+      // Capa 3: Copiar + log
+      if(!sent){capa3++;markContacted(p.id)}
+
       await new Promise(r=>setTimeout(r,2000));
     }
-    setContactStatus(`✅ ${ok} caseros contactados${fail>0?` · ${fail} fallidos`:""}${fail>0?" — usa Idealista para los restantes":""}`);
-    setContactSending(false);setTimeout(()=>setContactStatus(""),8000)
+
+    const total=capa1+capa2+capa3;
+    const parts=[];
+    if(capa1>0)parts.push(`${capa1} formularios enviados`);
+    if(capa2>0)parts.push(`${capa2} enviados a tu WA`);
+    if(capa3>0)parts.push(`${capa3} pendientes manual`);
+    setContactStatus(`✅ ${total} pisos procesados: ${parts.join(" · ")}`);
+    setContactSending(false);setTimeout(()=>setContactStatus(""),10000);
   };
 
   const sendAllWA=async()=>{

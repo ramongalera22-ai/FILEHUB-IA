@@ -81,7 +81,7 @@ Somos personas responsables, no fumadores y sin mascotas. Al trabajar ambos en e
 
 Tenemos disponibilidad inmediata para realizar una visita y podemos aportar toda la documentación necesaria para formalizar el alquiler si nuestro perfil es de su interés.
 
-Quedamos a su disposición en este medio o en el correo: carlosgalera2roman@gmail.com
+Quedamos a su disposición en este medio, por teléfono en el 679 888 148, o en el correo: carlosgalera2roman@gmail.com
 
 Atentamente. Carlos Galera Román`;
 
