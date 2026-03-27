@@ -39,6 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'expenses',       label: 'Gastos y Deuda',        icon: LibraryBig },
     { id: 'shared-hub',     label: 'Dashboard Hub',         icon: Heart },
     { id: 'piso',           label: 'Pisos',                 icon: Home },
+    { id: 'pisos-dashboard', label: '🏠 Pisos Dashboard',    icon: Home },
     { id: 'whatsapp-pisos', label: 'Pisos Bot WA',          icon: Home },
     { id: 'jobs',           label: 'Ofertas Empleo',        icon: Briefcase },
     { id: 'activities',     label: 'Actividades',           icon: Activity },
