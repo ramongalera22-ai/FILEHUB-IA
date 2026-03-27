@@ -642,6 +642,104 @@ app.get('/scrape/jobs', async (req, res) => {
 });
 
 // Favorites (save to Supabase via REST)
+
+// ── AUTO-CONTACT LANDLORD via scraping ──────────────────────────
+app.post('/contact-landlord', async (req, res) => {
+    const { url, message, name, email, phone } = req.body;
+    if (!url || !message) return res.status(400).json({ success: false, error: 'url y message requeridos' });
+
+    console.log(`📧 Auto-contacto casero: ${url}`);
+
+    try {
+        // Determine portal from URL
+        const isIdealista = url.includes('idealista.com');
+        const isFotocasa = url.includes('fotocasa.es');
+        const isHabitaclia = url.includes('habitaclia.com');
+
+        // Step 1: Fetch the listing page to find the contact form/endpoint
+        const html = await fetchWithProxyChain(url);
+
+        // Step 2: Try to find and submit the contact form
+        // Idealista uses a REST API for contact
+        if (isIdealista) {
+            // Extract property ID from URL
+            const idMatch = url.match(/\/inmueble\/(\d+)/);
+            const searchMatch = url.match(/idealista\.com\/([^?]+)/);
+
+            // Try the Idealista contact API
+            const contactUrl = 'https://www.idealista.com/ajax/contactadvertiser.ajax';
+            const formData = new URLSearchParams({
+                'adId': idMatch ? idMatch[1] : '',
+                'message': message,
+                'name': name || 'Carlos Galera',
+                'email': email || 'carlosgalera2roman@gmail.com',
+                'phone': phone || '+34679888148',
+                'acceptTerms': 'true',
+            });
+
+            const contactRes = await fetch(contactUrl, {
+                method: 'POST',
+                headers: {
+                    ...ANTI_BOT_HEADERS(),
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Referer': url,
+                    'Origin': 'https://www.idealista.com',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: formData.toString(),
+                signal: AbortSignal.timeout(15000),
+            });
+
+            if (contactRes.ok) {
+                const result = await contactRes.text();
+                console.log(`✅ Idealista contact sent for ${url}`);
+
+                // Also send confirmation via WhatsApp
+                if (sock && connectionStatus === 'connected') {
+                    const confirmMsg = `✅ *Auto-contacto enviado*\n📍 ${url}\n📧 Mensaje enviado al casero via Idealista`;
+                    await sock.sendMessage('34679888148@s.whatsapp.net', { text: confirmMsg });
+                }
+
+                return res.json({ success: true, method: 'idealista-api', message: 'Contacto enviado via Idealista' });
+            }
+        }
+
+        // Step 3: Fallback — extract email from page if available
+        const emailMatch = html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+        const phoneMatch = html.match(/(?:\+34|0034)?[\s.-]?[6789]\d{2}[\s.-]?\d{3}[\s.-]?\d{3}/g);
+
+        if (emailMatch && emailMatch.length > 0) {
+            // Found landlord email — send notification to WA
+            const landlordEmail = emailMatch.find(e => !e.includes('idealista') && !e.includes('fotocasa') && !e.includes('habitaclia')) || emailMatch[0];
+
+            if (sock && connectionStatus === 'connected') {
+                const msg = `📧 *Email casero encontrado*\n📍 ${url}\n✉️ ${landlordEmail}\n📞 ${phoneMatch ? phoneMatch[0] : 'No encontrado'}\n\n💡 Envía el mensaje de contacto a: ${landlordEmail}`;
+                await sock.sendMessage('34679888148@s.whatsapp.net', { text: msg });
+            }
+
+            return res.json({ success: true, method: 'email-found', email: landlordEmail, phone: phoneMatch ? phoneMatch[0] : null, message: 'Email del casero encontrado y enviado a tu WA' });
+        }
+
+        // Step 4: Fallback — copy message to WA for manual paste
+        if (sock && connectionStatus === 'connected') {
+            const fallbackMsg = `🏠 *Contactar manualmente:*\n📍 ${url}\n\n📋 Mensaje para copiar y pegar:\n\n${message}`;
+            await sock.sendMessage('34679888148@s.whatsapp.net', { text: fallbackMsg });
+        }
+
+        return res.json({ success: false, method: 'fallback-wa', message: 'No se pudo contactar automáticamente — enviado a tu WA para contacto manual' });
+
+    } catch (err) {
+        console.error(`❌ Auto-contact error: ${err.message}`);
+        // Always send to WA as fallback
+        try {
+            if (sock && connectionStatus === 'connected') {
+                await sock.sendMessage('34679888148@s.whatsapp.net', { text: `🏠 Contactar: ${url}\n\n${message}` });
+            }
+        } catch {}
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.post('/favorites/pisos', async (req, res) => {
     const { piso, userId } = req.body;
     if (!piso || !userId) return res.status(400).json({ error:'Faltan piso y userId' });
