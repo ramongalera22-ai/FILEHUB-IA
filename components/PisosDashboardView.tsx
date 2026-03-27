@@ -147,8 +147,9 @@ const PisosDashboardView: React.FC = () => {
     try{
       const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"}),signal:AbortSignal.timeout(8000)});
       const d=await r.json();
-      if(d.success&&d.method!=='wa-fallback'){
-        setContactStatus(`✅ Formulario enviado: ${p.titulo.substring(0,25)}`);markContacted(p.id);setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return;
+      if(d.success){
+        const emoji=d.method?.includes('puppeteer')?'🤖':d.method==='idealista-api'?'📧':d.method==='extract-contact'?'📞':'✅';
+        setContactStatus(`${emoji} ${d.method==='wa-fallback'?'Datos enviados a tu WA':d.method?.includes('puppeteer')?'Formulario rellenado automáticamente':'Contacto enviado'}: ${p.titulo.substring(0,25)}`);markContacted(p.id);setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return;
       }
     }catch{}
 
@@ -184,7 +185,7 @@ const PisosDashboardView: React.FC = () => {
       // Capa 1: Server auto-form
       try{
         const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"}),signal:AbortSignal.timeout(8000)});
-        const d=await r.json();if(d.success&&d.method!=='wa-fallback'){auto++;done=true;markContacted(p.id)}
+        const d=await r.json();if(d.success){auto++;done=true;markContacted(p.id)}
       }catch{}
 
       // Capa 2: WA con datos

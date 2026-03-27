@@ -643,13 +643,100 @@ app.get('/scrape/jobs', async (req, res) => {
 
 // Favorites (save to Supabase via REST)
 
-// ── AUTO-CONTACT LANDLORD — multi-layer fallback ────────────────
+// ── AUTO-CONTACT LANDLORD — 4 layers (puppeteer → API → email extract → WA) ──
+// Puppeteer is optional — loaded dynamically if available on Railway
+let puppeteer = null;
+try { puppeteer = require('puppeteer'); console.log('🎭 Puppeteer disponible'); } catch { console.log('⚠️ Puppeteer no instalado — usando layers 1-3'); }
+
+async function fillFormWithBrowser(url, message, name, email, phone) {
+    if (!puppeteer) throw new Error('Puppeteer not available');
+    const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+    try {
+        const page = await browser.newPage();
+        await page.setUserAgent(getUA());
+        await page.setViewport({ width: 1280, height: 900 });
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+
+        // Idealista
+        if (url.includes('idealista.com')) {
+            // Click "Contactar" button
+            const contactBtn = await page.$('button.icon-mail-outline, a[href*="contacto"], button:has-text("Contactar"), .contact-button, #btn-contact');
+            if (contactBtn) await contactBtn.click();
+            await page.waitForTimeout(2000);
+
+            // Fill form fields
+            const selectors = [
+                { sel: '#contact-form-name, input[name="name"], input[placeholder*="ombre"]', val: name },
+                { sel: '#contact-form-email, input[name="email"], input[type="email"]', val: email },
+                { sel: '#contact-form-phone, input[name="phone"], input[type="tel"]', val: phone },
+                { sel: '#contact-form-message, textarea[name="message"], textarea', val: message },
+            ];
+            for (const { sel, val } of selectors) {
+                try {
+                    await page.waitForSelector(sel, { timeout: 3000 });
+                    await page.click(sel);
+                    await page.evaluate((s) => { const el = document.querySelector(s); if (el) el.value = ''; }, sel);
+                    await page.type(sel, val, { delay: 10 });
+                } catch {}
+            }
+
+            // Accept terms if checkbox exists
+            try {
+                const checkbox = await page.$('input[type="checkbox"]');
+                if (checkbox) { const checked = await page.evaluate(el => el.checked, checkbox); if (!checked) await checkbox.click(); }
+            } catch {}
+
+            // Submit
+            try {
+                const submitBtn = await page.$('button[type="submit"], input[type="submit"], button:has-text("Enviar"), .submit-button');
+                if (submitBtn) { await submitBtn.click(); await page.waitForTimeout(3000); }
+            } catch {}
+
+            return { success: true, method: 'puppeteer-idealista' };
+        }
+
+        // Fotocasa / Habitaclia — similar form pattern
+        if (url.includes('fotocasa.es') || url.includes('habitaclia.com')) {
+            const contactBtn = await page.$('button[data-testid="contact-button"], .re-ContactDetail, a[href*="contactar"]');
+            if (contactBtn) await contactBtn.click();
+            await page.waitForTimeout(2000);
+
+            const fields = [
+                { sel: 'input[name="name"], input[placeholder*="ombre"]', val: name },
+                { sel: 'input[name="email"], input[type="email"]', val: email },
+                { sel: 'input[name="phone"], input[type="tel"]', val: phone },
+                { sel: 'textarea, textarea[name="message"]', val: message },
+            ];
+            for (const { sel, val } of fields) {
+                try { await page.waitForSelector(sel, { timeout: 3000 }); await page.click(sel); await page.type(sel, val, { delay: 10 }); } catch {}
+            }
+            try { const submit = await page.$('button[type="submit"]'); if (submit) { await submit.click(); await page.waitForTimeout(3000); } } catch {}
+            return { success: true, method: 'puppeteer-fotocasa' };
+        }
+
+        throw new Error('Portal no soportado para puppeteer');
+    } finally { await browser.close(); }
+}
+
 app.post('/contact-landlord', async (req, res) => {
     const { url, message, name, email, phone } = req.body;
     if (!url || !message) return res.status(400).json({ success: false, error: 'url y message requeridos' });
-
     console.log(`📧 Auto-contacto: ${url}`);
     const results = { layers: [] };
+
+    // ═══ LAYER 0: Puppeteer browser automation ═══
+    if (puppeteer) {
+        try {
+            const r = await fillFormWithBrowser(url, message, name || 'Carlos Galera Román', email || 'carlosgalera2roman@gmail.com', phone || '679888148');
+            results.layers.push({ layer: 0, ...r });
+            console.log(`✅ Layer 0 OK: Puppeteer form filled`);
+            if (sock && connectionStatus === 'connected') await sock.sendMessage('34679888148@s.whatsapp.net', { text: `✅ *Auto-contacto enviado (browser)*\n📍 ${url}\n🤖 Formulario rellenado automáticamente` });
+            return res.json({ success: true, method: r.method, layers: results.layers });
+        } catch (e) {
+            results.layers.push({ layer: 0, method: 'puppeteer', success: false, error: e.message });
+            console.log(`⚠️ Layer 0 failed: ${e.message}`);
+        }
+    }
 
     try {
         const html = await fetchWithProxyChain(url);
@@ -662,13 +749,12 @@ app.post('/contact-landlord', async (req, res) => {
                     const contactRes = await fetch('https://www.idealista.com/ajax/contactadvertiser.ajax', {
                         method: 'POST',
                         headers: { ...ANTI_BOT_HEADERS(), 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': url, 'Origin': 'https://www.idealista.com', 'X-Requested-With': 'XMLHttpRequest' },
-                        body: new URLSearchParams({ adId: idMatch[1], message: message, name: name || '', email: email || '', phone: phone || '', acceptTerms: 'true' }).toString(),
+                        body: new URLSearchParams({ adId: idMatch[1], message, name: name || '', email: email || '', phone: phone || '', acceptTerms: 'true' }).toString(),
                         signal: AbortSignal.timeout(15000),
                     });
                     if (contactRes.ok) {
                         results.layers.push({ layer: 1, method: 'idealista-api', success: true });
-                        console.log(`✅ Layer 1 OK: Idealista API`);
-                        if (sock && connectionStatus === 'connected') await sock.sendMessage('34679888148@s.whatsapp.net', { text: `✅ Auto-contacto enviado via Idealista\n📍 ${url}` });
+                        if (sock && connectionStatus === 'connected') await sock.sendMessage('34679888148@s.whatsapp.net', { text: `✅ Auto-contacto enviado via API\n📍 ${url}` });
                         return res.json({ success: true, method: 'idealista-api', layers: results.layers });
                     }
                 }
@@ -677,36 +763,25 @@ app.post('/contact-landlord', async (req, res) => {
 
         // ═══ LAYER 2: Extract email/phone from HTML ═══
         try {
-            const emails = (html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [])
-                .filter(e => !/(idealista|fotocasa|habitaclia|example|noreply|info@)/.test(e));
+            const emails = (html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || []).filter(e => !/(idealista|fotocasa|habitaclia|example|noreply|info@)/.test(e));
             const phones = (html.match(/(?:\+34|0034)?[\s.-]?[6789]\d{2}[\s.-]?\d{3}[\s.-]?\d{3}/g) || []);
-
             if (emails.length > 0 || phones.length > 0) {
-                const info = `📧 ${emails[0] || 'No encontrado'}\n📞 ${phones[0] || 'No encontrado'}`;
                 results.layers.push({ layer: 2, method: 'extract-contact', success: true, email: emails[0], phone: phones[0] });
-                if (sock && connectionStatus === 'connected') {
-                    await sock.sendMessage('34679888148@s.whatsapp.net', { text: `📧 *Datos casero encontrados*\n📍 ${url}\n${info}\n\n💡 Contacta directamente:\n${message.substring(0, 200)}...` });
-                }
-                console.log(`✅ Layer 2 OK: email/phone found`);
+                if (sock && connectionStatus === 'connected') await sock.sendMessage('34679888148@s.whatsapp.net', { text: `📧 *Datos casero:*\n📍 ${url}\n✉️ ${emails[0] || '—'}\n📞 ${phones[0] || '—'}\n\n📋 Mensaje:\n${message.substring(0, 300)}` });
                 return res.json({ success: true, method: 'extract-contact', email: emails[0], phone: phones[0], layers: results.layers });
             }
-        } catch (e) { results.layers.push({ layer: 2, method: 'extract-contact', success: false, error: e.message }); }
+        } catch (e) { results.layers.push({ layer: 2, success: false, error: e.message }); }
 
-        // ═══ LAYER 3: Send full info to WA for manual contact ═══
-        try {
-            if (sock && connectionStatus === 'connected') {
-                await sock.sendMessage('34679888148@s.whatsapp.net', { text: `🏠 *Contactar manualmente:*\n📍 ${url}\n\n📋 *Mensaje listo para copiar:*\n\n${message}` });
-                results.layers.push({ layer: 3, method: 'wa-fallback', success: true });
-                console.log(`✅ Layer 3: Sent to WA`);
-                return res.json({ success: true, method: 'wa-fallback', layers: results.layers });
-            }
-        } catch (e) { results.layers.push({ layer: 3, method: 'wa-fallback', success: false, error: e.message }); }
+        // ═══ LAYER 3: WA with full data ═══
+        if (sock && connectionStatus === 'connected') {
+            await sock.sendMessage('34679888148@s.whatsapp.net', { text: `🏠 *Contactar:*\n📍 ${url}\n\n📋 Mensaje:\n\n${message}` });
+            results.layers.push({ layer: 3, method: 'wa-fallback', success: true });
+            return res.json({ success: true, method: 'wa-fallback', layers: results.layers });
+        }
 
-        return res.json({ success: false, method: 'all-failed', layers: results.layers });
+        return res.json({ success: false, layers: results.layers });
     } catch (err) {
-        console.error(`❌ Contact error: ${err.message}`);
-        // Ultimate fallback: send to WA
-        try { if (sock && connectionStatus === 'connected') await sock.sendMessage('34679888148@s.whatsapp.net', { text: `🏠 Contactar: ${url}\n\n${message}` }); } catch {}
+        try { if (sock && connectionStatus === 'connected') await sock.sendMessage('34679888148@s.whatsapp.net', { text: `🏠 ${url}\n\n${message}` }); } catch {}
         return res.json({ success: false, error: err.message, layers: results.layers });
     }
 });
