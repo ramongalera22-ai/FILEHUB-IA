@@ -5,7 +5,7 @@ import {
   Briefcase, Mail, Copy, Check, ExternalLink, BarChart3, Send,
   TrendingUp, Building2, Train, Wind, ChevronDown, ChevronUp,
   Search, SlidersHorizontal, Stethoscope, Globe, Phone, Loader2,
-  Sparkles, Eye, Heart, HeartOff, AlertCircle, MessageCircle,
+  Sparkles, Eye, Heart, HeartOff, AlertCircle, MessageCircle, CheckCircle2,
   Clock, Activity, Zap, Play, Pause, Bot, RefreshCw, X, Wifi, WifiOff
 } from 'lucide-react';
 
@@ -96,11 +96,37 @@ const PisosDashboardView: React.FC = () => {
   const [favs,setFavs]=useState<Set<number>>(()=>{try{return new Set(JSON.parse(localStorage.getItem("fh_dash_favs")||"[]"))}catch{return new Set()}});
   const [copied,setCopied]=useState(false);
   const [sending,setSending]=useState(false);
+  const [contactPiso,setContactPiso]=useState<Piso|null>(null);
+  const [contactStatus,setContactStatus]=useState("");
+  const [contactSending,setContactSending]=useState(false);
+  const [contacted,setContacted]=useState<Set<number>>(()=>{try{return new Set(JSON.parse(localStorage.getItem("fh_contacted")||"[]"))}catch{return new Set()}});
   const [cronJobs,setCronJobs]=useState(CRONS);
 
   const saveFav=(s:Set<number>)=>{setFavs(s);try{localStorage.setItem("fh_dash_favs",JSON.stringify([...s]))}catch{}};
   const toggleFav=(id:number)=>{const n=new Set(favs);if(n.has(id))n.delete(id);else n.add(id);saveFav(n)};
   const copyMsg=()=>{navigator.clipboard.writeText(MSG);setCopied(true);setTimeout(()=>setCopied(false),2500)};
+
+  const markContacted=(id:number)=>{const n=new Set(contacted);n.add(id);setContacted(n);try{localStorage.setItem("fh_contacted",JSON.stringify([...n]))}catch{}};
+
+  const contactViaIdealista=(p:Piso)=>{window.open(p.url,"_blank");navigator.clipboard.writeText(MSG);setContactStatus("\u2705 Mensaje copiado \u2014 p\u00e9galo en el formulario de Idealista");markContacted(p.id);setTimeout(()=>setContactStatus(""),4000)};
+
+  const contactViaWA=async(p:Piso)=>{
+    setContactSending(true);
+    const txt=`\ud83c\udfe0 *CONTACTO CASERO: ${p.titulo}*\n\n${MSG}\n\n\ud83d\udccd Piso: ${p.titulo}\n\ud83d\udcb0 ${p.precio}\u20ac \u00b7 ${p.m2}m\u00b2 \u00b7 ${p.zona}\n\ud83d\udd17 ${p.url}`;
+    try{await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:txt})});setContactStatus("\u2705 Mensaje enviado a tu WhatsApp");markContacted(p.id)}catch{setContactStatus("\u274c Error al enviar")}
+    setContactSending(false);setTimeout(()=>setContactStatus(""),4000)
+  };
+
+  const contactAllFiltered=async()=>{
+    setContactSending(true);setContactStatus("Enviando a "+filtered.length+" pisos...");
+    for(const p of filtered){
+      const txt=`\ud83c\udfe0 *${p.titulo}*\n${p.precio}\u20ac \u00b7 ${p.m2}m\u00b2 \u00b7 ${p.zona}\n${p.url}`;
+      try{await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:txt})})}catch{}
+      markContacted(p.id);
+      await new Promise(r=>setTimeout(r,500));
+    }
+    setContactStatus(`\u2705 ${filtered.length} pisos enviados a tu WA`);setContactSending(false);setTimeout(()=>setContactStatus(""),5000)
+  };
 
   const sendAllWA=async()=>{
     setSending(true);
@@ -184,7 +210,8 @@ const PisosDashboardView: React.FC = () => {
             {[{k:"d",a:fD,t:()=>setFD(!fD),l:"\u2b50 Destacados"},{k:"b",a:fB,t:()=>setFB(!fB),l:"\ud83c\udf3f Balc\u00f3n"},{k:"a",a:fA,t:()=>setFA(!fA),l:"\ud83d\udea0 Ascensor"}].map(f=>(
               <button key={f.k} onClick={f.t} className={`text-xs font-bold px-3 py-2 rounded-lg border transition-all ${f.a?"bg-indigo-50 dark:bg-indigo-900/30 border-indigo-300 text-indigo-600":"bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-slate-300"}`}>{f.l}</button>
             ))}
-            <span className="text-[11px] font-mono text-slate-400 ml-auto">{filtered.length} resultado{filtered.length!==1?"s":""}</span>
+            <button onClick={contactAllFiltered} disabled={contactSending} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 shadow-sm shadow-green-500/20 transition-all"><Send size={12}/>Contactar todos</button>
+            <span className="text-[11px] font-mono text-slate-400 ml-auto">{filtered.length} resultado{filtered.length!==1?"s":""} \u00b7 {contacted.size} contactados</span>
           </div>
           <div className="space-y-3">{filtered.map((p,i)=>{const ratio=(p.precio/p.m2).toFixed(1);const isFav=favs.has(p.id);const star=p.nota?.includes("Terraza grande")?"\u2b50\u2b50":p.destacado?"\u2b50":null;return(
             <div key={p.id} className={`group relative bg-white dark:bg-slate-800 rounded-xl border transition-all hover:shadow-lg hover:-translate-y-0.5 cursor-pointer overflow-hidden ${p.destacado?"border-amber-300/50 dark:border-amber-500/30":"border-slate-200 dark:border-slate-700"}`} onClick={()=>window.open(p.url,"_blank")}>
@@ -213,6 +240,7 @@ const PisosDashboardView: React.FC = () => {
                     <div className="text-[10px] font-mono text-slate-400">{ratio} \u20ac/m\u00b2</div>
                     <div className="flex items-center gap-1 mt-1.5">
                       <button onClick={e=>{e.stopPropagation();toggleFav(p.id)}} className={`p-1.5 rounded-lg transition-colors ${isFav?"bg-red-50 dark:bg-red-900/30 text-red-500":"bg-slate-100 dark:bg-slate-700 text-slate-400 hover:text-red-400"}`}>{isFav?<Heart size={14} className="fill-current"/>:<HeartOff size={14}/>}</button>
+                      <button onClick={e=>{e.stopPropagation();setContactPiso(p)}} className={`p-1.5 rounded-lg transition-colors ${contacted.has(p.id)?"bg-emerald-50 dark:bg-emerald-900/30 text-emerald-500":"bg-amber-50 dark:bg-amber-900/30 text-amber-500 hover:bg-amber-100"}`} title="Contactar casero">{contacted.has(p.id)?<CheckCircle2 size={14}/>:<Send size={14}/>}</button>
                       <a href={p.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500 hover:bg-indigo-100 transition-colors" onClick={e=>e.stopPropagation()}><ExternalLink size={14}/></a>
                     </div>
                   </div>
@@ -280,6 +308,35 @@ const PisosDashboardView: React.FC = () => {
           </div>
           <pre className="p-5 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-sans">{MSG}</pre>
         </div>}
+
+        {/* CONTACT MODAL */}
+        {contactPiso&&<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={()=>setContactPiso(null)}>
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-start justify-between">
+                <div><h3 className="font-black text-lg text-slate-800 dark:text-white">Contactar casero</h3><p className="text-sm text-amber-600 dark:text-amber-400 font-bold mt-1">{contactPiso.titulo}</p><p className="text-xs text-slate-500 mt-0.5">{contactPiso.precio}\u20ac \u00b7 {contactPiso.m2}m\u00b2 \u00b7 {contactPiso.zona}</p></div>
+                <button onClick={()=>setContactPiso(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"><X size={18}/></button>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <button onClick={()=>{contactViaIdealista(contactPiso);setContactPiso(null)}} className="w-full flex items-center gap-3 p-4 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 rounded-xl transition-all border border-indigo-200 dark:border-indigo-500/20">
+                <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shrink-0"><ExternalLink size={18} className="text-white"/></div>
+                <div className="text-left flex-1"><p className="font-bold text-sm text-indigo-700 dark:text-indigo-300">Contactar en Idealista</p><p className="text-[11px] text-indigo-500/70">Abre el anuncio + copia el mensaje al portapapeles</p></div>
+              </button>
+              <button onClick={()=>{contactViaWA(contactPiso);setContactPiso(null)}} disabled={contactSending} className="w-full flex items-center gap-3 p-4 bg-green-50 dark:bg-green-500/10 hover:bg-green-100 dark:hover:bg-green-500/20 rounded-xl transition-all border border-green-200 dark:border-green-500/20 disabled:opacity-50">
+                <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shrink-0"><MessageCircle size={18} className="text-white"/></div>
+                <div className="text-left flex-1"><p className="font-bold text-sm text-green-700 dark:text-green-300">Enviar por WhatsApp</p><p className="text-[11px] text-green-500/70">Env\u00eda el mensaje de contacto + datos del piso a tu WA</p></div>
+              </button>
+              <button onClick={()=>{navigator.clipboard.writeText(MSG);setContactStatus("\u2705 Mensaje copiado");markContacted(contactPiso.id);setContactPiso(null);setTimeout(()=>setContactStatus(""),3000)}} className="w-full flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all border border-slate-200 dark:border-slate-700">
+                <div className="w-10 h-10 bg-slate-500 rounded-xl flex items-center justify-center shrink-0"><Copy size={18} className="text-white"/></div>
+                <div className="text-left flex-1"><p className="font-bold text-sm text-slate-700 dark:text-slate-300">Solo copiar mensaje</p><p className="text-[11px] text-slate-500/70">Copia el texto de contacto para pegar manualmente</p></div>
+              </button>
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800"><p className="text-[10px] text-slate-400 leading-relaxed line-clamp-3">{MSG.substring(0,200)}...</p></div>
+            </div>
+          </div>
+        </div>}
+
+        {contactStatus&&<div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl shadow-2xl text-sm font-bold animate-bounce">{contactStatus}</div>}
 
         {/* FOOTER */}
         <div className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-700 text-center">
