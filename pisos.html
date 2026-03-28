@@ -459,6 +459,8 @@ select.btn{-webkit-appearance:none;appearance:none;padding-right:28px;
       <div class="contact-header">
         <h3>📝 Copiar y pegar en cada anuncio</h3>
         <button class="btn-copy" id="btn-copy-msg" onclick="copyMsg()">Copiar mensaje</button>
+        <button style="background:#22c55e;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;" onclick="contactarTodos()">🤖 Auto-contactar todos</button>
+        <button style="background:#3b82f6;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;" onclick="lanzarBusqueda()">🔍 Buscar pisos ahora</button>
       </div>
       <div class="contact-body" id="contact-body"></div>
     </div>
@@ -475,6 +477,31 @@ select.btn{-webkit-appearance:none;appearance:none;padding-right:28px;
 
 <script>
 const API_URL = "https://nucboxg10.tail3a7cac.ts.net";
+
+async function contactarCasero(url, btn) {
+  try {
+    btn.textContent = '⏳ Contactando...'; btn.disabled = true;
+    const res = await fetch(API_URL + '/contactar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url})});
+    const data = await res.json();
+    if (data.ok) { btn.textContent = '✅ Enviado'; btn.style.background = '#16a34a'; }
+    else { btn.textContent = '❌ Error'; btn.style.background = '#dc2626'; }
+  } catch(e) { btn.textContent = '❌ Offline'; btn.style.background = '#dc2626'; }
+}
+async function contactarTodos() {
+  if (!confirm('¿Contactar TODOS los pisos no contactados?')) return;
+  const btns = document.querySelectorAll('.btn-contactar');
+  for (const btn of btns) {
+    if (btn.textContent.includes('Contactar')) { btn.click(); await new Promise(r => setTimeout(r, 12000)); }
+  }
+  alert('✅ Proceso completado');
+}
+async function lanzarBusqueda() {
+  if (!confirm('¿Lanzar búsqueda de pisos en NucBox?')) return;
+  try {
+    await fetch(API_URL + '/buscar', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    alert('🔍 Búsqueda lanzada. Tardará ~20 min. Los resultados se actualizarán automáticamente.');
+  } catch(e) { alert('❌ NucBox no accesible'); }
+}
 
 // ═══ DATA ═══════════════════════════════════════════════════════════════════
 const PISOS = [
@@ -723,6 +750,7 @@ function renderPisos() {
         <div class="piso-price-val">${p.precio}<span class="piso-price-unit">€</span></div>
         <div class="piso-ratio">${ratio} €/m²</div>
         <div class="piso-arrow">Ver anuncio →</div>
+        <button class="btn-contactar" style="margin-top:6px;background:#22c55e;color:#fff;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;width:100%;" onclick="event.stopPropagation();contactarCasero('${p.url}',this)">📞 Contactar</button>
       </div>
     </div>`;
   }).join('');
