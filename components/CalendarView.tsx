@@ -639,16 +639,20 @@ export default function CalendarView({
                           }`}>
                           {day}
                         </span>
-                        <div className="mt-2 space-y-1">
-                          {dayEvents.slice(0, 3).map((event, idx) => {
+                        <div className="mt-1.5 space-y-0.5">
+                          {dayEvents.slice(0, 2).map((event, idx) => {
                             const isGuardia = event.title.toLowerCase().includes('guardia');
                             return (
-                              <div key={idx} className={`h-1 rounded-full ${isGuardia ? 'bg-orange-500' :
-                                event.type === 'expense' ? 'bg-emerald-400' :
-                                  event.type === 'project' ? 'bg-amber-400' : 'bg-indigo-400'
-                                }`} title={event.title} />
+                              <div key={idx} className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md truncate ${isGuardia ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400' :
+                                event.type === 'work' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400' :
+                                event.type === 'fitness' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' :
+                                'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400'
+                                }`} title={event.title}>
+                                {isGuardia ? '🔴' : event.type === 'work' ? '💼' : event.type === 'fitness' ? '💪' : '📌'} {event.title.substring(0, 12)}{event.title.length > 12 ? '…' : ''}
+                              </div>
                             );
                           })}
+                          {dayEvents.length > 2 && <p className="text-[8px] text-slate-400 font-bold px-1">+{dayEvents.length - 2} más</p>}
                         </div>
                       </button>
                     );
@@ -1016,41 +1020,152 @@ export default function CalendarView({
           </div>
         </div>
 
-        {/* Intelligence Sidebar */}
-        <div className="lg:col-span-3 space-y-8">
-          <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden border border-indigo-500/20">
-            <h3 className="text-lg font-black mb-4 flex items-center gap-2">
-              <BrainCircuit className="text-indigo-400" size={20} /> AI Advisor
+        {/* ═══ UNIFIED SIDEBAR PANEL ═══ */}
+        <div className="lg:col-span-3 space-y-4">
+          {/* Today summary */}
+          <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-5 text-white relative overflow-hidden shadow-xl">
+            <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/5 rounded-full blur-xl" />
+            <p className="text-[10px] font-black uppercase tracking-wider opacity-70">Hoy · {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+            <div className="flex gap-4 mt-3">
+              <div><p className="text-2xl font-black">{calendarEvents.filter(e => e.start.startsWith(new Date().toISOString().split('T')[0])).length}</p><p className="text-[9px] opacity-60">Eventos</p></div>
+              <div><p className="text-2xl font-black">{(tasks||[]).filter(t => !t.completed && t.dueDate === new Date().toISOString().split('T')[0]).length}</p><p className="text-[9px] opacity-60">Tareas</p></div>
+              <div><p className="text-2xl font-black">{(() => { try { return JSON.parse(localStorage.getItem('filehub_hangouts')||'[]').filter((h:any) => h.date === new Date().toISOString().split('T')[0] && h.status !== 'done').length; } catch { return 0; } })()}</p><p className="text-[9px] opacity-60">Quedadas</p></div>
+            </div>
+          </div>
+
+          {/* Today's events */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+              <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">📅 Eventos de hoy</h3>
+            </div>
+            <div className="p-3 space-y-2 max-h-[200px] overflow-y-auto">
+              {calendarEvents.filter(e => e.start.startsWith(new Date().toISOString().split('T')[0])).length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4">Sin eventos hoy</p>
+              ) : calendarEvents.filter(e => e.start.startsWith(new Date().toISOString().split('T')[0])).map((ev, i) => {
+                const isGuardia = ev.title.toLowerCase().includes('guardia');
+                return (
+                  <div key={i} className={`px-3 py-2 rounded-xl text-xs font-bold border-l-4 ${isGuardia ? 'border-red-500 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400' : ev.type === 'work' ? 'border-amber-500 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400'}`}>
+                    {isGuardia ? '🔴 ' : ev.type === 'work' ? '💼 ' : ev.type === 'fitness' ? '💪 ' : '📌 '}{ev.title}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Pending tasks */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+              <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">✅ Tareas pendientes</h3>
+            </div>
+            <div className="p-3 space-y-1.5 max-h-[200px] overflow-y-auto">
+              {(tasks||[]).filter(t => !t.completed).length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4">Sin tareas pendientes</p>
+              ) : (tasks||[]).filter(t => !t.completed).sort((a,b) => {
+                const pOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+                return (pOrder[a.priority]||2) - (pOrder[b.priority]||2);
+              }).slice(0, 8).map((t, i) => (
+                <div key={i} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 ${t.priority === 'high' ? 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400' : t.priority === 'medium' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${t.priority === 'high' ? 'bg-red-500' : t.priority === 'medium' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                  <span className="truncate">{t.title}</span>
+                  {t.dueDate && <span className="text-[8px] ml-auto flex-shrink-0 opacity-60">{new Date(t.dueDate+'T12:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Upcoming hangouts */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+              <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">🍻 Próximas quedadas</h3>
+            </div>
+            <div className="p-3 space-y-1.5 max-h-[180px] overflow-y-auto">
+              {(() => {
+                try {
+                  const hangouts = JSON.parse(localStorage.getItem('filehub_hangouts') || '[]')
+                    .filter((h: any) => h.status !== 'done' && h.status !== 'cancelled' && h.date >= new Date().toISOString().split('T')[0])
+                    .sort((a: any, b: any) => a.date.localeCompare(b.date))
+                    .slice(0, 5);
+                  if (hangouts.length === 0) return <p className="text-xs text-slate-400 text-center py-4">Sin quedadas próximas</p>;
+                  return hangouts.map((h: any, i: number) => (
+                    <div key={i} className="px-3 py-2 rounded-xl bg-pink-50 dark:bg-pink-500/10 text-xs font-bold text-pink-700 dark:text-pink-400 flex items-center gap-2">
+                      <span>{h.emoji || '🍻'}</span>
+                      <span className="truncate">{h.title}</span>
+                      <span className="text-[8px] ml-auto opacity-60 flex-shrink-0">
+                        {h.date === new Date().toISOString().split('T')[0] ? '¡HOY!' : new Date(h.date + 'T12:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                      </span>
+                    </div>
+                  ));
+                } catch { return <p className="text-xs text-slate-400 text-center py-4">Sin quedadas</p>; }
+              })()}
+            </div>
+          </div>
+
+          {/* This week overview */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+              <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">📊 Esta semana</h3>
+            </div>
+            <div className="p-3 space-y-1.5">
+              {(() => {
+                const today = new Date();
+                const startOfWeek = new Date(today);
+                const day = startOfWeek.getDay();
+                startOfWeek.setDate(startOfWeek.getDate() - day + (day === 0 ? -6 : 1));
+                const days = Array.from({ length: 7 }, (_, i) => {
+                  const d = new Date(startOfWeek);
+                  d.setDate(d.getDate() + i);
+                  return d;
+                });
+                return days.map((d, i) => {
+                  const dateStr = d.toISOString().split('T')[0];
+                  const evCount = calendarEvents.filter(e => e.start.startsWith(dateStr)).length;
+                  const taskCount = (tasks||[]).filter(t => !t.completed && t.dueDate === dateStr).length;
+                  const isToday = dateStr === today.toISOString().split('T')[0];
+                  const isPast = d < today && !isToday;
+                  return (
+                    <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] ${isToday ? 'bg-indigo-50 dark:bg-indigo-500/10 ring-1 ring-indigo-200 dark:ring-indigo-500/30' : isPast ? 'opacity-40' : ''}`}>
+                      <span className={`w-7 font-black ${isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'}`}>{d.toLocaleDateString('es-ES', { weekday: 'short' }).slice(0,2).toUpperCase()}</span>
+                      <span className={`font-bold ${isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>{d.getDate()}</span>
+                      <div className="flex-1 flex gap-1 ml-2">
+                        {Array.from({ length: Math.min(evCount, 5) }).map((_, j) => <div key={j} className="w-2 h-2 rounded-full bg-indigo-400" />)}
+                        {Array.from({ length: Math.min(taskCount, 3) }).map((_, j) => <div key={`t-${j}`} className="w-2 h-2 rounded-full bg-amber-400" />)}
+                      </div>
+                      {(evCount + taskCount) > 0 && <span className="text-[8px] font-bold text-slate-400">{evCount + taskCount}</span>}
+                    </div>
+                  );
+                });
+              })()}
+              <div className="flex gap-4 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex items-center gap-1.5 text-[9px] text-slate-400"><div className="w-2 h-2 rounded-full bg-indigo-400" /> Eventos</div>
+                <div className="flex items-center gap-1.5 text-[9px] text-slate-400"><div className="w-2 h-2 rounded-full bg-amber-400" /> Tareas</div>
+              </div>
+            </div>
+          </div>
+
+          {/* AI Advisor */}
+          <div className="bg-slate-900 rounded-2xl p-5 text-white shadow-xl relative overflow-hidden border border-indigo-500/20">
+            <h3 className="text-sm font-black mb-3 flex items-center gap-2">
+              <BrainCircuit className="text-indigo-400" size={16} /> AI Advisor
             </h3>
-
             {analysisResult ? (
-              <div className="space-y-4 animate-in fade-in">
-                <p className="text-xs text-slate-300 leading-relaxed italic">"{analysisResult.summary}"</p>
-
+              <div className="space-y-3 animate-in fade-in">
+                <p className="text-[10px] text-slate-300 leading-relaxed italic">"{analysisResult.summary}"</p>
                 {analysisResult.conflicts && analysisResult.conflicts.length > 0 && (
-                  <div className="p-3 bg-red-500/20 rounded-xl border border-red-500/30">
-                    <p className="text-[9px] font-black uppercase text-red-300 mb-2 flex items-center gap-1"><AlertTriangle size={10} /> Conflictos</p>
-                    <ul className="text-[10px] space-y-1 text-red-200">
-                      {analysisResult.conflicts.map((c: string, i: number) => <li key={i}>• {c}</li>)}
-                    </ul>
+                  <div className="p-2.5 bg-red-500/20 rounded-lg border border-red-500/30">
+                    <p className="text-[8px] font-black uppercase text-red-300 mb-1.5">⚠️ Conflictos</p>
+                    <ul className="text-[9px] space-y-0.5 text-red-200">{analysisResult.conflicts.map((c: string, i: number) => <li key={i}>• {c}</li>)}</ul>
                   </div>
                 )}
-
                 {analysisResult.suggestions && (
-                  <div className="p-3 bg-emerald-500/20 rounded-xl border border-emerald-500/30">
-                    <p className="text-[9px] font-black uppercase text-emerald-300 mb-2">Sugerencias</p>
-                    <ul className="text-[10px] space-y-1 text-emerald-200">
-                      {analysisResult.suggestions.map((s: string, i: number) => <li key={i}>• {s}</li>)}
-                    </ul>
+                  <div className="p-2.5 bg-emerald-500/20 rounded-lg border border-emerald-500/30">
+                    <p className="text-[8px] font-black uppercase text-emerald-300 mb-1.5">💡 Sugerencias</p>
+                    <ul className="text-[9px] space-y-0.5 text-emerald-200">{analysisResult.suggestions.map((s: string, i: number) => <li key={i}>• {s}</li>)}</ul>
                   </div>
                 )}
-
-                <button onClick={() => setAnalysisResult(null)} className="text-[9px] font-black uppercase text-indigo-400 hover:text-white w-full text-center mt-2">Limpiar</button>
+                <button onClick={() => setAnalysisResult(null)} className="text-[8px] font-black uppercase text-indigo-400 hover:text-white w-full text-center">Limpiar</button>
               </div>
             ) : (
-              <div className="text-center py-8 opacity-50">
-                <p className="text-xs font-medium">Ejecuta el análisis para detectar conflictos y optimizar tu tiempo.</p>
-              </div>
+              <p className="text-[10px] text-slate-500">Pulsa "Análisis IA" para detectar conflictos y optimizar tu tiempo.</p>
             )}
           </div>
         </div>
