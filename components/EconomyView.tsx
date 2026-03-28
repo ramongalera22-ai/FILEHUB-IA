@@ -58,27 +58,44 @@ const EconomyView: React.FC<EconomyViewProps> = ({
 
    const handleAiChat = React.useCallback(async (overrideMsg?: string) => {
      const msg = overrideMsg || aiChatIn.trim();
-     if (!msg || aiChatLoading || !OPENROUTER_KEY_FIN) return;
+     if (!msg || aiChatLoading) return;
+     if (!OPENROUTER_KEY_FIN) {
+       setAiChatMsgs(prev => [...prev, 
+         { id: `fm-${Date.now()}`, role: 'user' as const, content: msg, ts: new Date() },
+         { id: `fm-${Date.now()+1}`, role: 'assistant' as const, content: '⚠️ Configura la variable VITE_OPENROUTER_KEY en tus ajustes para usar el asesor IA. Puedes obtener una key gratuita en openrouter.ai', ts: new Date() }
+       ]);
+       return;
+     }
      const userMsg = { id: `fm-${Date.now()}`, role: 'user' as const, content: msg, ts: new Date() };
      setAiChatMsgs(prev => [...prev, userMsg]);
      setAiChatIn(''); setAiChatLoading(true);
-     try {
-       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY_FIN}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
-         body: JSON.stringify({
-           model: 'anthropic/claude-haiku-4.5', max_tokens: 1500,
-           messages: [
-             { role: 'system', content: `Eres un asesor financiero IA en FILEHUB. El usuario es médico.\n\nDATOS FINANCIEROS:\n${finContext}\n\nINSTRUCCIONES:\n- Responde en español con emojis\n- Analiza riesgos de deuda, prioriza qué eliminar primero (avalancha vs bola de nieve)\n- Identifica puntos críticos (vencimientos, sobreendeudamiento, ratio deuda/ingreso)\n- Si suben un extracto PDF, analiza patrones de gasto\n- Sé directo con alertas rojas si hay riesgo\n- Sugiere plan de acción concreto` },
-             ...[...aiChatMsgs.slice(-10), userMsg].map(m => ({ role: m.role, content: m.content }))
-           ]
-         })
-       });
-       const d = await res.json();
-       const reply = d.choices?.[0]?.message?.content || 'Error';
-       setAiChatMsgs(prev => [...prev, { id: `fm-${Date.now()+1}`, role: 'assistant', content: reply, ts: new Date() }]);
-     } catch (e: any) {
-       setAiChatMsgs(prev => [...prev, { id: `fm-${Date.now()+1}`, role: 'assistant', content: `❌ Error: ${e.message}`, ts: new Date() }]);
+     
+     const models = ['anthropic/claude-haiku-4.5', 'anthropic/claude-3-haiku', 'google/gemini-flash-1.5'];
+     let reply = '';
+     
+     for (const model of models) {
+       try {
+         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+           method: 'POST', 
+           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY_FIN}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+           body: JSON.stringify({
+             model, max_tokens: 1500,
+             messages: [
+               { role: 'system', content: `Eres un asesor financiero IA en FILEHUB. El usuario es médico.\n\nDATOS FINANCIEROS:\n${finContext}\n\nINSTRUCCIONES:\n- Responde en español con emojis\n- Analiza riesgos de deuda, prioriza qué eliminar primero (avalancha vs bola de nieve)\n- Identifica puntos críticos (vencimientos, sobreendeudamiento, ratio deuda/ingreso)\n- Sé directo con alertas rojas si hay riesgo\n- Sugiere plan de acción concreto` },
+               ...[...aiChatMsgs.slice(-10), userMsg].map(m => ({ role: m.role, content: m.content }))
+             ]
+           })
+         });
+         const d = await res.json();
+         if (d.error) { reply = `⚠️ ${d.error.message || JSON.stringify(d.error)}`; continue; }
+         reply = d.choices?.[0]?.message?.content || '';
+         if (reply) break;
+       } catch (e: any) {
+         reply = `❌ Error de conexión: ${e.message}`;
+       }
      }
+     
+     setAiChatMsgs(prev => [...prev, { id: `fm-${Date.now()+1}`, role: 'assistant', content: reply || '⚠️ No se pudo obtener respuesta. Verifica tu API key de OpenRouter en Configuración.', ts: new Date() }]);
      setAiChatLoading(false);
    }, [aiChatIn, aiChatMsgs, aiChatLoading, finContext, OPENROUTER_KEY_FIN]);
 

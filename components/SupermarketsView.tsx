@@ -58,14 +58,8 @@ const RECURRENT_PRODUCTS = [
 const OPENROUTER_KEY_SM = import.meta.env.VITE_OPENROUTER_KEY || '';
 
 async function chatShoppingAI(messages: {role:string;content:string}[], listContext: string): Promise<string> {
-  if (!OPENROUTER_KEY_SM) return '⚠️ Configura VITE_OPENROUTER_KEY para usar el asistente IA.';
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY_SM}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
-      body: JSON.stringify({
-        model: 'anthropic/claude-haiku-4.5', max_tokens: 1200,
-        messages: [
-          { role: 'system', content: `Eres un asistente de compras IA integrado en FILEHUB. El usuario es médico con poco tiempo.
+  if (!OPENROUTER_KEY_SM) return '⚠️ Configura VITE_OPENROUTER_KEY en Configuración para usar el asistente IA.';
+  const systemContent = `Eres un asistente de compras IA integrado en FILEHUB. El usuario es médico con poco tiempo.
 
 LISTA DE LA COMPRA ACTUAL:
 ${listContext || 'Lista vacía.'}
@@ -79,14 +73,25 @@ INSTRUCCIONES:
 - Puedes sugerir recetas con los productos del carrito
 - Puedes organizar la lista por secciones del supermercado
 - Si preguntan por alternativas o sustitutos, recomienda con precios
-- Sé conciso y práctico` },
-          ...messages
-        ]
-      })
-    });
-    const d = await res.json();
-    return d.choices?.[0]?.message?.content || 'Error.';
-  } catch (e:any) { return `❌ Error: ${e.message}`; }
+- Sé conciso y práctico`;
+
+  const models = ['anthropic/claude-haiku-4.5', 'anthropic/claude-3-haiku', 'google/gemini-flash-1.5'];
+  for (const model of models) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY_SM}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+        body: JSON.stringify({
+          model, max_tokens: 1200,
+          messages: [{ role: 'system', content: systemContent }, ...messages]
+        })
+      });
+      const d = await res.json();
+      if (d.error) continue;
+      const reply = d.choices?.[0]?.message?.content;
+      if (reply) return reply;
+    } catch { continue; }
+  }
+  return '⚠️ No se pudo conectar. Verifica tu API key de OpenRouter en Configuración.';
 }
 
 const SupermarketsView: React.FC<SupermarketsViewProps> = ({

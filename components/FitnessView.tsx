@@ -48,43 +48,57 @@ INSTRUCCIONES:
 - Si el usuario pregunta por su progreso, analiza sus sesiones completadas vs planificadas
 - Puedes sugerir ajustes basados en la intensidad y tipo de sesiones previas`;
 
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENROUTER_KEY}`,
-        'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA'
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-haiku-4.5',
-        max_tokens: 1500,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages
-        ]
-      })
-    });
-    const d = await res.json();
-    return d.choices?.[0]?.message?.content || 'Error: no se recibió respuesta.';
+    const models = ['anthropic/claude-haiku-4.5', 'anthropic/claude-3-haiku', 'google/gemini-flash-1.5'];
+    for (const model of models) {
+      try {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENROUTER_KEY}`,
+            'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA'
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 1500,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              ...messages
+            ]
+          })
+        });
+        const d = await res.json();
+        if (d.error) continue;
+        const reply = d.choices?.[0]?.message?.content;
+        if (reply) return reply;
+      } catch { continue; }
+    }
+    return '⚠️ No se pudo conectar con la IA. Verifica tu API key de OpenRouter en Configuración.';
   } catch (err: any) {
     return `❌ Error de conexión: ${err.message}`;
   }
 }
 
 async function generatePlanAI(goal: string, days: number): Promise<string> {
-  if (!OPENROUTER_KEY) return 'Configura tu API key de OpenRouter.';
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
-      body: JSON.stringify({
-        model: 'anthropic/claude-haiku-4.5', max_tokens: 1200,
-        messages: [{ role: 'user', content: `Crea un plan de entrenamiento de ${days} días para: ${goal}. Soy médico con guardias de 24h, necesito entrenamientos de 30-45 min máximo. Incluye: día, tipo de ejercicio, duración, series/reps, intensidad y consejo de recuperación. Responde en español con emojis.` }]
-      })
-    });
-    const d = await res.json();
-    return d.choices?.[0]?.message?.content || 'Error generando plan.';
-  } catch { return 'Error de conexión.'; }
+  if (!OPENROUTER_KEY) return '⚠️ Configura tu API key de OpenRouter en Configuración.';
+  const models = ['anthropic/claude-haiku-4.5', 'anthropic/claude-3-haiku', 'google/gemini-flash-1.5'];
+  for (const model of models) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+        body: JSON.stringify({
+          model, max_tokens: 1200,
+          messages: [{ role: 'user', content: `Crea un plan de entrenamiento de ${days} días para: ${goal}. Soy médico con guardias de 24h, necesito entrenamientos de 30-45 min máximo. Incluye: día, tipo de ejercicio, duración, series/reps, intensidad y consejo de recuperación. Responde en español con emojis.` }]
+        })
+      });
+      const d = await res.json();
+      if (d.error) continue;
+      const reply = d.choices?.[0]?.message?.content;
+      if (reply) return reply;
+    } catch { continue; }
+  }
+  return '⚠️ No se pudo generar el plan. Verifica tu API key de OpenRouter.';
 }
 
 import { BotPanelFitness } from './BotPanel';
