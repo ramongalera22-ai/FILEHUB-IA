@@ -24,6 +24,56 @@ interface CronJob {
 
 // ═══ CONFIG ══════════════════════════════════════════════════════
 const WA_SERVER = import.meta.env.VITE_WA_SERVER_URL || 'https://whatsapp-filehub-production.up.railway.app';
+const LOCAL_BOT = import.meta.env.VITE_OLLAMA_URL?.replace(':11434', ':3001') || 'http://100.80.12.26:3001'; // OpenClaw miniPC bot
+
+// Smart contact: tries miniPC bot first (Playwright local), then Railway, then browser fallback
+async function smartContact(url: string, message: string, name: string, email: string, phone: string): Promise<{success:boolean;method:string;error?:string}> {
+  // Layer 1: MiniPC OpenClaw bot (Playwright local — fastest & most reliable)
+  for (const server of [LOCAL_BOT, WA_SERVER]) {
+    try {
+      const r = await fetch(`${server}/contact-landlord`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, message, name, email, phone }),
+        signal: AbortSignal.timeout(15000)
+      });
+      const d = await r.json();
+      if (d.success) {
+        // Send WhatsApp confirmation
+        try {
+          await fetch(`${server}/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: '34679888148',
+              message: `✅ *CONTACTO ENVIADO*\n\n🏠 ${url.split('/inmueble/')[1]?.split('/')[0] || 'Piso'}\n🤖 Método: ${d.method || server.includes('100.80') ? 'OpenClaw MiniPC' : 'Railway'}\n📧 Formulario rellenado automáticamente\n\n⏰ ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`
+            }),
+            signal: AbortSignal.timeout(5000)
+          });
+        } catch {}
+        return { success: true, method: server.includes('100.80') ? '🖥️ OpenClaw MiniPC' : '☁️ Railway Bot' };
+      }
+    } catch {}
+  }
+
+  // Layer 2: Send via WA for manual follow-up
+  for (const server of [LOCAL_BOT, WA_SERVER]) {
+    try {
+      const r = await fetch(`${server}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: '34679888148',
+          message: `🏠 *CONTACTAR MANUALMENTE:*\n🔗 ${url}\n\n📋 Mensaje copiado al portapapeles. Pega en el formulario.\n\n⏰ ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`
+        }),
+        signal: AbortSignal.timeout(5000)
+      });
+      if (r.ok) return { success: true, method: '📱 WhatsApp reminder' };
+    } catch {}
+  }
+
+  return { success: false, method: 'browser', error: 'Servidores no disponibles' };
+}
 
 // ═══ DATA ════════════════════════════════════════════════════════
 const PISOS: Piso[] = [
@@ -217,28 +267,18 @@ const PisosDashboardView: React.FC = () => {
     setContactSending(true);
     try{await navigator.clipboard.writeText(MSG)}catch{}
 
-    // Capa 1: Auto-form
-    setContactStatus(`🤖 Capa 1: Enviando formulario...`);
-    try{
-      const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"}),signal:AbortSignal.timeout(8000)});
-      const d=await r.json();
-      if(d.success){
-        const emoji=d.method?.includes('puppeteer')?'🤖':d.method==='idealista-api'?'📧':d.method==='extract-contact'?'📞':'✅';
-        setContactStatus(`${emoji} ${d.method==='wa-fallback'?'Datos enviados a tu WA':d.method?.includes('puppeteer')?'Formulario rellenado automáticamente':'Contacto enviado'}: ${p.titulo.substring(0,25)}`);markContacted(p.id);setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return;
-      }
-    }catch{}
-
-    // Capa 2: WA
-    setContactStatus(`⚠️ Capa 2: Enviando a tu WA...`);
-    try{
-      const r=await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:`🏠 *CONTACTAR:*\n${p.titulo}\n${p.precio}€ · ${p.m2}m² · ${p.zona}\n🔗 ${p.url}\n\n📋 Mensaje:\n${MSG}`}),signal:AbortSignal.timeout(5000)});
-      if(r.ok){setContactStatus(`✅ Datos enviados a tu WA — abre el link y pega`);markContacted(p.id);setContactSending(false);setTimeout(()=>setContactStatus(""),5000);return}
-    }catch{}
-
-    // Capa 3: SIEMPRE funciona
-    window.open(p.url,"_blank");
-    markContacted(p.id);
-    setContactStatus(`✅ Anuncio abierto — mensaje copiado, pégalo en el formulario`);
+    setContactStatus(`🤖 Contactando casero de ${p.titulo.substring(0,25)}...`);
+    const result = await smartContact(p.url, MSG, "Carlos Galera Román", "carlosgalera2roman@gmail.com", "679888148");
+    
+    if(result.success){
+      setContactStatus(`${result.method} · Contacto enviado: ${p.titulo.substring(0,25)}`);
+      markContacted(p.id);
+    } else {
+      // Fallback: abrir en navegador
+      window.open(p.url,"_blank");
+      markContacted(p.id);
+      setContactStatus(`📤 Anuncio abierto — mensaje copiado, pégalo en el formulario`);
+    }
     setContactSending(false);setTimeout(()=>setContactStatus(""),6000);
   };
 
@@ -247,7 +287,6 @@ const PisosDashboardView: React.FC = () => {
     const pending=filtered.filter(x=>!contacted.has(x.id));
     if(pending.length===0){setContactStatus("✅ Todos ya contactados");setContactSending(false);setTimeout(()=>setContactStatus(""),3000);return}
 
-    // Copy message to clipboard first
     try{await navigator.clipboard.writeText(MSG)}catch{}
 
     let auto=0,wa=0,browser=0;
@@ -255,36 +294,26 @@ const PisosDashboardView: React.FC = () => {
     for(let i=0;i<pending.length;i++){
       const p=pending[i];
       setContactStatus(`🤖 ${i+1}/${pending.length}: ${p.titulo.substring(0,25)}...`);
-      let done=false;
 
-      // Capa 1: Server auto-form
-      try{
-        const r=await fetch(`${WA_SERVER}/contact-landlord`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:p.url,message:MSG,name:"Carlos Galera Román",email:"carlosgalera2roman@gmail.com",phone:"679888148"}),signal:AbortSignal.timeout(8000)});
-        const d=await r.json();if(d.success){auto++;done=true;markContacted(p.id)}
-      }catch{}
-
-      // Capa 2: WA con datos
-      if(!done){
-        try{
-          const r=await fetch(`${WA_SERVER}/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:"34679888148",message:`🏠 *#${i+1} CONTACTAR:*\n${p.titulo}\n${p.precio}€ · ${p.m2}m² · ${p.zona}\n🔗 ${p.url}\n\n📋 Mensaje:\n${MSG}`}),signal:AbortSignal.timeout(5000)});
-          if(r.ok){wa++;done=true;markContacted(p.id)}
-        }catch{}
-      }
-
-      // Capa 3: SIEMPRE funciona — abre el anuncio en el navegador
-      if(!done){
+      const result = await smartContact(p.url, MSG, "Carlos Galera Román", "carlosgalera2roman@gmail.com", "679888148");
+      
+      if(result.success){
+        if(result.method.includes('MiniPC')||result.method.includes('Railway')) auto++;
+        else wa++;
+        markContacted(p.id);
+      } else {
         window.open(p.url,"_blank");
         browser++;markContacted(p.id);
       }
 
-      await new Promise(r=>setTimeout(r,done?1500:800));
+      await new Promise(r=>setTimeout(r,result.success?2000:800));
     }
 
     const parts=[];
-    if(auto>0)parts.push(`${auto} auto-formulario`);
+    if(auto>0)parts.push(`${auto} auto-enviados por bot`);
     if(wa>0)parts.push(`${wa} vía WA`);
     if(browser>0)parts.push(`${browser} abiertos en navegador`);
-    setContactStatus(`✅ ${pending.length} pisos: ${parts.join(" · ")}${browser>0?" — mensaje en portapapeles, pégalo en cada pestaña":""}`);
+    setContactStatus(`✅ ${pending.length} pisos: ${parts.join(" · ")}${browser>0?" — usa el bookmarklet en cada pestaña":""}`);
     setContactSending(false);setTimeout(()=>setContactStatus(""),12000);
   };
 

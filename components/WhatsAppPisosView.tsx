@@ -37,6 +37,7 @@ interface Oferta { titulo: string; url: string; ubicacion?: string; icon: string
 // ════════════════════════════════════════════════════════════════
 const WA_SERVER = import.meta.env.VITE_WA_SERVER_URL || 'https://whatsapp-filehub-production.up.railway.app';
 const WA_WS = import.meta.env.VITE_WA_WS_URL || 'wss://whatsapp-filehub-production.up.railway.app/ws';
+const LOCAL_BOT = import.meta.env.VITE_OLLAMA_URL?.replace(':11434', ':3001') || 'http://100.80.12.26:3001';
 const PISOS_KEY = 'filehub_pisos_v4';
 const CRON_KEY = 'filehub_crons_v3';
 const FAVS_KEY = 'filehub_pisos_favs_v2';
@@ -146,49 +147,77 @@ const WhatsAppPisosView: React.FC = () => {
     const saveFavs=(f:Set<string>)=>{setFavs(f);try{localStorage.setItem(FAVS_KEY,JSON.stringify([...f]))}catch{}};
     const markContacted=(id:string)=>{setContacted(prev=>{const n=new Set(prev);n.add(id);try{localStorage.setItem('filehub_contacted_pisos',JSON.stringify([...n]))}catch{}return n})};
     
-    // Auto-contact single piso: open URL + copy message
+    // Smart contact via bot (MiniPC → Railway → browser fallback)
     const autoContactSingle=async(p:Property)=>{
       if(!p.url)return;
       try{await navigator.clipboard.writeText(MSG_CONTACTO)}catch{}
+      
+      // Try MiniPC bot first, then Railway
+      for(const server of [LOCAL_BOT, WA_SERVER]){
+        try{
+          const r=await fetch(`${server}/contact-landlord`,{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({url:p.url,message:MSG_CONTACTO,name:'Carlos Galera Román',email:'carlosgalera2roman@gmail.com',phone:'679888148'}),
+            signal:AbortSignal.timeout(15000)
+          });
+          const d=await r.json();
+          if(d.success){
+            markContacted(p.id);
+            // Send WA confirmation
+            try{await fetch(`${server}/send`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:'34679888148',message:`✅ *CONTACTO ENVIADO*\n🏠 ${p.title.substring(0,40)}\n💰 ${p.price}\n🤖 ${server.includes('100.80')?'OpenClaw MiniPC':'Railway Bot'}\n⏰ ${new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}`}),signal:AbortSignal.timeout(5000)})}catch{}
+            setMsg(`✅ ${server.includes('100.80')?'🖥️ MiniPC':'☁️ Railway'} envió contacto: ${p.title.substring(0,25)}`);
+            setTimeout(()=>setMsg(''),5000);
+            return;
+          }
+        }catch{}
+      }
+      
+      // Fallback: open in browser
       window.open(p.url,'_blank');
       markContacted(p.id);
-      setMsg(`✅ Mensaje copiado — pégalo en el formulario de ${p.title}`);
+      setMsg(`📤 Anuncio abierto — usa el bookmarklet para rellenar`);
       setTimeout(()=>setMsg(''),4000);
     };
 
-    // Auto-contact ALL non-contacted pisos with delay
+    // Auto-contact ALL
     const autoContactAll=async()=>{
       const pending=sorted.filter(p=>p.url&&!contacted.has(p.id));
-      if(pending.length===0){setMsg('✅ Todos los pisos ya contactados');setTimeout(()=>setMsg(''),3000);return}
+      if(pending.length===0){setMsg('✅ Todos ya contactados');setTimeout(()=>setMsg(''),3000);return}
       setContactSending(true);
       try{await navigator.clipboard.writeText(MSG_CONTACTO)}catch{}
       
+      let bot=0,browser=0;
       for(let i=0;i<pending.length;i++){
         const p=pending[i];
-        setContactProgress(`📤 Contactando ${i+1}/${pending.length}: ${p.title.substring(0,30)}...`);
+        setContactProgress(`🤖 ${i+1}/${pending.length}: ${p.title.substring(0,30)}...`);
+        let done=false;
         
-        // Try server auto-fill first
-        try{
-          const r=await fetch(`${WA_SERVER}/contact-landlord`,{
-            method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({url:p.url,message:MSG_CONTACTO,name:'Carlos Galera Román',email:'carlosgalera2roman@gmail.com',phone:'679888148'}),
-            signal:AbortSignal.timeout(10000)
-          });
-          if(r.ok){markContacted(p.id);continue}
-        }catch{}
+        for(const server of [LOCAL_BOT, WA_SERVER]){
+          try{
+            const r=await fetch(`${server}/contact-landlord`,{
+              method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({url:p.url,message:MSG_CONTACTO,name:'Carlos Galera Román',email:'carlosgalera2roman@gmail.com',phone:'679888148'}),
+              signal:AbortSignal.timeout(15000)
+            });
+            const d=await r.json();
+            if(d.success){bot++;done=true;markContacted(p.id);
+              try{await fetch(`${server}/send`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:'34679888148',message:`✅ #${i+1} *AUTO-CONTACTO*\n🏠 ${p.title.substring(0,35)}\n💰 ${p.price}\n🤖 ${server.includes('100.80')?'MiniPC':'Railway'}`}),signal:AbortSignal.timeout(5000)})}catch{}
+              break;
+            }
+          }catch{}
+        }
         
-        // Fallback: open in new tab
-        window.open(p.url,'_blank');
-        markContacted(p.id);
-        
-        // Wait 2s between contacts to not overwhelm
-        if(i<pending.length-1) await new Promise(r=>setTimeout(r,2000));
+        if(!done){window.open(p.url,'_blank');browser++;markContacted(p.id);}
+        await new Promise(r=>setTimeout(r,done?2500:1000));
       }
       
       setContactProgress('');
-      setMsg(`✅ ${pending.length} pisos contactados — pega el mensaje en cada pestaña abierta`);
+      const parts=[];
+      if(bot>0)parts.push(`${bot} enviados por bot`);
+      if(browser>0)parts.push(`${browser} abiertos en navegador`);
+      setMsg(`✅ ${pending.length} pisos: ${parts.join(' · ')}`);
       setContactSending(false);
-      setTimeout(()=>setMsg(''),5000);
+      setTimeout(()=>setMsg(''),8000);
     };
     useEffect(()=>{try{localStorage.setItem(CRON_KEY,JSON.stringify(crons))}catch{}},[crons]);
 
