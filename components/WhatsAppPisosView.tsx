@@ -135,12 +135,61 @@ const WhatsAppPisosView: React.FC = () => {
     const [fD,setFD]=useState(false);
     const [crons,setCrons]=useState<CronJob[]>(()=>{try{const s=localStorage.getItem(CRON_KEY);return s?JSON.parse(s):DEFAULT_CRONS}catch{return DEFAULT_CRONS}});
     const [favs,setFavs]=useState<Set<string>>(()=>{try{return new Set(JSON.parse(localStorage.getItem(FAVS_KEY)||'[]'))}catch{return new Set()}});
+    const [contacted,setContacted]=useState<Set<string>>(()=>{try{return new Set(JSON.parse(localStorage.getItem('filehub_contacted_pisos')||'[]'))}catch{return new Set()}});
+    const [contactSending,setContactSending]=useState(false);
+    const [contactProgress,setContactProgress]=useState('');
     const [selProp,setSelProp]=useState<Property|null>(null);
     const wsRef=useRef<WebSocket|null>(null);
     const rcRef=useRef<ReturnType<typeof setTimeout>|null>(null);
 
     const save=(u:Property[])=>{setWaProps(u);try{localStorage.setItem(PISOS_KEY,JSON.stringify(u.slice(0,200)))}catch{}};
     const saveFavs=(f:Set<string>)=>{setFavs(f);try{localStorage.setItem(FAVS_KEY,JSON.stringify([...f]))}catch{}};
+    const markContacted=(id:string)=>{setContacted(prev=>{const n=new Set(prev);n.add(id);try{localStorage.setItem('filehub_contacted_pisos',JSON.stringify([...n]))}catch{}return n})};
+    
+    // Auto-contact single piso: open URL + copy message
+    const autoContactSingle=async(p:Property)=>{
+      if(!p.url)return;
+      try{await navigator.clipboard.writeText(MSG_CONTACTO)}catch{}
+      window.open(p.url,'_blank');
+      markContacted(p.id);
+      setMsg(`✅ Mensaje copiado — pégalo en el formulario de ${p.title}`);
+      setTimeout(()=>setMsg(''),4000);
+    };
+
+    // Auto-contact ALL non-contacted pisos with delay
+    const autoContactAll=async()=>{
+      const pending=sorted.filter(p=>p.url&&!contacted.has(p.id));
+      if(pending.length===0){setMsg('✅ Todos los pisos ya contactados');setTimeout(()=>setMsg(''),3000);return}
+      setContactSending(true);
+      try{await navigator.clipboard.writeText(MSG_CONTACTO)}catch{}
+      
+      for(let i=0;i<pending.length;i++){
+        const p=pending[i];
+        setContactProgress(`📤 Contactando ${i+1}/${pending.length}: ${p.title.substring(0,30)}...`);
+        
+        // Try server auto-fill first
+        try{
+          const r=await fetch(`${WA_SERVER}/contact-landlord`,{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({url:p.url,message:MSG_CONTACTO,name:'Carlos Galera Román',email:'carlosgalera2roman@gmail.com',phone:'679888148'}),
+            signal:AbortSignal.timeout(10000)
+          });
+          if(r.ok){markContacted(p.id);continue}
+        }catch{}
+        
+        // Fallback: open in new tab
+        window.open(p.url,'_blank');
+        markContacted(p.id);
+        
+        // Wait 2s between contacts to not overwhelm
+        if(i<pending.length-1) await new Promise(r=>setTimeout(r,2000));
+      }
+      
+      setContactProgress('');
+      setMsg(`✅ ${pending.length} pisos contactados — pega el mensaje en cada pestaña abierta`);
+      setContactSending(false);
+      setTimeout(()=>setMsg(''),5000);
+    };
     useEffect(()=>{try{localStorage.setItem(CRON_KEY,JSON.stringify(crons))}catch{}},[crons]);
 
     // ═══ WEBSOCKET ═══════════════════════════════════════════════
@@ -225,6 +274,7 @@ const WhatsAppPisosView: React.FC = () => {
                 {p.extras&&p.extras.length>0&&<div className="flex gap-1 flex-wrap mb-3">{p.extras.map((e,j)=>(<span key={j} className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${/cerca|L3|L5/i.test(e)?'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300':/balc|terraza|reform|ascensor/i.test(e)?'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300':'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>{e}</span>))}</div>}
                 <div className="flex gap-2">
                     {p.url&&<a href={p.url} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-300"><ExternalLink size={12}/>Ver anuncio</a>}
+                    {p.url&&<button onClick={e=>{e.stopPropagation();autoContactSingle(p)}} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold shadow-sm transition-all ${contacted.has(p.id)?'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700':'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-green-500/20'}`}>{contacted.has(p.id)?<><CheckCircle2 size={12}/>Contactado</>:<><Send size={12}/>Contactar</>}</button>}
                     {p.senderPhone&&<button onClick={()=>sendWA(p)} disabled={sendId===p.id} className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-500 hover:bg-green-600 disabled:opacity-50 rounded-xl text-xs font-bold text-white shadow-sm shadow-green-500/20">{sendId===p.id?<Loader2 size={12} className="animate-spin"/>:<MessageCircle size={12}/>}{sendId===p.id?'...':'WhatsApp'}</button>}
                 </div>
             </div>
@@ -269,8 +319,11 @@ const WhatsAppPisosView: React.FC = () => {
             <div className="flex flex-wrap gap-2 items-center">
                 <select value={sort} onChange={e=>setSort(e.target.value)} className="text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 font-medium cursor-pointer outline-none"><option value="precio-asc">Precio ↑</option><option value="precio-desc">Precio ↓</option><option value="m2-desc">m² ↓</option><option value="ratio">€/m²</option></select>
                 <button onClick={()=>setFD(!fD)} className={`text-xs font-bold px-3 py-2 rounded-lg border ${fD?'bg-amber-50 dark:bg-amber-900/30 border-amber-300 text-amber-600':'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}>⭐ Destacados</button>
-                <span className="text-[10px] font-mono text-slate-400 ml-auto">{sorted.length} pisos · 850–1400€ · L3/L5</span>
+                <button onClick={autoContactAll} disabled={contactSending} className="flex items-center gap-1.5 text-xs font-black px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white disabled:opacity-50 shadow-md shadow-green-500/20 transition-all">{contactSending?<Loader2 size={12} className="animate-spin"/>:<Send size={12}/>}🚀 Contactar todos ({sorted.filter(p=>p.url&&!contacted.has(p.id)).length})</button>
+                <button onClick={copyMsg} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:border-indigo-300">{copied?<><Check size={12} className="text-emerald-500"/>Copiado</>:<><Copy size={12}/>Copiar mensaje</>}</button>
+                <span className="text-[10px] font-mono text-slate-400 ml-auto">{sorted.length} pisos · {contacted.size} contactados</span>
             </div>
+            {contactProgress&&<div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-700 rounded-xl px-4 py-2.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-2 animate-pulse"><Loader2 size={14} className="animate-spin"/>{contactProgress}</div>}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{sorted.map(p=><Card key={p.id} p={p}/>)}</div>
         </div>}
 
