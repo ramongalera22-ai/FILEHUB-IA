@@ -6,7 +6,7 @@ import {
   Plane, BarChart3, QrCode, Settings, FolderOpen, Dumbbell,
   Utensils, Home, Activity, Edit3, BookOpen, Briefcase, Phone,
   Car, Newspaper, ShoppingCart, MessageSquare, Star, Shield,
-  Brain, Flame
+  Brain, Flame, Stethoscope, Users
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,6 +31,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'travel-planner', label: '✈️ Viajes IA',           icon: Plane },
     { id: 'travel-notebook', label: '📓 Cuaderno Viaje IA',   icon: BookOpen },
     { id: 'shifts',         label: '🛡️ Guardias',           icon: Shield },
+    { id: 'patient-notes',  label: '🩺 Notas Pacientes',    icon: Stethoscope },
+    { id: 'hangouts',       label: '🍻 Quedadas',           icon: Users },
     { id: 'budget-alerts',  label: '💰 Alertas Presupuesto',icon: Target },
     { id: 'cron-jobs',      label: '⏰ Cron Jobs Bot',      icon: Activity },
     { id: 'time-block',     label: '🧠 Asesor de Tiempo',   icon: Brain },

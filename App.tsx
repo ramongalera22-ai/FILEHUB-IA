@@ -44,6 +44,8 @@ import SupermarketsView from './components/SupermarketsView';
 import OpenWebUIView from './components/OpenWebUIView';
 import MonthlyAnalysisView from './components/MonthlyAnalysisView';
 import NotebookAIView from './components/NotebookAIView';
+import PatientNotesView from './components/PatientNotesView';
+import HangoutsView from './components/HangoutsView';
 import CronJobsView from './components/CronJobsView';
 import TimeBlockView from './components/TimeBlockView';
 import WhatsAppInboxView from './components/WhatsAppInboxView';
@@ -1280,6 +1282,8 @@ const App: React.FC = () => {
       case 'whatsapp-inbox': return <WhatsAppInboxView />;
       case 'openwebui': return <OpenWebUIView url={openWebUIConfig.baseUrl} />;
       case 'notebook-ai': return <NotebookAIView />;
+      case 'patient-notes': return <PatientNotesView />;
+      case 'hangouts': return <HangoutsView />;
       case 'vip-tasks': return <VipTasksView session={session} />;
       case 'shifts': return (
         <ShiftsCalendarView
