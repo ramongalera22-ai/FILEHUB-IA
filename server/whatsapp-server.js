@@ -650,49 +650,133 @@ try { puppeteer = require('puppeteer'); console.log('🎭 Puppeteer disponible')
 
 async function fillFormWithBrowser(url, message, name, email, phone) {
     if (!puppeteer) throw new Error('Puppeteer not available');
-    const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+    const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
     try {
         const page = await browser.newPage();
         await page.setUserAgent(getUA());
         await page.setViewport({ width: 1280, height: 900 });
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 25000 });
+        await page.waitForTimeout(2000);
+
+        // Accept cookies if present
+        try {
+            const cookieBtn = await page.$('#didomi-notice-agree-button, button[id*="accept"], button[class*="accept"], .sui-AtomButton--primary');
+            if (cookieBtn) { await cookieBtn.click(); await page.waitForTimeout(1000); }
+        } catch {}
 
         // Idealista
         if (url.includes('idealista.com')) {
-            // Click "Contactar" button
-            const contactBtn = await page.$('button.icon-mail-outline, a[href*="contacto"], button:has-text("Contactar"), .contact-button, #btn-contact');
-            if (contactBtn) await contactBtn.click();
-            await page.waitForTimeout(2000);
-
-            // Fill form fields
-            const selectors = [
-                { sel: '#contact-form-name, input[name="name"], input[placeholder*="ombre"]', val: name },
-                { sel: '#contact-form-email, input[name="email"], input[type="email"]', val: email },
-                { sel: '#contact-form-phone, input[name="phone"], input[type="tel"]', val: phone },
-                { sel: '#contact-form-message, textarea[name="message"], textarea', val: message },
+            // Try to find and fill the message textarea directly (new Idealista UI shows it on page)
+            const textareaSelectors = [
+                'textarea#message', 'textarea[name="message"]', 'textarea.textarea',
+                'textarea[placeholder*="mensaje"]', 'textarea[placeholder*="Tu mensaje"]',
+                '#contact-form textarea', '.contact-form textarea', 'textarea'
             ];
-            for (const { sel, val } of selectors) {
+            
+            let textareaFound = false;
+            for (const sel of textareaSelectors) {
                 try {
-                    await page.waitForSelector(sel, { timeout: 3000 });
-                    await page.click(sel);
-                    await page.evaluate((s) => { const el = document.querySelector(s); if (el) el.value = ''; }, sel);
-                    await page.type(sel, val, { delay: 10 });
+                    const ta = await page.$(sel);
+                    if (ta) {
+                        await ta.click({ clickCount: 3 });
+                        await page.waitForTimeout(300);
+                        await page.keyboard.press('Backspace');
+                        await ta.type(message, { delay: 5 });
+                        textareaFound = true;
+                        console.log(`✅ Textarea found with: ${sel}`);
+                        break;
+                    }
                 } catch {}
             }
 
-            // Accept terms if checkbox exists
+            // If no textarea visible, click contact button first
+            if (!textareaFound) {
+                const contactBtnSelectors = [
+                    'button.icon-mail-outline', 'a[href*="contacto"]',
+                    '.contact-button', '#btn-contact', 'button[class*="contact"]',
+                    'a[class*="contact"]', '.detail-contact button', 
+                    'button:has-text("Contactar")', 'a:has-text("Contactar")'
+                ];
+                for (const sel of contactBtnSelectors) {
+                    try {
+                        const btn = await page.$(sel);
+                        if (btn) { await btn.click(); await page.waitForTimeout(3000); break; }
+                    } catch {}
+                }
+
+                // Try textarea again after clicking contact
+                for (const sel of textareaSelectors) {
+                    try {
+                        const ta = await page.$(sel);
+                        if (ta) {
+                            await ta.click({ clickCount: 3 });
+                            await page.keyboard.press('Backspace');
+                            await ta.type(message, { delay: 5 });
+                            textareaFound = true;
+                            break;
+                        }
+                    } catch {}
+                }
+            }
+
+            // Fill other fields if present
+            const fieldMap = [
+                { sels: ['input[name="name"]', 'input[placeholder*="ombre"]', '#contact-form-name'], val: name },
+                { sels: ['input[name="email"]', 'input[type="email"]', '#contact-form-email'], val: email },
+                { sels: ['input[name="phone"]', 'input[type="tel"]', '#contact-form-phone'], val: phone },
+            ];
+            for (const { sels, val } of fieldMap) {
+                for (const sel of sels) {
+                    try {
+                        const el = await page.$(sel);
+                        if (el) {
+                            await el.click({ clickCount: 3 });
+                            await page.keyboard.press('Backspace');
+                            await el.type(val, { delay: 5 });
+                            break;
+                        }
+                    } catch {}
+                }
+            }
+
+            // Accept terms/conditions checkbox
             try {
-                const checkbox = await page.$('input[type="checkbox"]');
-                if (checkbox) { const checked = await page.evaluate(el => el.checked, checkbox); if (!checked) await checkbox.click(); }
+                const checkboxes = await page.$$('input[type="checkbox"]');
+                for (const cb of checkboxes) {
+                    const checked = await page.evaluate(el => el.checked, cb);
+                    if (!checked) await cb.click();
+                }
             } catch {}
 
-            // Submit
+            // Click submit / "Contactar por chat" / "Enviar"
+            const submitSelectors = [
+                'button[type="submit"]', 'input[type="submit"]',
+                'button.contactar', 'button[class*="submit"]',
+                'button[class*="send"]', '.submit-button',
+                'button[data-testid="contact-submit"]'
+            ];
+            for (const sel of submitSelectors) {
+                try {
+                    const btn = await page.$(sel);
+                    if (btn) { await btn.click(); await page.waitForTimeout(3000); break; }
+                } catch {}
+            }
+            
+            // Also try by text content
             try {
-                const submitBtn = await page.$('button[type="submit"], input[type="submit"], button:has-text("Enviar"), .submit-button');
-                if (submitBtn) { await submitBtn.click(); await page.waitForTimeout(3000); }
+                await page.evaluate(() => {
+                    const buttons = document.querySelectorAll('button, a.btn, input[type="submit"]');
+                    for (const btn of buttons) {
+                        const txt = (btn.textContent || btn.value || '').toLowerCase();
+                        if (txt.includes('contactar') || txt.includes('enviar') || txt.includes('send')) {
+                            btn.click(); break;
+                        }
+                    }
+                });
+                await page.waitForTimeout(3000);
             } catch {}
 
-            return { success: true, method: 'puppeteer-idealista' };
+            return { success: textareaFound, method: 'puppeteer-idealista', textareaFilled: textareaFound };
         }
 
         // Fotocasa / Habitaclia — similar form pattern

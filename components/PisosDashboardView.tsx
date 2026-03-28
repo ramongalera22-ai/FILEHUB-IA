@@ -474,15 +474,43 @@ const PisosDashboardView: React.FC = () => {
         </div>}
 
         {/* TAB: CONTACTO */}
-        {tab==="contacto"&&<div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2"><Mail size={16} className="text-amber-500"/>Mensaje para caseros</h3>
-            <div className="flex gap-2">
-              <button onClick={copyMsg} className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg ${copied?"bg-emerald-500 text-white":"bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/25"}`}>{copied?<><Check size={14}/>Copiado</>:<><Copy size={14}/>Copiar</>}</button>
-              <button onClick={sendAllWA} disabled={sending} className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"><Send size={14}/>Enviar WA</button>
+        {tab==="contacto"&&<div className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2"><Mail size={16} className="text-amber-500"/>Mensaje para caseros</h3>
+              <div className="flex gap-2">
+                <button onClick={copyMsg} className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg ${copied?"bg-emerald-500 text-white":"bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/25"}`}>{copied?<><Check size={14}/>Copiado</>:<><Copy size={14}/>Copiar</>}</button>
+                <button onClick={sendAllWA} disabled={sending} className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"><Send size={14}/>Enviar WA</button>
+              </div>
+            </div>
+            <pre className="p-5 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-sans">{MSG}</pre>
+          </div>
+
+          {/* BOOKMARKLET - Auto-fill Idealista */}
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 rounded-xl border border-amber-200 dark:border-amber-700 p-5">
+            <h3 className="font-black text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2 mb-3">🔖 Auto-rellenar Idealista (Bookmarklet)</h3>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mb-4">Arrastra este botón a tu barra de marcadores. Cuando estés en un anuncio de Idealista, haz clic y se rellenará automáticamente el formulario de contacto y lo enviará.</p>
+            <div className="flex flex-wrap gap-3 items-center">
+              <a
+                href={`javascript:void((function(){const MSG=${JSON.stringify(MSG).replace(/'/g, "\\'")};try{const ta=document.querySelector('textarea[name="message"],textarea#message,textarea.textarea,textarea');if(ta){ta.focus();ta.value='';const nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set;nativeInputValueSetter.call(ta,MSG);ta.dispatchEvent(new Event('input',{bubbles:true}));ta.dispatchEvent(new Event('change',{bubbles:true}));setTimeout(()=>{const btns=document.querySelectorAll('button,input[type=submit]');for(const b of btns){const t=(b.textContent||b.value||'').toLowerCase();if(t.includes('contactar')||t.includes('enviar')){b.click();break;}}},500);alert('✅ Mensaje rellenado y enviado');}else{alert('⚠️ No se encontró el formulario. Asegúrate de estar en un anuncio de Idealista.');}}catch(e){alert('❌ Error: '+e.message);}})())`}
+                className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl text-xs font-black shadow-lg cursor-grab active:cursor-grabbing hover:shadow-xl transition-all"
+                onClick={e => e.preventDefault()}
+                draggable
+              >
+                🏠 Auto-Contactar Idealista
+              </a>
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">← Arrastra a tu barra de marcadores</span>
+            </div>
+            <div className="mt-4 bg-white dark:bg-slate-800 rounded-lg p-3 border border-amber-200 dark:border-amber-700">
+              <p className="text-[10px] font-bold text-slate-500 mb-2">Instrucciones:</p>
+              <ol className="text-[10px] text-slate-400 space-y-1">
+                <li>1. Arrastra el botón naranja a tu barra de favoritos del navegador</li>
+                <li>2. Abre un anuncio en Idealista (ej: idealista.com/inmueble/12345)</li>
+                <li>3. Haz clic en el bookmarklet "Auto-Contactar Idealista" de tu barra</li>
+                <li>4. El mensaje se rellena automáticamente y se envía al casero</li>
+              </ol>
             </div>
           </div>
-          <pre className="p-5 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-sans">{MSG}</pre>
         </div>}
 
         {/* CONTACT MODAL */}
