@@ -45,6 +45,55 @@ import { supabase } from '../services/supabaseClient';
 import { syncAllCarlosCalendars, CARLOS_CALENDARS, SyncResult } from '../services/googleCalendarSync';
 import { BotPanelCalendario } from './BotPanel';
 
+// ── GOOGLE CALENDAR EVENT CREATION VIA ANTHROPIC MCP ───────────────
+async function createGoogleCalendarEvent(
+  title: string,
+  date: string,
+  startTime?: string,
+  endTime?: string,
+  description?: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const timeInfo = startTime && endTime
+      ? `from ${startTime} to ${endTime} on ${date}`
+      : `all day on ${date}`;
+    
+    const descPart = description ? ` Description: "${description}".` : '';
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `Create a Google Calendar event titled "${title}" ${timeInfo}. Timezone: Europe/Madrid.${descPart} Confirm when done.`
+        }],
+        mcp_servers: [{
+          type: 'url',
+          url: 'https://gcal.mcp.claude.com/mcp',
+          name: 'google-calendar'
+        }]
+      })
+    });
+
+    const data = await res.json();
+    const textBlocks = data.content?.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n') || '';
+    const toolResults = data.content?.filter((b: any) => b.type === 'mcp_tool_result') || [];
+    
+    const hasSuccess = toolResults.length > 0 || textBlocks.toLowerCase().includes('created') || textBlocks.toLowerCase().includes('creado');
+    
+    return {
+      success: hasSuccess,
+      message: hasSuccess ? '✅ Evento creado en Google Calendar' : textBlocks || 'No se pudo crear el evento'
+    };
+  } catch (err: any) {
+    console.error('Error creating Google Calendar event:', err);
+    return { success: false, message: `❌ Error: ${err.message}` };
+  }
+}
+
 interface CalendarViewProps {
   expenses: Expense[];
   projects: Project[];
@@ -198,7 +247,24 @@ export default function CalendarView({
   const [analysisResult, setAnalysisResult] = useState<any>(null);
 
   // Quick Add State
-  const [quickEvent, setQuickEvent] = useState({ title: '', date: new Date().toISOString().split('T')[0], type: 'personal' as any });
+  const [quickEvent, setQuickEvent] = useState({ 
+    title: '', 
+    date: new Date().toISOString().split('T')[0], 
+    type: 'personal' as any,
+    startTime: '',
+    endTime: '',
+    description: '',
+    syncToGoogle: true 
+  });
+  const [isCreatingGCal, setIsCreatingGCal] = useState(false);
+  const [gcalFeedback, setGcalFeedback] = useState('');
+
+  // Inline add state for week/month views
+  const [inlineAddDate, setInlineAddDate] = useState<string | null>(null);
+  const [inlineTitle, setInlineTitle] = useState('');
+  const [inlineType, setInlineType] = useState<'personal' | 'work' | 'project' | 'fitness'>('personal');
+  const [inlineSyncGoogle, setInlineSyncGoogle] = useState(true);
+  const [isInlineCreating, setIsInlineCreating] = useState(false);
 
   const icsInputRef = useRef<HTMLInputElement>(null);
 
@@ -331,20 +397,65 @@ export default function CalendarView({
     event.target.value = '';
   };
 
-  const handleQuickAddSubmit = (e: React.FormEvent) => {
+  const handleQuickAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickEvent.title) return;
-    onAddEvent({
+    
+    const newEvent: CalendarEvent = {
       id: `quick-${Date.now()}`,
       title: quickEvent.title,
-      start: quickEvent.date,
-      end: quickEvent.date,
+      start: quickEvent.startTime ? `${quickEvent.date}T${quickEvent.startTime}` : quickEvent.date,
+      end: quickEvent.endTime ? `${quickEvent.date}T${quickEvent.endTime}` : quickEvent.date,
       type: quickEvent.type,
       source: 'manual'
-    });
-    setQuickEvent({ title: '', date: new Date().toISOString().split('T')[0], type: 'personal' });
-    alert("Evento añadido con éxito");
-    setActiveSubView('month');
+    };
+    
+    // Save locally + Supabase
+    onAddEvent(newEvent);
+    
+    // Sync to Google Calendar if enabled
+    if (quickEvent.syncToGoogle) {
+      setIsCreatingGCal(true);
+      setGcalFeedback('⏳ Creando en Google Calendar...');
+      const result = await createGoogleCalendarEvent(
+        quickEvent.title,
+        quickEvent.date,
+        quickEvent.startTime || undefined,
+        quickEvent.endTime || undefined,
+        quickEvent.description || undefined
+      );
+      setGcalFeedback(result.message);
+      setIsCreatingGCal(false);
+      // Clear feedback after 4s
+      setTimeout(() => setGcalFeedback(''), 4000);
+    }
+    
+    setQuickEvent({ title: '', date: new Date().toISOString().split('T')[0], type: 'personal', startTime: '', endTime: '', description: '', syncToGoogle: true });
+  };
+
+  // Inline add handler for week/daily views
+  const handleInlineAdd = async (dateStr: string) => {
+    if (!inlineTitle.trim()) return;
+    
+    const newEvent: CalendarEvent = {
+      id: `inline-${Date.now()}`,
+      title: inlineTitle,
+      start: dateStr,
+      end: dateStr,
+      type: inlineType,
+      source: 'manual'
+    };
+    
+    onAddEvent(newEvent);
+    
+    if (inlineSyncGoogle) {
+      setIsInlineCreating(true);
+      await createGoogleCalendarEvent(inlineTitle, dateStr);
+      setIsInlineCreating(false);
+    }
+    
+    setInlineTitle('');
+    setInlineAddDate(null);
   };
 
   const handleAddSource = () => {
@@ -559,26 +670,75 @@ export default function CalendarView({
                 <div className="flex-1 grid grid-cols-7 gap-2 h-full overflow-y-auto">
                   {weekDates.map(day => {
                     const dateStr = day.toISOString().split('T')[0];
-                    // Simple filter for demo: find events on this day
                     const dayEvents = calendarEvents.filter(e => e.start.startsWith(dateStr));
+                    const isAddingHere = inlineAddDate === dateStr;
+                    const dayIsToday = dateStr === new Date().toISOString().split('T')[0];
 
                     return (
-                      <div key={dateStr} className="flex flex-col bg-slate-50 rounded-2xl p-2 border border-slate-100">
-                        <div className="text-center p-2 border-b border-slate-200 mb-2">
-                          <p className="text-[10px] font-black uppercase text-slate-400">{day.toLocaleDateString('es-ES', { weekday: 'short' })}</p>
-                          <p className="font-black text-slate-700">{day.getDate()}</p>
+                      <div key={dateStr} className={`flex flex-col rounded-2xl p-2 border transition-all ${dayIsToday ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-100'}`}>
+                        <div className={`text-center p-2 border-b mb-2 ${dayIsToday ? 'border-indigo-200' : 'border-slate-200'}`}>
+                          <p className={`text-[10px] font-black uppercase ${dayIsToday ? 'text-indigo-500' : 'text-slate-400'}`}>{day.toLocaleDateString('es-ES', { weekday: 'short' })}</p>
+                          <p className={`font-black ${dayIsToday ? 'text-indigo-700' : 'text-slate-700'}`}>{day.getDate()}</p>
                         </div>
-                        <div className="flex-1 space-y-2">
+                        <div className="flex-1 space-y-1.5">
                           {dayEvents.map(ev => {
                             const isGuardia = ev.title.toLowerCase().includes('guardia');
                             return (
-                              <div key={ev.id} className={`bg-white p-2 rounded-lg text-[9px] font-bold shadow-sm border-l-4 text-slate-700 ${isGuardia ? 'border-orange-500 bg-orange-50/50 text-orange-800' : 'border-indigo-500'
-                                }`}>
+                              <div key={ev.id} className={`bg-white p-2 rounded-lg text-[9px] font-bold shadow-sm border-l-4 text-slate-700 group relative ${isGuardia ? 'border-orange-500 bg-orange-50/50 text-orange-800' : ev.type === 'work' ? 'border-red-400' : ev.type === 'fitness' ? 'border-emerald-400' : 'border-indigo-500'}`}>
                                 {ev.title}
+                                {onDeleteEvent && (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); onDeleteEvent(ev.id); }}
+                                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[8px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-red-600"
+                                  >✕</button>
+                                )}
                               </div>
                             );
                           })}
                         </div>
+
+                        {/* Inline Add */}
+                        {isAddingHere ? (
+                          <div className="mt-2 space-y-1.5 animate-in slide-in-from-bottom-1">
+                            <input
+                              autoFocus
+                              value={inlineTitle}
+                              onChange={e => setInlineTitle(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleInlineAdd(dateStr); if (e.key === 'Escape') setInlineAddDate(null); }}
+                              placeholder="Evento..."
+                              className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-400/30"
+                            />
+                            <select value={inlineType} onChange={e => setInlineType(e.target.value as any)} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-[9px] font-bold outline-none">
+                              <option value="personal">📌 Personal</option>
+                              <option value="work">🔴 Trabajo</option>
+                              <option value="project">📋 Proyecto</option>
+                              <option value="fitness">💪 Fitness</option>
+                            </select>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input type="checkbox" checked={inlineSyncGoogle} onChange={e => setInlineSyncGoogle(e.target.checked)} className="rounded" />
+                              <span className="text-[8px] font-bold text-slate-500">📅 Google Cal</span>
+                            </label>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleInlineAdd(dateStr)}
+                                disabled={isInlineCreating}
+                                className="flex-1 bg-indigo-600 text-white text-[9px] font-black py-1.5 rounded-lg hover:bg-indigo-500 disabled:opacity-50 flex items-center justify-center gap-1"
+                              >
+                                {isInlineCreating ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />} Crear
+                              </button>
+                              <button onClick={() => { setInlineAddDate(null); setInlineTitle(''); }} className="px-2 bg-slate-200 text-slate-600 text-[9px] font-bold rounded-lg hover:bg-slate-300">
+                                <X size={10} />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setInlineAddDate(dateStr); setInlineTitle(''); }}
+                            className="mt-2 w-full py-1.5 rounded-lg border border-dashed border-slate-300 text-[9px] font-bold text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center justify-center gap-1"
+                          >
+                            <Plus size={10} /> Añadir
+                          </button>
+                        )}
                       </div>
                     )
                   })}
@@ -646,33 +806,141 @@ export default function CalendarView({
                     })
                   )}
                 </div>
+
+                {/* Quick add in daily view */}
+                <div className="mt-8 border-t border-slate-100 pt-8">
+                  {(() => {
+                    const dayDateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
+                    const isAddingHere = inlineAddDate === dayDateStr;
+                    
+                    return isAddingHere ? (
+                      <div className="bg-slate-50 rounded-[2rem] p-6 border border-slate-200 animate-in slide-in-from-bottom-2 space-y-4">
+                        <h4 className="font-black text-slate-700 text-sm flex items-center gap-2"><Plus size={16} className="text-indigo-500" /> Nuevo evento para el {selectedDay} de {monthName}</h4>
+                        <input
+                          autoFocus
+                          value={inlineTitle}
+                          onChange={e => setInlineTitle(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleInlineAdd(dayDateStr); if (e.key === 'Escape') setInlineAddDate(null); }}
+                          placeholder="Nombre del evento..."
+                          className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400"
+                        />
+                        <div className="grid grid-cols-2 gap-3">
+                          <select value={inlineType} onChange={e => setInlineType(e.target.value as any)} className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none">
+                            <option value="personal">📌 Personal</option>
+                            <option value="work">🔴 Trabajo / Guardia</option>
+                            <option value="project">📋 Proyecto</option>
+                            <option value="fitness">💪 Fitness</option>
+                          </select>
+                          <label className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-3 cursor-pointer hover:border-indigo-300 transition-all">
+                            <input type="checkbox" checked={inlineSyncGoogle} onChange={e => setInlineSyncGoogle(e.target.checked)} className="rounded text-indigo-600" />
+                            <span className="text-xs font-bold text-slate-600">📅 Google Calendar</span>
+                          </label>
+                        </div>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => handleInlineAdd(dayDateStr)}
+                            disabled={isInlineCreating || !inlineTitle.trim()}
+                            className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-indigo-500 disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            {isInlineCreating ? <><Loader2 size={14} className="animate-spin" /> Creando...</> : <><Plus size={14} /> Crear Evento</>}
+                          </button>
+                          <button onClick={() => { setInlineAddDate(null); setInlineTitle(''); }} className="px-5 bg-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-300 transition-all">
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setInlineAddDate(dayDateStr); setInlineTitle(''); }}
+                        className="w-full py-4 rounded-2xl border-2 border-dashed border-slate-200 text-sm font-bold text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Plus size={18} /> Añadir evento a este día
+                      </button>
+                    );
+                  })()}
+                </div>
               </div>
             )}
 
             {/* QUICK ADD */}
             {activeSubView === 'quick' && (
-              <div className="bg-slate-900 p-12 rounded-[4rem] text-white shadow-2xl min-h-[500px] flex flex-col items-center justify-center animate-in slide-in-from-top-4">
-                <div className="w-20 h-20 bg-indigo-600 rounded-[2rem] flex items-center justify-center mb-10 shadow-2xl shadow-indigo-900/50">
+              <div className="bg-slate-900 p-8 sm:p-12 rounded-[3rem] text-white shadow-2xl min-h-[500px] flex flex-col items-center justify-center animate-in slide-in-from-top-4">
+                <div className="w-20 h-20 bg-indigo-600 rounded-[2rem] flex items-center justify-center mb-8 shadow-2xl shadow-indigo-900/50">
                   <MessageSquarePlus size={36} />
                 </div>
-                <h3 className="text-4xl font-black tracking-tight mb-4">Inyección Rápida</h3>
-                <p className="text-slate-400 font-medium mb-12 text-center max-w-md">Registra nuevos hitos o recordatorios sin fricción.</p>
+                <h3 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">Añadir Evento</h3>
+                <p className="text-slate-400 font-medium mb-8 text-center max-w-md">Se guardará localmente y en Google Calendar si lo activas.</p>
 
-                <form onSubmit={handleQuickAddSubmit} className="w-full max-w-xl space-y-6">
-                  <div className="relative group">
-                    <Zap className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400" size={24} />
-                    <input placeholder="¿Qué quieres agendar?" className="w-full bg-white/5 border border-white/10 rounded-[2rem] py-6 pl-16 pr-8 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none text-xl font-bold transition-all" value={quickEvent.title} onChange={e => setQuickEvent({ ...quickEvent, title: e.target.value })} autoFocus />
+                {gcalFeedback && (
+                  <div className={`mb-6 px-6 py-3 rounded-2xl text-sm font-bold border ${gcalFeedback.includes('✅') ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : gcalFeedback.includes('❌') ? 'bg-red-500/20 border-red-500/30 text-red-300' : 'bg-blue-500/20 border-blue-500/30 text-blue-300'}`}>
+                    {gcalFeedback}
                   </div>
+                )}
+
+                <form onSubmit={handleQuickAddSubmit} className="w-full max-w-xl space-y-5">
+                  {/* Title */}
+                  <div className="relative group">
+                    <Zap className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400" size={22} />
+                    <input placeholder="¿Qué quieres agendar?" className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 pl-16 pr-8 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none text-lg font-bold transition-all" value={quickEvent.title} onChange={e => setQuickEvent({ ...quickEvent, title: e.target.value })} autoFocus />
+                  </div>
+
+                  {/* Date + Type */}
                   <div className="grid grid-cols-2 gap-4">
-                    <input type="date" className="bg-white/5 border border-white/10 rounded-2xl p-5 text-sm font-bold outline-none" value={quickEvent.date} onChange={e => setQuickEvent({ ...quickEvent, date: e.target.value })} />
-                    <select className="bg-white/5 border border-white/10 rounded-2xl p-5 text-[10px] font-black uppercase" value={quickEvent.type} onChange={e => setQuickEvent({ ...quickEvent, type: e.target.value as any })} >
-                      <option value="personal">Recordatorio</option>
-                      <option value="work">Laboral</option>
-                      <option value="project">Proyecto</option>
-                      <option value="fitness">Fitness</option>
+                    <input type="date" className="bg-white/5 border border-white/10 rounded-2xl p-4 text-sm font-bold outline-none focus:border-indigo-500 transition-all" value={quickEvent.date} onChange={e => setQuickEvent({ ...quickEvent, date: e.target.value })} />
+                    <select className="bg-white/5 border border-white/10 rounded-2xl p-4 text-xs font-black uppercase outline-none focus:border-indigo-500" value={quickEvent.type} onChange={e => setQuickEvent({ ...quickEvent, type: e.target.value as any })} >
+                      <option value="personal">📌 Recordatorio</option>
+                      <option value="work">🔴 Laboral / Guardia</option>
+                      <option value="project">📋 Proyecto</option>
+                      <option value="fitness">💪 Fitness</option>
+                      <option value="trip">✈️ Viaje</option>
                     </select>
                   </div>
-                  <button type="submit" className="w-full py-6 bg-indigo-600 rounded-[2rem] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:bg-indigo-500 transition-all">Confirmar e Inyectar</button>
+
+                  {/* Start/End Time */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 block">Hora inicio (opcional)</label>
+                      <input type="time" className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm font-bold outline-none focus:border-indigo-500 transition-all" value={quickEvent.startTime} onChange={e => setQuickEvent({ ...quickEvent, startTime: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5 block">Hora fin (opcional)</label>
+                      <input type="time" className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm font-bold outline-none focus:border-indigo-500 transition-all" value={quickEvent.endTime} onChange={e => setQuickEvent({ ...quickEvent, endTime: e.target.value })} />
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <textarea
+                    placeholder="Descripción o notas (opcional)..."
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm font-medium outline-none focus:border-indigo-500 transition-all resize-none h-24"
+                    value={quickEvent.description}
+                    onChange={e => setQuickEvent({ ...quickEvent, description: e.target.value })}
+                  />
+
+                  {/* Google Calendar Toggle */}
+                  <div
+                    onClick={() => setQuickEvent({ ...quickEvent, syncToGoogle: !quickEvent.syncToGoogle })}
+                    className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all ${quickEvent.syncToGoogle ? 'bg-indigo-600/20 border-indigo-500/40' : 'bg-white/5 border-white/10'}`}
+                  >
+                    <div className={`w-12 h-7 rounded-full flex items-center transition-all ${quickEvent.syncToGoogle ? 'bg-indigo-500 justify-end' : 'bg-slate-600 justify-start'}`}>
+                      <div className="w-5 h-5 bg-white rounded-full shadow-md mx-1" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">📅 Sincronizar con Google Calendar</p>
+                      <p className="text-[10px] text-slate-400">El evento se creará también en tu Google Calendar</p>
+                    </div>
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={isCreatingGCal || !quickEvent.title}
+                    className="w-full py-5 bg-indigo-600 rounded-2xl font-black text-xs uppercase tracking-[0.15em] shadow-xl hover:bg-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                  >
+                    {isCreatingGCal ? (
+                      <><Loader2 size={16} className="animate-spin" /> Creando evento...</>
+                    ) : (
+                      <><Plus size={16} /> Crear Evento</>
+                    )}
+                  </button>
                 </form>
               </div>
             )}

@@ -1,11 +1,46 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, Trash2, Shield,
-  Clock, Sun, Moon, Sunrise, AlertCircle, Download, Euro, BarChart3
+  Clock, Sun, Moon, Sunrise, AlertCircle, Download, Euro, BarChart3, Loader2
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { CalendarEvent } from '../types';
 import { exportShiftsToICal } from '../services/notificationService';
+
+// ── GOOGLE CALENDAR EVENT CREATION VIA ANTHROPIC MCP ───────────────
+async function createGoogleCalendarEvent(
+  title: string,
+  date: string,
+  description?: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const descPart = description ? ` Description: "${description}".` : '';
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `Create a Google Calendar event titled "${title}" all day on ${date}. Timezone: Europe/Madrid.${descPart} Confirm when done.`
+        }],
+        mcp_servers: [{
+          type: 'url',
+          url: 'https://gcal.mcp.claude.com/mcp',
+          name: 'google-calendar'
+        }]
+      })
+    });
+    const data = await res.json();
+    const toolResults = data.content?.filter((b: any) => b.type === 'mcp_tool_result') || [];
+    const textBlocks = data.content?.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n') || '';
+    const hasSuccess = toolResults.length > 0 || textBlocks.toLowerCase().includes('created') || textBlocks.toLowerCase().includes('creado');
+    return { success: hasSuccess, message: hasSuccess ? '✅ Sincronizado con Google Calendar' : textBlocks || 'Error' };
+  } catch (err: any) {
+    return { success: false, message: `❌ Error: ${err.message}` };
+  }
+}
 
 interface ShiftsCalendarViewProps {
   events: CalendarEvent[];
@@ -34,6 +69,9 @@ const ShiftsCalendarView: React.FC<ShiftsCalendarViewProps> = ({ events, onAddEv
   const [selectedShiftType, setSelectedShiftType] = useState('guardia');
   const [shiftNote, setShiftNote] = useState('');
   const [showStats, setShowStats] = useState(false);
+  const [syncToGoogle, setSyncToGoogle] = useState(true);
+  const [isCreatingGCal, setIsCreatingGCal] = useState(false);
+  const [gcalFeedback, setGcalFeedback] = useState('');
 
   // Pay rates per shift type (configurable in state)
   const [payRates] = useState<Record<string, number>>({
@@ -89,6 +127,21 @@ const ShiftsCalendarView: React.FC<ShiftsCalendarViewProps> = ({ events, onAddEv
       source: 'manual',
     };
     onAddEvent(event);
+
+    // Sync to Google Calendar
+    if (syncToGoogle) {
+      setIsCreatingGCal(true);
+      setGcalFeedback('⏳ Sincronizando con Google Calendar...');
+      const result = await createGoogleCalendarEvent(
+        event.title,
+        selectedDate,
+        shiftNote || undefined
+      );
+      setGcalFeedback(result.message);
+      setIsCreatingGCal(false);
+      setTimeout(() => setGcalFeedback(''), 4000);
+    }
+    
     setShowAddForm(false);
     setShiftNote('');
   };
@@ -254,8 +307,13 @@ const ShiftsCalendarView: React.FC<ShiftsCalendarViewProps> = ({ events, onAddEv
           </div>
 
           {showAddForm && (
-            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
-              <div className="flex flex-wrap gap-2 mb-3">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 space-y-3">
+              {gcalFeedback && (
+                <div className={`px-4 py-2.5 rounded-xl text-xs font-bold ${gcalFeedback.includes('✅') ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : gcalFeedback.includes('❌') ? 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-200' : 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200'}`}>
+                  {gcalFeedback}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
                 {SHIFT_TYPES.map(s => (
                   <button key={s.id} onClick={() => setSelectedShiftType(s.id)}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
@@ -270,9 +328,21 @@ const ShiftsCalendarView: React.FC<ShiftsCalendarViewProps> = ({ events, onAddEv
                   placeholder="Nota opcional (ej: Hospital General)..."
                   className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500/20" />
                 <button onClick={addShift}
-                  className="px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-all text-sm">
+                  disabled={isCreatingGCal}
+                  className="px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-all text-sm disabled:opacity-50 flex items-center gap-2">
+                  {isCreatingGCal ? <Loader2 size={14} className="animate-spin" /> : null}
                   ✓ Guardar
                 </button>
+              </div>
+              {/* Google Calendar sync toggle */}
+              <div
+                onClick={() => setSyncToGoogle(!syncToGoogle)}
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border cursor-pointer transition-all ${syncToGoogle ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-700' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600'}`}
+              >
+                <div className={`w-10 h-6 rounded-full flex items-center transition-all ${syncToGoogle ? 'bg-indigo-500 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start'}`}>
+                  <div className="w-4 h-4 bg-white rounded-full shadow-md mx-1" />
+                </div>
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">📅 Sincronizar con Google Calendar</span>
               </div>
             </div>
           )}
