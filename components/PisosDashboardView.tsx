@@ -475,40 +475,108 @@ const PisosDashboardView: React.FC = () => {
 
         {/* TAB: CONTACTO */}
         {tab==="contacto"&&<div className="space-y-4">
+          {/* Message */}
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2"><Mail size={16} className="text-amber-500"/>Mensaje para caseros</h3>
               <div className="flex gap-2">
                 <button onClick={copyMsg} className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg ${copied?"bg-emerald-500 text-white":"bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/25"}`}>{copied?<><Check size={14}/>Copiado</>:<><Copy size={14}/>Copiar</>}</button>
-                <button onClick={sendAllWA} disabled={sending} className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"><Send size={14}/>Enviar WA</button>
               </div>
             </div>
-            <pre className="p-5 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-sans">{MSG}</pre>
+            <pre className="p-4 text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-sans max-h-[200px] overflow-y-auto">{MSG}</pre>
           </div>
 
-          {/* BOOKMARKLET - Auto-fill Idealista */}
+          {/* ═══ HERRAMIENTA 1: Contacto directo masivo ═══ */}
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-500/10 dark:to-emerald-500/5 rounded-xl border-2 border-green-300 dark:border-green-500/30 p-5">
+            <h3 className="font-black text-sm text-green-800 dark:text-green-300 flex items-center gap-2 mb-2">🚀 Contacto Directo Masivo</h3>
+            <p className="text-xs text-green-700 dark:text-green-400 mb-4">Abre todos los anuncios de pisos no contactados. En cada pestaña, el bookmarklet de tu barra de favoritos rellenará y enviará el mensaje automáticamente.</p>
+            <div className="flex flex-wrap gap-3 items-center">
+              <button onClick={async()=>{
+                const pending=filtered.filter(x=>!contacted.has(x.id)&&x.url);
+                if(pending.length===0){setContactStatus("✅ Todos ya contactados");setTimeout(()=>setContactStatus(""),3000);return}
+                try{await navigator.clipboard.writeText(MSG)}catch{}
+                setContactSending(true);
+                for(let i=0;i<pending.length;i++){
+                  setContactStatus(`📤 Abriendo ${i+1}/${pending.length}: ${pending[i].titulo.substring(0,25)}...`);
+                  window.open(pending[i].url,"_blank");
+                  markContacted(pending[i].id);
+                  await new Promise(r=>setTimeout(r,1500));
+                }
+                setContactStatus(`✅ ${pending.length} anuncios abiertos — usa el bookmarklet en cada pestaña para enviar`);
+                setContactSending(false);setTimeout(()=>setContactStatus(""),8000);
+              }} disabled={contactSending} className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-xs font-black shadow-lg disabled:opacity-50">
+                {contactSending?<Loader2 size={14} className="animate-spin"/>:<Send size={14}/>}Abrir {filtered.filter(x=>!contacted.has(x.id)&&x.url).length} anuncios
+              </button>
+              <button onClick={()=>{setContacted(new Set());try{localStorage.setItem("fh_contacted",JSON.stringify([]))}catch{}}} className="px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 rounded-xl text-xs font-bold hover:border-red-300">Resetear contactados</button>
+              <span className="text-[10px] font-mono text-green-600">{contacted.size} contactados · {filtered.filter(x=>!contacted.has(x.id)).length} pendientes</span>
+            </div>
+          </div>
+
+          {/* ═══ HERRAMIENTA 2: Bookmarklet avanzado ═══ */}
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 rounded-xl border border-amber-200 dark:border-amber-700 p-5">
-            <h3 className="font-black text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2 mb-3">🔖 Auto-rellenar Idealista (Bookmarklet)</h3>
-            <p className="text-xs text-amber-700 dark:text-amber-400 mb-4">Arrastra este botón a tu barra de marcadores. Cuando estés en un anuncio de Idealista, haz clic y se rellenará automáticamente el formulario de contacto y lo enviará.</p>
+            <h3 className="font-black text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2 mb-2">🔖 Bookmarklet Auto-Relleno (Paso Clave)</h3>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mb-4">Arrastra este botón a tu <strong>barra de favoritos</strong>. Luego, cuando estés en un anuncio de Idealista, haz clic y rellenará + enviará el mensaje.</p>
             <div className="flex flex-wrap gap-3 items-center">
               <a
-                href={`javascript:void((function(){const MSG=${JSON.stringify(MSG).replace(/'/g, "\\'")};try{const ta=document.querySelector('textarea[name="message"],textarea#message,textarea.textarea,textarea');if(ta){ta.focus();ta.value='';const nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set;nativeInputValueSetter.call(ta,MSG);ta.dispatchEvent(new Event('input',{bubbles:true}));ta.dispatchEvent(new Event('change',{bubbles:true}));setTimeout(()=>{const btns=document.querySelectorAll('button,input[type=submit]');for(const b of btns){const t=(b.textContent||b.value||'').toLowerCase();if(t.includes('contactar')||t.includes('enviar')){b.click();break;}}},500);alert('✅ Mensaje rellenado y enviado');}else{alert('⚠️ No se encontró el formulario. Asegúrate de estar en un anuncio de Idealista.');}}catch(e){alert('❌ Error: '+e.message);}})())`}
-                className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl text-xs font-black shadow-lg cursor-grab active:cursor-grabbing hover:shadow-xl transition-all"
+                href={`javascript:void((function(){var MSG=${JSON.stringify(MSG)};function fillAndSend(){var sels=['textarea[name=message]','textarea#message','textarea.textarea','textarea[placeholder]','textarea'];var ta=null;for(var i=0;i<sels.length;i++){ta=document.querySelector(sels[i]);if(ta)break;}if(!ta){var frames=document.querySelectorAll('iframe');for(var f=0;f<frames.length;f++){try{ta=frames[f].contentDocument.querySelector('textarea');if(ta)break;}catch(e){}};}if(ta){ta.focus();ta.value='';var setter=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set;setter.call(ta,MSG);ta.dispatchEvent(new Event('input',{bubbles:true}));ta.dispatchEvent(new Event('change',{bubbles:true}));ta.dispatchEvent(new KeyboardEvent('keyup',{bubbles:true}));setTimeout(function(){var btns=document.querySelectorAll('button,input[type=submit],a.btn');for(var b=0;b<btns.length;b++){var txt=(btns[b].textContent||btns[b].value||'').toLowerCase();if(txt.indexOf('contactar')>=0||txt.indexOf('enviar')>=0||txt.indexOf('send')>=0){btns[b].click();setTimeout(function(){document.title='✅ '+document.title;},1000);return;}}alert('Mensaje rellenado. Haz clic en Enviar manualmente.');},800);}else{alert('No se encontro el formulario. Desplazate hasta ver el textarea de contacto e intentalo de nuevo.');}}var cookies=document.querySelector('#didomi-notice-agree-button')||document.querySelector('button[id*=accept]');if(cookies){cookies.click();setTimeout(fillAndSend,1000);}else{fillAndSend();}})())`}
+                className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl text-sm font-black shadow-xl cursor-grab active:cursor-grabbing hover:shadow-2xl transition-all border-2 border-amber-400"
                 onClick={e => e.preventDefault()}
                 draggable
               >
                 🏠 Auto-Contactar Idealista
               </a>
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">← Arrastra a tu barra de marcadores</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-amber-700 dark:text-amber-400 font-black">← ARRASTRA a tu barra de favoritos</span>
+                <span className="text-[9px] text-amber-600/60">Funciona en: Idealista, Fotocasa, Habitaclia</span>
+              </div>
             </div>
-            <div className="mt-4 bg-white dark:bg-slate-800 rounded-lg p-3 border border-amber-200 dark:border-amber-700">
-              <p className="text-[10px] font-bold text-slate-500 mb-2">Instrucciones:</p>
-              <ol className="text-[10px] text-slate-400 space-y-1">
-                <li>1. Arrastra el botón naranja a tu barra de favoritos del navegador</li>
-                <li>2. Abre un anuncio en Idealista (ej: idealista.com/inmueble/12345)</li>
-                <li>3. Haz clic en el bookmarklet "Auto-Contactar Idealista" de tu barra</li>
-                <li>4. El mensaje se rellena automáticamente y se envía al casero</li>
-              </ol>
+          </div>
+
+          {/* ═══ HERRAMIENTA 3: Script para consola ═══ */}
+          <div className="bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-500/10 dark:to-indigo-500/10 rounded-xl border border-violet-200 dark:border-violet-700 p-5">
+            <h3 className="font-black text-sm text-violet-800 dark:text-violet-300 flex items-center gap-2 mb-2">💻 Script para Consola del Navegador</h3>
+            <p className="text-xs text-violet-700 dark:text-violet-400 mb-3">Si el bookmarklet no funciona, abre la consola (F12 → Console) en la página de Idealista y pega este script:</p>
+            <div className="relative">
+              <pre className="bg-slate-900 text-emerald-400 p-4 rounded-lg text-[10px] font-mono overflow-x-auto max-h-[150px] leading-relaxed">{`// Auto-rellenar formulario Idealista
+const MSG = ${JSON.stringify(MSG.substring(0,60)+'...')};
+// Copia el script completo con el botón ↓
+const ta = document.querySelector('textarea');
+if (ta) {
+  const set = Object.getOwnPropertyDescriptor(
+    HTMLTextAreaElement.prototype, 'value').set;
+  set.call(ta, MSG);
+  ta.dispatchEvent(new Event('input', {bubbles:true}));
+  // Buscar botón enviar
+  document.querySelectorAll('button').forEach(b => {
+    if (/contactar|enviar/i.test(b.textContent))
+      b.click();
+  });
+}`}</pre>
+              <button onClick={()=>{
+                const script=`(function(){var MSG=${JSON.stringify(MSG)};var ta=document.querySelector('textarea');if(ta){var set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;set.call(ta,MSG);ta.dispatchEvent(new Event('input',{bubbles:true}));ta.dispatchEvent(new Event('change',{bubbles:true}));setTimeout(function(){document.querySelectorAll('button,input[type=submit]').forEach(function(b){var t=(b.textContent||b.value||'').toLowerCase();if(t.indexOf('contactar')>=0||t.indexOf('enviar')>=0){b.click();}});},500);}else{alert('No se encontró textarea');}})();`;
+                navigator.clipboard.writeText(script);setContactStatus("✅ Script copiado — pégalo en la consola (F12) de Idealista");setTimeout(()=>setContactStatus(""),5000);
+              }} className="absolute top-2 right-2 px-3 py-1.5 bg-violet-600 text-white rounded-lg text-[10px] font-bold hover:bg-violet-700"><Copy size={10} className="inline mr-1"/>Copiar script completo</button>
+            </div>
+          </div>
+
+          {/* ═══ INSTRUCCIONES PASO A PASO ═══ */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+            <h3 className="font-black text-sm text-slate-800 dark:text-white mb-4">📋 Cómo contactar todos los caseros en 2 minutos</h3>
+            <div className="space-y-3">
+              {[
+                {n:'1', emoji:'🔖', title:'Instala el bookmarklet', desc:'Arrastra el botón naranja "Auto-Contactar Idealista" a tu barra de favoritos (solo 1 vez)'},
+                {n:'2', emoji:'🚀', title:'Abre todos los anuncios', desc:'Pulsa "Abrir X anuncios" arriba. Se abrirán en pestañas nuevas con 1.5s de delay'},
+                {n:'3', emoji:'⚡', title:'Auto-rellena cada pestaña', desc:'Ve a cada pestaña de Idealista y haz clic en tu bookmarklet. El mensaje se rellena y se envía solo'},
+                {n:'4', emoji:'✅', title:'¡Hecho!', desc:'Cada casero recibirá tu mensaje de pareja de médicos automáticamente'},
+              ].map(step=>(
+                <div key={step.n} className="flex gap-4 items-start">
+                  <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg flex items-center justify-center text-sm font-black text-indigo-600 dark:text-indigo-400 flex-shrink-0">{step.n}</div>
+                  <div>
+                    <p className="text-xs font-black text-slate-800 dark:text-white">{step.emoji} {step.title}</p>
+                    <p className="text-[10px] text-slate-500">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>}
