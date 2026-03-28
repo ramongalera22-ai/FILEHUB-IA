@@ -401,6 +401,123 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
         </div>
       </section>
 
+      {/* ── LONG-TERM vs SHORT-TERM GOALS ──────────────────────── */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Long-term goals (deadline > 3 months away) */}
+        <div className="bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-500/5 dark:to-violet-500/5 rounded-[2rem] border border-indigo-100 dark:border-indigo-800 p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white"><Flag size={18} /></div>
+            <div>
+              <h3 className="font-black text-lg text-indigo-900 dark:text-indigo-300">Metas a Largo Plazo</h3>
+              <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">+3 meses · Visión estratégica</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {goals.filter(g => {
+              const daysUntil = (new Date(g.targetDate).getTime() - Date.now()) / 86400000;
+              return daysUntil > 90 && g.status === 'active';
+            }).length === 0 ? (
+              <div className="text-center py-8 text-indigo-400">
+                <Flag size={32} className="mx-auto mb-2 opacity-40" />
+                <p className="text-xs font-bold">Sin metas a largo plazo</p>
+                <button onClick={() => openModal()} className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">+ Crear meta</button>
+              </div>
+            ) : (
+              goals.filter(g => {
+                const daysUntil = (new Date(g.targetDate).getTime() - Date.now()) / 86400000;
+                return daysUntil > 90 && g.status === 'active';
+              }).map(g => {
+                const progress = g.targetValue ? Math.min((g.currentValue / g.targetValue) * 100, 100) : 0;
+                const daysLeft = Math.ceil((new Date(g.targetDate).getTime() - Date.now()) / 86400000);
+                const catColors: Record<string, string> = { financial: 'bg-emerald-500', career: 'bg-blue-500', health: 'bg-rose-500', personal: 'bg-amber-500' };
+                return (
+                  <div key={g.id} className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-indigo-100 dark:border-indigo-800 group hover:shadow-md transition-all">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full ${catColors[g.category] || 'bg-slate-400'}`} />
+                        <p className="font-black text-sm text-slate-800 dark:text-white">{g.title}</p>
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button onClick={() => openModal(g)} className="p-1 text-slate-400 hover:text-indigo-500"><Edit3 size={12} /></button>
+                        <button onClick={() => onDeleteGoal(g.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${catColors[g.category] || 'bg-slate-400'}`} style={{ width: `${progress}%` }} />
+                      </div>
+                      <span className="text-[10px] font-black text-slate-500">{progress.toFixed(0)}%</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-400 font-bold">
+                      <span>{g.currentValue} / {g.targetValue} {g.unit}</span>
+                      <span className="flex items-center gap-1"><Clock size={10} /> {daysLeft} días</span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Short-term goals (deadline <= 3 months) */}
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/5 dark:to-orange-500/5 rounded-[2rem] border border-amber-100 dark:border-amber-800 p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white"><Zap size={18} /></div>
+            <div>
+              <h3 className="font-black text-lg text-amber-900 dark:text-amber-300">Objetivos a Corto Plazo</h3>
+              <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">0-3 meses · Acción inmediata</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {goals.filter(g => {
+              const daysUntil = (new Date(g.targetDate).getTime() - Date.now()) / 86400000;
+              return daysUntil <= 90 && g.status === 'active';
+            }).length === 0 ? (
+              <div className="text-center py-8 text-amber-400">
+                <Zap size={32} className="mx-auto mb-2 opacity-40" />
+                <p className="text-xs font-bold">Sin objetivos a corto plazo</p>
+                <button onClick={() => openModal()} className="mt-3 px-4 py-2 bg-amber-500 text-white rounded-xl text-xs font-bold hover:bg-amber-600 transition-all">+ Crear objetivo</button>
+              </div>
+            ) : (
+              goals.filter(g => {
+                const daysUntil = (new Date(g.targetDate).getTime() - Date.now()) / 86400000;
+                return daysUntil <= 90 && g.status === 'active';
+              }).map(g => {
+                const progress = g.targetValue ? Math.min((g.currentValue / g.targetValue) * 100, 100) : 0;
+                const daysLeft = Math.max(0, Math.ceil((new Date(g.targetDate).getTime() - Date.now()) / 86400000));
+                const isUrgent = daysLeft <= 7;
+                const catColors: Record<string, string> = { financial: 'bg-emerald-500', career: 'bg-blue-500', health: 'bg-rose-500', personal: 'bg-amber-500' };
+                return (
+                  <div key={g.id} className={`bg-white dark:bg-slate-800 rounded-xl p-4 border group hover:shadow-md transition-all ${isUrgent ? 'border-red-300 dark:border-red-700 ring-1 ring-red-200' : 'border-amber-100 dark:border-amber-800'}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full ${catColors[g.category] || 'bg-slate-400'}`} />
+                        <p className="font-black text-sm text-slate-800 dark:text-white">{g.title}</p>
+                        {isUrgent && <span className="text-[8px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded-md uppercase">¡Urgente!</span>}
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button onClick={() => openModal(g)} className="p-1 text-slate-400 hover:text-amber-500"><Edit3 size={12} /></button>
+                        <button onClick={() => onDeleteGoal(g.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${isUrgent ? 'bg-red-500' : catColors[g.category] || 'bg-slate-400'}`} style={{ width: `${progress}%` }} />
+                      </div>
+                      <span className="text-[10px] font-black text-slate-500">{progress.toFixed(0)}%</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-400 font-bold">
+                      <span>{g.currentValue} / {g.targetValue} {g.unit}</span>
+                      <span className={`flex items-center gap-1 ${isUrgent ? 'text-red-500' : ''}`}><Clock size={10} /> {daysLeft}d restantes</span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* Tabla Dinámica por Periodo */}
       <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
         <div className="p-10 border-b border-slate-50 flex items-center justify-between bg-slate-50/20">

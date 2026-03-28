@@ -30,7 +30,32 @@ const CATEGORY_ICONS: Record<string, React.FC<any>> = {
   tecnologia: Zap,
 };
 
-const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
+const RSS_PROXIES = [
+  (url: string) => `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&count=5`,
+  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+];
+
+// Parse raw XML RSS if rss2json fails
+function parseRSSXml(xml: string, source: typeof SOURCES[0]): NewsItem[] {
+  const items: NewsItem[] = [];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+  const entries = doc.querySelectorAll('item, entry');
+  entries.forEach((entry, i) => {
+    if (i >= 5) return;
+    const title = entry.querySelector('title')?.textContent?.replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim() || '';
+    const link = entry.querySelector('link')?.textContent?.trim() || entry.querySelector('link')?.getAttribute('href') || '';
+    const pubDate = entry.querySelector('pubDate, published, updated')?.textContent || '';
+    let thumbnail = '';
+    const enclosure = entry.querySelector('enclosure');
+    if (enclosure) thumbnail = enclosure.getAttribute('url') || '';
+    const media = entry.querySelector('thumbnail, content');
+    if (!thumbnail && media) thumbnail = media.getAttribute('url') || '';
+    if (title) items.push({ title, link, pubDate, source: source.name, color: source.color, category: source.category, thumbnail });
+  });
+  return items;
+}
 
 const NewsView: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
@@ -43,25 +68,37 @@ const NewsView: React.FC = () => {
   const fetchNews = useCallback(async () => {
     setLoading(true);
     const allNews: NewsItem[] = [];
+
     await Promise.allSettled(
       SOURCES.filter(s => activeSources.includes(s.name)).map(async (source) => {
+        // Try rss2json first
         try {
-          const res = await fetch(`${RSS2JSON}${encodeURIComponent(source.rssUrl)}&count=5`);
+          const res = await fetch(RSS_PROXIES[0](source.rssUrl), { signal: AbortSignal.timeout(8000) });
           const data = await res.json();
-          if (data.status === 'ok' && data.items) {
+          if (data.status === 'ok' && data.items?.length > 0) {
             data.items.slice(0, 5).forEach((item: any) => {
               allNews.push({
                 title: item.title?.replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim() || '',
-                link: item.link || '',
-                pubDate: item.pubDate || '',
-                source: source.name,
-                color: source.color,
-                category: source.category,
+                link: item.link || '', pubDate: item.pubDate || '',
+                source: source.name, color: source.color, category: source.category,
                 thumbnail: item.thumbnail || item.enclosure?.link || '',
               });
             });
+            return;
           }
         } catch {}
+
+        // Fallback: try CORS proxies with raw XML parsing
+        for (let i = 1; i < RSS_PROXIES.length; i++) {
+          try {
+            const res = await fetch(RSS_PROXIES[i](source.rssUrl), { signal: AbortSignal.timeout(8000) });
+            const text = await res.text();
+            if (text.includes('<rss') || text.includes('<feed') || text.includes('<item')) {
+              const parsed = parseRSSXml(text, source);
+              if (parsed.length > 0) { allNews.push(...parsed); return; }
+            }
+          } catch {}
+        }
       })
     );
     allNews.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
@@ -134,10 +171,10 @@ const NewsView: React.FC = () => {
         ))}
       </div>
 
-      {/* News grid */}
+      {/* News grid - grouped by source for 3 per source */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 9 }).map((_, i) => (
             <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-white/5 animate-pulse">
               <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/3 mb-3" />
               <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-full mb-2" />
@@ -148,32 +185,48 @@ const NewsView: React.FC = () => {
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-slate-400">
           <Newspaper size={32} className="mx-auto mb-3 opacity-40" />
-          <p className="text-sm font-semibold">No hay noticias</p>
+          <p className="text-sm font-semibold">No hay noticias — pulsa Actualizar</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((item, i) => {
-            const CatIcon = CATEGORY_ICONS[item.category] || Globe2;
+        <div className="space-y-8">
+          {/* Per-source sections — 3 articles each */}
+          {SOURCES.filter(s => activeSources.includes(s.name)).map(source => {
+            const sourceNews = filtered.filter(n => n.source === source.name).slice(0, 3);
+            if (sourceNews.length === 0) return null;
             return (
-              <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
-                className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-white/5 hover:border-indigo-500/40 hover:shadow-lg transition-all overflow-hidden flex flex-col">
-                {item.thumbnail && (
-                  <div className="h-36 overflow-hidden">
-                    <img src={item.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                  </div>
-                )}
-                <div className="p-4 flex flex-col flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: item.color }}>{item.source}</span>
-                    <CatIcon size={11} className="text-slate-400" />
-                    <span className="text-[10px] text-slate-400 ml-auto">{formatDate(item.pubDate)}</span>
-                  </div>
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300 leading-snug flex-1 group-hover:text-indigo-500 transition-colors line-clamp-3">{item.title}</p>
-                  <div className="flex items-center gap-1 mt-3 text-[10px] text-indigo-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                    Leer más <ExternalLink size={10} />
-                  </div>
+              <div key={source.name}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: source.color }} />
+                  <h3 className="font-black text-sm text-slate-700 dark:text-slate-300 uppercase tracking-wider">{source.name}</h3>
+                  <span className="text-[10px] text-slate-400 font-bold">{sourceNews.length} artículos</span>
                 </div>
-              </a>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {sourceNews.map((item, i) => {
+                    const CatIcon = CATEGORY_ICONS[item.category] || Globe2;
+                    return (
+                      <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
+                        className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-white/5 hover:border-indigo-500/40 hover:shadow-lg transition-all overflow-hidden flex flex-col">
+                        {item.thumbnail && (
+                          <div className="h-36 overflow-hidden">
+                            <img src={item.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          </div>
+                        )}
+                        <div className="p-4 flex flex-col flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: item.color }}>{item.source}</span>
+                            <CatIcon size={11} className="text-slate-400" />
+                            <span className="text-[10px] text-slate-400 ml-auto">{formatDate(item.pubDate)}</span>
+                          </div>
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300 leading-snug flex-1 group-hover:text-indigo-500 transition-colors line-clamp-3">{item.title}</p>
+                          <div className="flex items-center gap-1 mt-3 text-[10px] text-indigo-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                            Leer más <ExternalLink size={10} />
+                          </div>
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>

@@ -55,11 +55,45 @@ const RECURRENT_PRODUCTS = [
     { id: 'rec-16', name: "Galletas Napolitanas Cuétara 426g", price: 2.27, category: "Dulces", image: "🍪" }
 ];
 
+const OPENROUTER_KEY_SM = import.meta.env.VITE_OPENROUTER_KEY || '';
+
+async function chatShoppingAI(messages: {role:string;content:string}[], listContext: string): Promise<string> {
+  if (!OPENROUTER_KEY_SM) return '⚠️ Configura VITE_OPENROUTER_KEY para usar el asistente IA.';
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY_SM}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-haiku-4.5', max_tokens: 1200,
+        messages: [
+          { role: 'system', content: `Eres un asistente de compras IA integrado en FILEHUB. El usuario es médico con poco tiempo.
+
+LISTA DE LA COMPRA ACTUAL:
+${listContext || 'Lista vacía.'}
+
+PRODUCTOS RECURRENTES DISPONIBLES:
+${RECURRENT_PRODUCTS.map(p => `- ${p.image} ${p.name} (${p.price}€)`).join('\n')}
+
+INSTRUCCIONES:
+- Responde en español con emojis
+- Si piden exportar la lista, formatea como lista clara con ✅ checks
+- Puedes sugerir recetas con los productos del carrito
+- Puedes organizar la lista por secciones del supermercado
+- Si preguntan por alternativas o sustitutos, recomienda con precios
+- Sé conciso y práctico` },
+          ...messages
+        ]
+      })
+    });
+    const d = await res.json();
+    return d.choices?.[0]?.message?.content || 'Error.';
+  } catch (e:any) { return `❌ Error: ${e.message}`; }
+}
+
 const SupermarketsView: React.FC<SupermarketsViewProps> = ({
     items, orders, onAddItem, onToggleItem, onDeleteItem, onAddOrder
 }) => {
     const [activeScreen, setActiveScreen] = useState<'hub' | 'alcampo'>('hub');
-    const [activeTab, setActiveTab] = useState('shop'); // 'shop' | 'smart-list' | 'manual-list' | 'history'
+    const [activeTab, setActiveTab] = useState('shop'); // 'shop' | 'smart-list' | 'manual-list' | 'history' | 'ai-chef'
     const [searchTerm, setSearchTerm] = useState('');
     const [products, setProducts] = useState(RECURRENT_PRODUCTS);
     const [cart, setCart] = useState<any[]>([]);
@@ -72,9 +106,49 @@ const SupermarketsView: React.FC<SupermarketsViewProps> = ({
 
     // Estados de Checkout
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-    const [checkoutStep, setCheckoutStep] = useState(1); // 1: Datos, 2: Pago, 3: Confirmado
+    const [checkoutStep, setCheckoutStep] = useState(1);
     const [address, setAddress] = useState({ street: '', city: '', zip: '' });
     const [payment, setPayment] = useState({ card: '', expiry: '', cvc: '' });
+
+    // AI Chat state
+    const [chatMsgs, setChatMsgs] = useState<{id:string;role:'user'|'assistant';content:string;ts:Date}[]>([]);
+    const [chatIn, setChatIn] = useState('');
+    const [chatLoading, setChatLoading] = useState(false);
+    const chatRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => { chatRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs]);
+
+    const listContext = React.useMemo(() => {
+      const cartItems = cart.map(c => `- ${c.name} x${c.qty} (${(c.price * c.qty).toFixed(2)}€)`).join('\n');
+      const manualItems = manualList.map(m => `- ${m.name} ${m.price ? `(${m.price}€)` : ''} ${m.checked ? '✅' : '⬜'}`).join('\n');
+      const shoppingItems = items.map(i => `- ${i.name} ${i.completed ? '✅' : '⬜'}`).join('\n');
+      return `CARRITO:\n${cartItems || 'Vacío'}\n\nLISTA MANUAL:\n${manualItems || 'Vacía'}\n\nLISTA GENERAL:\n${shoppingItems || 'Vacía'}`;
+    }, [cart, manualList, items]);
+
+    const handleChatSend = React.useCallback(async (overrideMsg?: string) => {
+      const msg = overrideMsg || chatIn.trim();
+      if (!msg || chatLoading) return;
+      const userMsg = { id: `m-${Date.now()}`, role: 'user' as const, content: msg, ts: new Date() };
+      setChatMsgs(prev => [...prev, userMsg]);
+      setChatIn('');
+      setChatLoading(true);
+      const history = [...chatMsgs.slice(-8), userMsg].map(m => ({ role: m.role, content: m.content }));
+      const response = await chatShoppingAI(history, listContext);
+      setChatMsgs(prev => [...prev, { id: `m-${Date.now()+1}`, role: 'assistant', content: response, ts: new Date() }]);
+      setChatLoading(false);
+    }, [chatIn, chatMsgs, chatLoading, listContext]);
+
+    const exportListText = () => {
+      const lines = [
+        '🛒 LISTA DE LA COMPRA — FILEHUB',
+        `📅 ${new Date().toLocaleDateString('es-ES')}`, '',
+        ...cart.map(c => `☐ ${c.name} x${c.qty} — ${(c.price*c.qty).toFixed(2)}€`),
+        ...manualList.map(m => `${m.checked ? '✅' : '☐'} ${m.name}${m.price ? ` — ${m.price}€` : ''}`),
+        ...items.filter(i => !i.completed).map(i => `☐ ${i.name}`),
+        '', `💰 Total carrito: ${cart.reduce((t,c) => t + c.price*c.qty, 0).toFixed(2)}€`
+      ].join('\n');
+      navigator.clipboard.writeText(lines).then(() => alert('Lista copiada al portapapeles'));
+    };
 
     // Estados de carga
     const [isLoading, setIsLoading] = useState(false);
@@ -289,17 +363,18 @@ const SupermarketsView: React.FC<SupermarketsViewProps> = ({
                             Web Alcampo <ExternalLink size={14} />
                         </button>
 
-                        <nav className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto max-w-[90vw] no-scrollbar">
+                        <nav className="flex bg-white dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto max-w-[90vw] no-scrollbar">
                             {[
                                 { id: 'shop', icon: Search, label: 'Tienda' },
                                 { id: 'smart-list', icon: Sparkles, label: 'Lista IA' },
                                 { id: 'manual-list', icon: Table, label: 'Lista Manual' },
+                                { id: 'ai-chef', icon: Store, label: '🧠 Asistente' },
                                 { id: 'history', icon: History, label: 'Pedidos' }
                             ].map(tab => (
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${activeTab === tab.id ? (tab.id === 'ai-chef' ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md' : 'bg-red-600 text-white shadow-md') : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                                 >
                                     <tab.icon size={14} /> {tab.label}
                                 </button>
@@ -474,6 +549,75 @@ const SupermarketsView: React.FC<SupermarketsViewProps> = ({
                                             )}
                                         </tbody>
                                     </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* AI CHEF / SHOPPING ASSISTANT */}
+                        {activeTab === 'ai-chef' && (
+                            <div className="space-y-5 animate-in slide-in-from-bottom-4">
+                                <div className="bg-gradient-to-br from-violet-600 to-indigo-600 rounded-[2rem] p-6 text-white relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full blur-[60px] -mr-16 -mt-16" />
+                                    <div className="relative z-10 flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-2xl">🧠</div>
+                                            <div>
+                                                <h3 className="text-xl font-black">Asistente de Compras IA</h3>
+                                                <p className="text-white/60 text-xs font-bold">Powered by Claude Haiku · Conoce tu lista y productos</p>
+                                            </div>
+                                        </div>
+                                        <button onClick={exportListText} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold flex items-center gap-2 transition-all">
+                                            📋 Exportar Lista
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {chatMsgs.length === 0 && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {[
+                                            { emoji: '📋', text: 'Exporta mi lista de la compra formateada' },
+                                            { emoji: '🍳', text: 'Sugiéreme recetas con lo que tengo en el carrito' },
+                                            { emoji: '🏪', text: 'Organiza mi lista por secciones del super' },
+                                            { emoji: '💰', text: 'Sugiéreme alternativas más baratas' },
+                                        ].map((p, i) => (
+                                            <button key={i} onClick={() => handleChatSend(p.text)}
+                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-left hover:border-violet-300 hover:shadow-lg transition-all">
+                                                <span className="text-2xl mb-2 block">{p.emoji}</span>
+                                                <p className="text-xs font-bold text-slate-600 dark:text-slate-300">{p.text}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col" style={{ minHeight: '300px' }}>
+                                    <div className="flex-1 overflow-y-auto p-5 space-y-4 max-h-[400px]">
+                                        {chatMsgs.length === 0 && (
+                                            <div className="text-center py-12">
+                                                <Store size={36} className="mx-auto text-violet-300 mb-4" />
+                                                <p className="text-sm font-bold text-slate-400">Pregúntame sobre tu lista, pídeme recetas o que te la exporte</p>
+                                            </div>
+                                        )}
+                                        {chatMsgs.map(m => (
+                                            <div key={m.id} className={`flex gap-2.5 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${m.role === 'user' ? 'bg-violet-600 text-white' : 'bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 text-slate-800 dark:text-slate-200'}`}>
+                                                    <pre className="text-xs font-sans whitespace-pre-wrap leading-relaxed">{m.content}</pre>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {chatLoading && (
+                                            <div className="flex gap-2.5"><div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs text-violet-600 font-bold flex items-center gap-2"><RefreshCw size={14} className="animate-spin" /> Pensando...</div></div>
+                                        )}
+                                        <div ref={chatRef} />
+                                    </div>
+                                    <div className="border-t border-slate-100 dark:border-slate-700 p-3 flex gap-2">
+                                        <input value={chatIn} onChange={e => setChatIn(e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') handleChatSend(); }}
+                                            placeholder="Pregunta sobre tu compra..." className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium outline-none focus:border-violet-400" />
+                                        <button onClick={() => handleChatSend()} disabled={!chatIn.trim() || chatLoading}
+                                            className="w-10 h-10 bg-violet-600 hover:bg-violet-700 text-white rounded-xl flex items-center justify-center disabled:opacity-40 transition-all">
+                                            {chatLoading ? <RefreshCw size={16} className="animate-spin" /> : <ChevronRight size={16} />}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
