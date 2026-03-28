@@ -2,51 +2,71 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { ShoppingItem, DayPlan, Meal, WeightEntry, NutritionPlan, WorkDocument } from '../types';
 import {
-  ShoppingBasket,
-  Plus,
-  CheckCircle2,
-  Circle,
-  Utensils,
-  Trash2,
-  Calendar,
-  Sparkles,
-  Search,
-  X,
-  Zap,
-  TrendingUp,
-  Loader2,
-  Scale,
-  FileUp,
-  Eye,
-  FileSpreadsheet,
-  Camera,
-  FileText,
-  BrainCircuit,
-  Settings,
-  ChefHat,
-  Brain,
-  Share2,
-  ArrowUpRight,
-  Edit3
+  ShoppingBasket, Plus, CheckCircle2, Circle, Utensils, Trash2, Calendar,
+  Sparkles, Search, X, Zap, TrendingUp, Loader2, Scale, FileUp, Eye,
+  FileSpreadsheet, Camera, FileText, BrainCircuit, Settings, ChefHat,
+  Brain, Share2, ArrowUpRight, Edit3, Send, MessageCircle, Bot, RefreshCw
 } from 'lucide-react';
 import { analyzeNutritionDocument, generateNutritionPlan } from '../services/openrouterService';
 
 const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
 
 async function generateMealPlanAI(preferences: string, days: number): Promise<string> {
-  if (!OPENROUTER_KEY) return 'Configura tu API key de OpenRouter.';
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
-      body: JSON.stringify({
-        model: 'anthropic/claude-haiku-4.5', max_tokens: 1500,
-        messages: [{ role: 'user', content: `Crea un plan de comidas de ${days} días para un médico con estas preferencias: ${preferences}. Incluye: desayuno, comida y cena para cada día, con tiempo de preparación máximo 20 min por comida. También incluye lista de la compra al final. Responde en español.` }]
-      })
-    });
-    const d = await res.json();
-    return d.choices?.[0]?.message?.content || 'Error generando plan.';
-  } catch { return 'Error de conexión.'; }
+  if (!OPENROUTER_KEY) return '⚠️ Configura tu API key de OpenRouter en Configuración.';
+  const models = ['anthropic/claude-haiku-4.5', 'anthropic/claude-3-haiku', 'google/gemini-flash-1.5'];
+  for (const model of models) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+        body: JSON.stringify({
+          model, max_tokens: 1500,
+          messages: [{ role: 'user', content: `Crea un plan de comidas de ${days} días para un médico con estas preferencias: ${preferences}. Incluye: desayuno, comida y cena para cada día, con tiempo de preparación máximo 20 min por comida. También incluye lista de la compra al final. Responde en español con emojis.` }]
+        })
+      });
+      const d = await res.json();
+      if (d.error) continue;
+      const reply = d.choices?.[0]?.message?.content;
+      if (reply) return reply;
+    } catch { continue; }
+  }
+  return '⚠️ No se pudo generar el plan. Verifica tu API key.';
+}
+
+async function chatNutritionAI(messages: {role:string;content:string}[], context: string): Promise<string> {
+  if (!OPENROUTER_KEY) return '⚠️ Configura VITE_OPENROUTER_KEY para usar el cuaderno IA.';
+  const models = ['anthropic/claude-haiku-4.5', 'anthropic/claude-3-haiku', 'google/gemini-flash-1.5'];
+  for (const model of models) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+        body: JSON.stringify({
+          model, max_tokens: 1500,
+          messages: [
+            { role: 'system', content: `Eres un nutricionista IA en FILEHUB. El usuario es médico con guardias de 24h, necesita comidas rápidas (max 20min prep).
+
+DATOS DEL USUARIO:
+${context}
+
+INSTRUCCIONES:
+- Responde en español con emojis
+- Sugiere comidas prácticas y nutritivas para médicos con poco tiempo
+- Ten en cuenta las guardias: post-guardia = comidas reconfortantes y energéticas
+- Puedes crear menús semanales, listas de compra, analizar macros
+- Si preguntan por un plato, da receta rápida con ingredientes y pasos
+- Sé conciso y práctico` },
+            ...messages
+          ]
+        })
+      });
+      const d = await res.json();
+      if (d.error) continue;
+      const reply = d.choices?.[0]?.message?.content;
+      if (reply) return reply;
+    } catch { continue; }
+  }
+  return '⚠️ No se pudo conectar. Verifica tu API key.';
 }
 import { supabase } from '../services/supabaseClient';
 import {
@@ -79,6 +99,32 @@ const NutritionView: React.FC<NutritionViewProps> = ({
   const [showAIModal, setShowAIModal] = useState(false);
   const [documents, setDocuments] = useState<WorkDocument[]>([]);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // AI Notebook Chat
+  const [chatMsgs, setChatMsgs] = useState<{id:string;role:'user'|'assistant';content:string;ts:Date}[]>([]);
+  const [chatIn, setChatIn] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => { chatRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs]);
+
+  const nutritionContext = useMemo(() => {
+    const plans = weeklyPlan.filter(d => d.meals.length > 0).map(d => `${d.day}: ${d.meals.map(m => `${m.type}=${m.title}`).join(', ')}`).join('\n');
+    const weights = weightEntries.slice(-10).map(w => `${w.date}: ${w.weight}kg`).join(', ');
+    return `PLAN SEMANAL:\n${plans || 'Sin plan'}\n\nPESO RECIENTE: ${weights || 'Sin datos'}\n\nOBJETIVO: ${dietGoal}\nINVENTARIO: ${inventory}`;
+  }, [weeklyPlan, weightEntries, dietGoal, inventory]);
+
+  const handleChatSend = React.useCallback(async (overrideMsg?: string) => {
+    const msg = overrideMsg || chatIn.trim();
+    if (!msg || chatLoading) return;
+    const userMsg = { id: `nm-${Date.now()}`, role: 'user' as const, content: msg, ts: new Date() };
+    setChatMsgs(prev => [...prev, userMsg]);
+    setChatIn(''); setChatLoading(true);
+    const history = [...chatMsgs.slice(-10), userMsg].map(m => ({ role: m.role, content: m.content }));
+    const reply = await chatNutritionAI(history, nutritionContext);
+    setChatMsgs(prev => [...prev, { id: `nm-${Date.now()+1}`, role: 'assistant', content: reply, ts: new Date() }]);
+    setChatLoading(false);
+  }, [chatIn, chatMsgs, chatLoading, nutritionContext]);
 
   const saveNotesAsDocument = () => {
     if (!notes.trim()) return;
@@ -256,91 +302,86 @@ const NutritionView: React.FC<NutritionViewProps> = ({
       </header>
 
       {activeTab === 'notebook' && (
-        <div className="space-y-12 animate-in slide-in-from-bottom-6 duration-700">
-          {/* AI Integrations */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* NotebookLM */}
-            <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-10 flex flex-col justify-between group hover:border-indigo-500/50 transition-all shadow-2xl overflow-hidden relative">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/10 blur-[60px] rounded-full -mr-10 -mt-10 group-hover:bg-indigo-600/20 transition-all"></div>
-              <div className="space-y-6 relative z-10">
-                <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform">
-                  <Brain size={32} />
-                </div>
+        <div className="space-y-6 animate-in slide-in-from-bottom-4">
+          {/* AI Notebook Header */}
+          <div className="bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 rounded-[2rem] p-8 text-white relative overflow-hidden shadow-2xl">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] -mr-20 -mt-20" />
+            <div className="relative z-10">
+              <div className="flex items-center gap-4 mb-3">
+                <div className="w-14 h-14 bg-white/10 backdrop-blur rounded-2xl flex items-center justify-center text-3xl">🥗</div>
                 <div>
-                  <h4 className="text-2xl font-black text-white">NotebookLM</h4>
-                  <p className="text-slate-400 text-sm mt-3 font-bold leading-relaxed">Analiza tu nutrición y genera planes inteligentes con la IA de Google.</p>
+                  <h3 className="text-2xl font-black tracking-tight">Cuaderno IA de Nutrición</h3>
+                  <p className="text-white/60 text-sm font-bold">Claude Haiku · Conoce tu plan, peso y objetivos</p>
                 </div>
-              </div>
-              <div className="mt-10 relative z-10">
-                <a
-                  href="https://notebooklm.google.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-center shadow-xl shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 group/btn"
-                >
-                  Abrir Notebook <ArrowUpRight size={16} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
-                </a>
-              </div>
-            </div>
-
-            {/* OpenNotebookLM */}
-            <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-10 flex flex-col justify-between group hover:border-emerald-500/50 transition-all shadow-2xl overflow-hidden relative">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-600/10 blur-[60px] rounded-full -mr-10 -mt-10 group-hover:bg-emerald-600/20 transition-all"></div>
-              <div className="space-y-6 relative z-10">
-                <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
-                  <Share2 size={32} />
-                </div>
-                <div>
-                  <h4 className="text-2xl font-black text-white">OpenNotebook</h4>
-                  <p className="text-slate-400 text-sm mt-3 font-bold leading-relaxed">Tu base de conocimiento nutricional privado y local.</p>
-                </div>
-              </div>
-              <div className="mt-10 relative z-10">
-                <a
-                  href="https://open-notebooklm.vercel.app/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-center shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 group/btn"
-                >
-                  Lanzar Alpha <ArrowUpRight size={16} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
-                </a>
               </div>
             </div>
           </div>
 
-          {/* Writing Board */}
-          <div className="flex flex-col space-y-6">
-            <div className="flex justify-between items-center px-4">
-              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Cuaderno de Nutrición</h3>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${isSaving ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${isSaving ? 'text-amber-500' : 'text-slate-400'}`}>
-                    {isSaving ? 'Guardando...' : 'Sincronizado'}
-                  </span>
-                </div>
-                <button
-                  onClick={saveNotesAsDocument}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"
-                >
-                  <FileText size={14} />
-                  Convertir en Documento
+          {/* Quick prompts */}
+          {chatMsgs.length === 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {[
+                { emoji: '📋', text: 'Créame un menú semanal saludable para esta semana' },
+                { emoji: '🛒', text: 'Genera una lista de la compra basada en mi plan' },
+                { emoji: '⚡', text: 'Comidas rápidas para después de una guardia de 24h' },
+                { emoji: '📊', text: 'Analiza mis macros y calorías del plan actual' },
+                { emoji: '🥑', text: 'Sugiéreme snacks saludables para el hospital' },
+                { emoji: '🍳', text: 'Recetas batch cooking para preparar el domingo' },
+              ].map((p, i) => (
+                <button key={i} onClick={() => handleChatSend(p.text)}
+                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-left hover:border-emerald-300 hover:shadow-lg transition-all group">
+                  <span className="text-2xl mb-2 block">{p.emoji}</span>
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-emerald-600 transition-colors">{p.text}</p>
                 </button>
-              </div>
+              ))}
             </div>
-            <div className="bg-slate-900 rounded-[3rem] border border-slate-800 p-10 shadow-2xl flex group focus-within:ring-4 focus-within:ring-indigo-500/5 transition-all">
-              <textarea
-                className="w-full bg-transparent border-none focus:outline-none resize-none text-xl font-medium leading-relaxed text-slate-100 placeholder:text-slate-600 font-serif"
-                placeholder="Anota tus comidas, suplementos o cómo te sientes hoy..."
-                value={notes}
-                onChange={(e) => {
-                  setNotes(e.target.value);
-                  setIsSaving(true);
-                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                  saveTimeoutRef.current = setTimeout(() => setIsSaving(false), 1000);
-                }}
-                rows={12}
-              />
+          )}
+
+          {/* Chat */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col" style={{ minHeight: chatMsgs.length > 0 ? '450px' : '200px' }}>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 max-h-[500px]">
+              {chatMsgs.length === 0 && (
+                <div className="text-center py-16">
+                  <ChefHat size={36} className="mx-auto text-emerald-300 mb-4" />
+                  <h4 className="font-black text-lg text-slate-800 dark:text-white mb-2">Tu nutricionista IA personal</h4>
+                  <p className="text-sm text-slate-400 max-w-md mx-auto">Pregúntame sobre menús, recetas rápidas, listas de la compra o analiza tu plan nutricional.</p>
+                </div>
+              )}
+              {chatMsgs.map(m => (
+                <div key={m.id} className={`flex gap-3 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {m.role === 'assistant' && <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 shadow-lg"><ChefHat size={14} className="text-white" /></div>}
+                  <div className={`max-w-[80%] rounded-2xl px-5 py-4 ${m.role === 'user' ? 'bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg' : 'bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 text-slate-800 dark:text-slate-200'}`}>
+                    <pre className="text-sm font-sans whitespace-pre-wrap leading-relaxed break-words">{m.content}</pre>
+                  </div>
+                  {m.role === 'user' && <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-xl flex items-center justify-center flex-shrink-0 mt-1"><Utensils size={14} className="text-slate-500" /></div>}
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex gap-3"><div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 shadow-lg"><ChefHat size={14} className="text-white" /></div><div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm text-emerald-600 font-bold flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Preparando...</div></div>
+              )}
+              <div ref={chatRef} />
+            </div>
+            <div className="border-t border-slate-100 dark:border-slate-700 p-4 bg-slate-50/50 dark:bg-slate-900/30 flex gap-3">
+              <textarea value={chatIn} onChange={e => setChatIn(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
+                placeholder="Pregunta sobre nutrición, recetas, listas de compra..."
+                className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 resize-none min-h-[48px] max-h-[100px]" rows={1} />
+              <button onClick={() => handleChatSend()} disabled={!chatIn.trim() || chatLoading}
+                className="w-12 h-12 bg-gradient-to-br from-emerald-600 to-teal-600 text-white rounded-2xl flex items-center justify-center disabled:opacity-40 shadow-lg flex-shrink-0">
+                {chatLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Notes section */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center px-2">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">Notas de Nutrición</h3>
+              <button onClick={saveNotesAsDocument} disabled={!notes.trim()} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all flex items-center gap-1.5 disabled:opacity-40"><FileText size={12} /> Guardar</button>
+            </div>
+            <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl focus-within:ring-4 focus-within:ring-emerald-500/10">
+              <textarea className="w-full bg-transparent border-none focus:outline-none resize-none text-base font-medium leading-relaxed text-slate-100 placeholder:text-slate-600 font-serif" placeholder="Anota comidas, suplementos, sensaciones..." value={notes}
+                onChange={(e) => { setNotes(e.target.value); setIsSaving(true); if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = setTimeout(() => setIsSaving(false), 1000); }} rows={6} />
             </div>
           </div>
         </div>
