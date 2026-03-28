@@ -46,6 +46,7 @@ import MonthlyAnalysisView from './components/MonthlyAnalysisView';
 import NotebookAIView from './components/NotebookAIView';
 import PatientNotesView from './components/PatientNotesView';
 import HangoutsView from './components/HangoutsView';
+import ActivitiesView from './components/ActivitiesView';
 import CronJobsView from './components/CronJobsView';
 import TimeBlockView from './components/TimeBlockView';
 import WhatsAppInboxView from './components/WhatsAppInboxView';
@@ -1284,6 +1285,7 @@ const App: React.FC = () => {
       case 'notebook-ai': return <NotebookAIView />;
       case 'patient-notes': return <PatientNotesView />;
       case 'hangouts': return <HangoutsView />;
+      case 'activities': return <ActivitiesView />;
       case 'vip-tasks': return <VipTasksView session={session} />;
       case 'shifts': return (
         <ShiftsCalendarView
@@ -1335,7 +1337,7 @@ const App: React.FC = () => {
         <Sidebar
           currentView={currentView === 'shared-hub' ? hubTab : currentView}
           onViewChange={(v) => {
-            if (['piso', 'activities', 'shopping', 'shared-hub', 'whiteboard'].includes(v)) {
+            if (['piso', 'shopping', 'shared-hub', 'whiteboard'].includes(v)) {
               if (v !== 'shared-hub') setHubTab(v as any);
               setCurrentView('shared-hub');
             } else if (v === 'trips') {
