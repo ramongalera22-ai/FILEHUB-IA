@@ -112,6 +112,81 @@ const PisosDashboardView: React.FC = () => {
   const [contacted,setContacted]=useState<Set<number>>(()=>{try{return new Set(JSON.parse(localStorage.getItem("fh_contacted")||"[]"))}catch{return new Set()}});
   const [cronJobs,setCronJobs]=useState(CRONS);
 
+  // ═══ LIVE PISOS FROM BOT ══════════════════════════════════════
+  const [livePisos,setLivePisos]=useState<Piso[]>(()=>{try{return JSON.parse(localStorage.getItem("fh_live_pisos")||"[]")}catch{return[]}});
+  const [scraping,setScraping]=useState(false);
+  const [scrapeMsg,setScrapeMsg]=useState("");
+  const [lastScrape,setLastScrape]=useState<string|null>(()=>localStorage.getItem("fh_last_scrape"));
+  const [showSource,setShowSource]=useState<'all'|'static'|'live'>('all');
+
+  // Fetch pisos from bot Playwright scraper
+  const scrapePisos=async()=>{
+    setScraping(true);setScrapeMsg("🔍 Buscando pisos con Playwright...");
+    try{
+      // Try scrape endpoint first
+      const r=await fetch(`${WA_SERVER}/scrape/pisos?city=barcelona&maxPrice=1400&type=alquiler&maxItems=30`,{signal:AbortSignal.timeout(30000)});
+      const d=await r.json();
+      if(d.pisos&&d.pisos.length>0){
+        const newPisos:Piso[]=d.pisos.map((p:any,i:number)=>({
+          id:1000+i+Date.now()%1000, titulo:p.title||'Piso',
+          precio:parseInt(String(p.price).replace(/[^\d]/g,''))||0,
+          hab:p.rooms?`${p.rooms} hab`:'—', m2:p.sqm||0, planta:p.floor||'ext',
+          extras:p.extras||[], zona:p.location||p.zona||'Barcelona',
+          fuente:p.source||'Bot Playwright', url:p.url||'', destacado:false,
+          nota:p.description?.substring(0,60)||`Scrapeado ${new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}`
+        })).filter((p:Piso)=>p.precio>0&&p.precio<=1400);
+        setLivePisos(newPisos);
+        try{localStorage.setItem("fh_live_pisos",JSON.stringify(newPisos))}catch{}
+        const now=new Date().toISOString();setLastScrape(now);localStorage.setItem("fh_last_scrape",now);
+        setScrapeMsg(`✅ ${newPisos.length} pisos encontrados por el bot`);
+      }else{
+        setScrapeMsg("⚠️ El bot no devolvió pisos. Puede estar reiniciándose.");
+      }
+    }catch(e:any){
+      // Fallback: try classified messages endpoint
+      try{
+        const r2=await fetch(`${WA_SERVER}/messages/classified`,{signal:AbortSignal.timeout(10000)});
+        const d2=await r2.json();
+        if(d2.pisos&&d2.pisos.length>0){
+          const newPisos:Piso[]=d2.pisos.slice(0,30).map((m:any,i:number)=>{
+            const body=m.body||'';
+            const pm=body.match(/(\d[\d.,]*)\s*€/);const price=pm?parseInt(pm[1].replace(/\D/g,'')):0;
+            const sm=body.match(/(\d+)\s*m[²2]/i);const sqm=sm?parseInt(sm[1]):0;
+            const rm=body.match(/(\d+)\s*hab/i);const rooms=rm?parseInt(rm[1]):0;
+            const title=body.split('\n').find((l:string)=>l.trim().length>5&&l.trim().length<80)?.replace(/\*+/g,'').trim()||'Piso detectado';
+            const um=body.match(/https?:\/\/[^\s)>"]+/);
+            return{id:2000+i+Date.now()%1000,titulo:title.substring(0,60),precio:price,hab:rooms?`${rooms} hab`:'—',m2:sqm,planta:'ext',extras:[],zona:'Barcelona',fuente:'WhatsApp Bot',url:um?um[0]:'',destacado:false,nota:`Via WA ${new Date(m.timestamp*1000||Date.now()).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}`};
+          }).filter((p:Piso)=>p.precio>0);
+          setLivePisos(newPisos);
+          try{localStorage.setItem("fh_live_pisos",JSON.stringify(newPisos))}catch{}
+          setScrapeMsg(`✅ ${newPisos.length} pisos de mensajes WA`);
+        }else{
+          setScrapeMsg(`❌ Error de conexión: ${e.message}`);
+        }
+      }catch{
+        setScrapeMsg(`❌ Bot no disponible: ${e.message}`);
+      }
+    }
+    setScraping(false);setTimeout(()=>setScrapeMsg(""),5000);
+  };
+
+  // Auto-scrape on mount if last scrape was > 2h ago
+  useEffect(()=>{
+    const shouldScrape=!lastScrape||(Date.now()-new Date(lastScrape).getTime())>2*60*60*1000;
+    if(shouldScrape)scrapePisos();
+  },[]);
+
+  // Merge static + live pisos
+  const ALL_PISOS=useMemo(()=>{
+    if(showSource==='static')return PISOS;
+    if(showSource==='live')return livePisos;
+    // Deduplicate by URL
+    const byUrl=new Map<string,Piso>();
+    PISOS.forEach(p=>byUrl.set(p.url,p));
+    livePisos.forEach(p=>{if(p.url&&!byUrl.has(p.url))byUrl.set(p.url,p)});
+    return[...byUrl.values()];
+  },[livePisos,showSource]);
+
   const saveFav=(s:Set<number>)=>{setFavs(s);try{localStorage.setItem("fh_dash_favs",JSON.stringify([...s]))}catch{}};
   const toggleFav=(id:number)=>{const n=new Set(favs);if(n.has(id))n.delete(id);else n.add(id);saveFav(n)};
   const copyMsg=()=>{navigator.clipboard.writeText(MSG);setCopied(true);setTimeout(()=>setCopied(false),2500)};
@@ -224,10 +299,10 @@ const PisosDashboardView: React.FC = () => {
   const toggleCron=(id:string)=>setCronJobs(p=>p.map(j=>j.id===id?{...j,enabled:!j.enabled,status:j.enabled?"paused" as const:"active" as const}:j));
 
   // Zones for filter dropdown
-  const allZones=useMemo(()=>[...new Set(PISOS.map(p=>p.zona))].sort(),[]);
+  const allZones=useMemo(()=>[...new Set(ALL_PISOS.map(p=>p.zona))].sort(),[ALL_PISOS]);
 
   const filtered=useMemo(()=>{
-    let l=[...PISOS];
+    let l=[...ALL_PISOS];
     if(fD)l=l.filter(p=>p.destacado);
     if(fB)l=l.filter(p=>p.extras.some(e=>/balc|terraza/i.test(e)));
     if(fA)l=l.filter(p=>p.extras.some(e=>/ascensor/i.test(e)));
@@ -235,16 +310,16 @@ const PisosDashboardView: React.FC = () => {
     if(q){const s=q.toLowerCase();l=l.filter(p=>p.titulo.toLowerCase().includes(s)||p.zona.toLowerCase().includes(s));}
     switch(sort){case"precio-asc":l.sort((a,b)=>a.precio-b.precio);break;case"precio-desc":l.sort((a,b)=>b.precio-a.precio);break;case"m2-desc":l.sort((a,b)=>b.m2-a.m2);break;case"m2-asc":l.sort((a,b)=>a.m2-b.m2);break;case"ratio":l.sort((a,b)=>(a.precio/a.m2)-(b.precio/b.m2));break;}
     return l;
-  },[sort,fD,fB,fA,fZ,q]);
+  },[sort,fD,fB,fA,fZ,q,ALL_PISOS]);
 
-  const P=PISOS.map(p=>p.precio);const avgP=Math.round(P.reduce((a,b)=>a+b,0)/P.length);
-  const M=PISOS.map(p=>p.m2);const avgM=Math.round(M.reduce((a,b)=>a+b,0)/M.length);
-  const maxP=Math.max(...P);const maxM=Math.max(...M);
+  const P=ALL_PISOS.map(p=>p.precio);const avgP=P.length?Math.round(P.reduce((a,b)=>a+b,0)/P.length):0;
+  const M=ALL_PISOS.map(p=>p.m2).filter(m=>m>0);const avgM=M.length?Math.round(M.reduce((a,b)=>a+b,0)/M.length):0;
+  const maxP=P.length?Math.max(...P):0;const maxM=M.length?Math.max(...M):0;
 
-  const priceData=useMemo(()=>[...PISOS].sort((a,b)=>a.precio-b.precio).map(p=>({label:p.titulo.length>20?p.titulo.slice(0,18)+"\u2026":p.titulo,value:p.precio,max:maxP})),[]);
-  const m2Data=useMemo(()=>[...PISOS].sort((a,b)=>b.m2-a.m2).map(p=>({label:p.titulo.length>20?p.titulo.slice(0,18)+"\u2026":p.titulo,value:p.m2,max:maxM})),[]);
-  const zonaData=useMemo(()=>{const z:Record<string,number>={};PISOS.forEach(p=>{z[p.zona]=(z[p.zona]||0)+1});const e=Object.entries(z).sort((a,b)=>b[1]-a[1]);const mx=Math.max(...e.map(x=>x[1]));return e.map(([k,v])=>({label:k,value:v,max:mx}))},[]);
-  const ratioData=useMemo(()=>[...PISOS].sort((a,b)=>(a.precio/a.m2)-(b.precio/b.m2)).map(p=>({label:p.titulo.length>20?p.titulo.slice(0,18)+"\u2026":p.titulo,value:parseFloat((p.precio/p.m2).toFixed(1)),max:Math.max(...PISOS.map(x=>x.precio/x.m2))})),[]);
+  const priceData=useMemo(()=>[...ALL_PISOS].sort((a,b)=>a.precio-b.precio).map(p=>({label:p.titulo.length>20?p.titulo.slice(0,18)+"\u2026":p.titulo,value:p.precio,max:maxP||1})),[ALL_PISOS,maxP]);
+  const m2Data=useMemo(()=>[...ALL_PISOS].filter(p=>p.m2>0).sort((a,b)=>b.m2-a.m2).map(p=>({label:p.titulo.length>20?p.titulo.slice(0,18)+"\u2026":p.titulo,value:p.m2,max:maxM||1})),[ALL_PISOS,maxM]);
+  const zonaData=useMemo(()=>{const z:Record<string,number>={};ALL_PISOS.forEach(p=>{z[p.zona]=(z[p.zona]||0)+1});const e=Object.entries(z).sort((a,b)=>b[1]-a[1]);const mx=Math.max(...e.map(x=>x[1]),1);return e.map(([k,v])=>({label:k,value:v,max:mx}))},[ALL_PISOS]);
+  const ratioData=useMemo(()=>[...ALL_PISOS].filter(p=>p.m2>0).sort((a,b)=>(a.precio/a.m2)-(b.precio/b.m2)).map(p=>({label:p.titulo.length>20?p.titulo.slice(0,18)+"\u2026":p.titulo,value:parseFloat((p.precio/p.m2).toFixed(1)),max:Math.max(...ALL_PISOS.filter(x=>x.m2>0).map(x=>x.precio/x.m2),1)})),[ALL_PISOS]);
 
   return(
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 sm:p-6 lg:p-8 custom-scrollbar overflow-y-auto">
@@ -259,16 +334,31 @@ const PisosDashboardView: React.FC = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400">Larga duración · Sin amueblar · Pisos completos · 850–1400€ · L3/L5 · &gt;35m²</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap items-center">
+            <button onClick={scrapePisos} disabled={scraping} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs font-black shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all">
+              {scraping?<Loader2 size={14} className="animate-spin"/>:<RefreshCw size={14}/>}{scraping?'Buscando...':'🔄 Actualizar'}
+            </button>
             <button onClick={sendAllWA} disabled={sending} className="flex items-center gap-2 px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-bold shadow-sm shadow-green-500/20 disabled:opacity-50 transition-all">
               {sending?<Loader2 size={14} className="animate-spin"/>:<Send size={14}/>}Enviar todo por WA
             </button>
+            {lastScrape&&<span className="text-[9px] text-slate-400 font-mono">Sync: {fRel(lastScrape)}</span>}
           </div>
         </div>
 
+        {/* SCRAPE STATUS */}
+        {scrapeMsg&&<div className={`mb-4 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 ${scrapeMsg.includes('✅')?'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700':scrapeMsg.includes('❌')?'bg-red-50 dark:bg-red-500/10 text-red-600 border border-red-200':'bg-blue-50 dark:bg-blue-500/10 text-blue-600 border border-blue-200'}`}>{scraping&&<Loader2 size={12} className="animate-spin"/>}{scrapeMsg}</div>}
+
+        {/* SOURCE TOGGLE */}
+        {livePisos.length>0&&<div className="flex gap-2 mb-4 items-center">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Fuente:</span>
+          {[{id:'all',label:`Todos (${ALL_PISOS.length})`},{id:'static',label:`Curados (${PISOS.length})`},{id:'live',label:`Bot (${livePisos.length})`}].map(s=>(
+            <button key={s.id} onClick={()=>setShowSource(s.id as any)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${showSource===s.id?'bg-amber-500 text-white border-amber-500 shadow-md':'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-amber-300'}`}>{s.label}</button>
+          ))}
+        </div>}
+
         {/* STATS */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          {[{v:PISOS.length,l:"Pisos",c:"bg-indigo-500",i:<Home size={18} className="text-white"/>},{v:`${avgP}€`,l:"Precio medio",c:"bg-amber-500",i:<Euro size={18} className="text-white"/>},{v:`${Math.min(...P)}€`,l:"Mínimo",c:"bg-emerald-500",i:<TrendingUp size={18} className="text-white"/>},{v:`${Math.max(...P)}€`,l:"Máximo",c:"bg-red-500",i:<TrendingUp size={18} className="text-white rotate-180"/>},{v:`${avgM}m²`,l:"Media m²",c:"bg-blue-500",i:<Maximize2 size={18} className="text-white"/>},{v:PISOS.filter(p=>p.destacado).length,l:"Destacados",c:"bg-amber-500",i:<Star size={18} className="text-white fill-white"/>}].map((s,i)=>(
+          {[{v:ALL_PISOS.length,l:"Pisos",c:"bg-indigo-500",i:<Home size={18} className="text-white"/>},{v:`${avgP}€`,l:"Precio medio",c:"bg-amber-500",i:<Euro size={18} className="text-white"/>},{v:P.length?`${Math.min(...P)}€`:'—',l:"Mínimo",c:"bg-emerald-500",i:<TrendingUp size={18} className="text-white"/>},{v:P.length?`${Math.max(...P)}€`:'—',l:"Máximo",c:"bg-red-500",i:<TrendingUp size={18} className="text-white rotate-180"/>},{v:`${avgM}m²`,l:"Media m²",c:"bg-blue-500",i:<Maximize2 size={18} className="text-white"/>},{v:ALL_PISOS.filter(p=>p.destacado).length,l:"Destacados",c:"bg-amber-500",i:<Star size={18} className="text-white fill-white"/>}].map((s,i)=>(
             <div key={i} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:shadow-lg transition-all hover:-translate-y-0.5">
               <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${s.c} mb-2`}>{s.i}</div>
               <div className="text-2xl font-black text-slate-900 dark:text-white">{s.v}</div>
