@@ -1,6 +1,6 @@
 {
   "title": "Pisos Barcelona 800-1400€ · Búsqueda automática",
-  "updated": "2026-03-28T03:06:46.759228",
+  "updated": "2026-03-28T08:19:53.369139",
   "filters": {
     "city": "Barcelona",
     "minPrice": 800,
@@ -15,11 +15,11 @@
   },
   "stats": {
     "total_encontrados": 123,
-    "total_contactados": 23,
+    "total_contactados": 19,
     "por_portal": {
       "idealista": {
         "encontrados": 123,
-        "contactados": 23
+        "contactados": 19
       },
       "fotocasa": {
         "encontrados": 0,
@@ -48,7 +48,7 @@
       "zona": "Ático en CL Magalhaes, 33, El Poble Sec - Parc de Montjuïc, Barcelona",
       "url": "https://www.idealista.com/inmueble/109929026/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Calle de la Mare de Déu de Port, La Marina del Port, Barcelona",
@@ -66,7 +66,7 @@
       "zona": "Piso en Torrent de l'Olla, 191, Vila de Gràcia, Barcelona",
       "url": "https://www.idealista.com/inmueble/35414867/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en Calle de Praga, El Baix Guinardó, Barcelona",
@@ -84,7 +84,7 @@
       "zona": "Estudio en Calle de Praga, El Baix Guinardó, Barcelona",
       "url": "https://www.idealista.com/inmueble/110802790/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Calle de Sant Paulí de Nola, 6, La Font de la Guatlla, Barcelona",
@@ -93,7 +93,7 @@
       "zona": "Piso en Calle de Sant Paulí de Nola, 6, La Font de la Guatlla, Barcelona",
       "url": "https://www.idealista.com/inmueble/91860756/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en Plaza d'Espanya, La Nova Esquerra de l'Eixample, Barcelona",
@@ -102,7 +102,7 @@
       "zona": "Estudio en Plaza d'Espanya, La Nova Esquerra de l'Eixample, Barcelona",
       "url": "https://www.idealista.com/inmueble/110924642/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Calle del Taquígraf Garriga, 91, Les Corts, Barcelona",
@@ -111,7 +111,7 @@
       "zona": "Piso en Calle del Taquígraf Garriga, 91, Les Corts, Barcelona",
       "url": "https://www.idealista.com/inmueble/86949590/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en Calle Enrique Granados, L'Antiga Esquerra de l'Eixample, Barcelona",
@@ -120,7 +120,7 @@
       "zona": "Estudio en Calle Enrique Granados, L'Antiga Esquerra de l'Eixample, Barcelona",
       "url": "https://www.idealista.com/inmueble/34044410/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en Calle de la Diputació, La Dreta de l'Eixample, Barcelona",
@@ -129,7 +129,7 @@
       "zona": "Estudio en Calle de la Diputació, La Dreta de l'Eixample, Barcelona",
       "url": "https://www.idealista.com/inmueble/95610160/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Casanova, L'Antiga Esquerra de l'Eixample, Barcelona",
@@ -138,7 +138,7 @@
       "zona": "Piso en Casanova, L'Antiga Esquerra de l'Eixample, Barcelona",
       "url": "https://www.idealista.com/inmueble/38321216/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en Calle de Mozart, Vila de Gràcia, Barcelona",
@@ -174,7 +174,7 @@
       "zona": "Piso en Calle de Dante Alighieri, El Carmel, Barcelona",
       "url": "https://www.idealista.com/inmueble/98792320/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en mare de deu dels Àngels, 49, La Teixonera, Barcelona",
@@ -183,7 +183,7 @@
       "zona": "Estudio en mare de deu dels Àngels, 49, La Teixonera, Barcelona",
       "url": "https://www.idealista.com/inmueble/108619785/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en Ronda de Sant Antoni, Sant Antoni, Barcelona",
@@ -192,7 +192,7 @@
       "zona": "Estudio en Ronda de Sant Antoni, Sant Antoni, Barcelona",
       "url": "https://www.idealista.com/inmueble/106408418/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Les Corts, Barcelona",
@@ -201,7 +201,7 @@
       "zona": "Piso en Les Corts, Barcelona",
       "url": "https://www.idealista.com/inmueble/110934384/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Calle de los Castillejos, 221, La Sagrada Família, Barcelona",
@@ -210,7 +210,7 @@
       "zona": "Piso en Calle de los Castillejos, 221, La Sagrada Família, Barcelona",
       "url": "https://www.idealista.com/inmueble/111040327/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Ático en Calle de la Conca de Tremp, El Carmel, Barcelona",
@@ -219,7 +219,7 @@
       "zona": "Ático en Calle de la Conca de Tremp, El Carmel, Barcelona",
       "url": "https://www.idealista.com/inmueble/97013179/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Calle de Sigüenza, 70, El Carmel, Barcelona",
@@ -228,7 +228,7 @@
       "zona": "Piso en Calle de Sigüenza, 70, El Carmel, Barcelona",
       "url": "https://www.idealista.com/inmueble/111024200/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Calle de València, s/n, La Nova Esquerra de l'Eixample, Barcelona",
@@ -246,7 +246,7 @@
       "zona": "Piso en Calle de Móra d'Ebre, El Coll, Barcelona",
       "url": "https://www.idealista.com/inmueble/104543807/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en Calle de Tamarit, Sant Antoni, Barcelona",
@@ -255,7 +255,7 @@
       "zona": "Estudio en Calle de Tamarit, Sant Antoni, Barcelona",
       "url": "https://www.idealista.com/inmueble/39983410/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en Avenida Diagonal, 317, La Dreta de l'Eixample, Barcelona",
@@ -264,7 +264,7 @@
       "zona": "Estudio en Avenida Diagonal, 317, La Dreta de l'Eixample, Barcelona",
       "url": "https://www.idealista.com/inmueble/110980821/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Ático en Avenida de sant ramon nonat, La Maternitat i Sant Ramon, Barcelona",
@@ -273,7 +273,7 @@
       "zona": "Ático en Avenida de sant ramon nonat, La Maternitat i Sant Ramon, Barcelona",
       "url": "https://www.idealista.com/inmueble/32399940/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Ático en Calle de l'Equador, Les Corts, Barcelona",
@@ -282,7 +282,7 @@
       "zona": "Ático en Calle de l'Equador, Les Corts, Barcelona",
       "url": "https://www.idealista.com/inmueble/108114424/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Calle de Padilla, 375, El Baix Guinardó, Barcelona",
@@ -291,7 +291,7 @@
       "zona": "Piso en Calle de Padilla, 375, El Baix Guinardó, Barcelona",
       "url": "https://www.idealista.com/inmueble/111025130/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Piso en Calle de la Concòrdia, El Poble Sec - Parc de Montjuïc, Barcelona",
@@ -300,7 +300,7 @@
       "zona": "Piso en Calle de la Concòrdia, El Poble Sec - Parc de Montjuïc, Barcelona",
       "url": "https://www.idealista.com/inmueble/111027544/",
       "portal": "idealista",
-      "contactado": true
+      "contactado": false
     },
     {
       "titulo": "Estudio en Calle de Villar, El Guinardó, Barcelona",
@@ -588,7 +588,7 @@
       "zona": "Piso en Calle d'En Fontrodona, El Poble Sec - Parc de Montjuïc, Barcelona",
       "url": "https://www.idealista.com/inmueble/110795232/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle de Salvà, El Poble Sec - Parc de Montjuïc, Barcelona",
@@ -597,7 +597,7 @@
       "zona": "Piso en Calle de Salvà, El Poble Sec - Parc de Montjuïc, Barcelona",
       "url": "https://www.idealista.com/inmueble/107536581/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle de Jacquard, Sants, Barcelona",
@@ -606,7 +606,7 @@
       "zona": "Piso en Calle de Jacquard, Sants, Barcelona",
       "url": "https://www.idealista.com/inmueble/107248453/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle d'En Fontrodona, El Poble Sec - Parc de Montjuïc, Barcelona",
@@ -615,7 +615,7 @@
       "zona": "Piso en Calle d'En Fontrodona, El Poble Sec - Parc de Montjuïc, Barcelona",
       "url": "https://www.idealista.com/inmueble/110348304/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Estudio en Carretera de Collblanc, La Maternitat i Sant Ramon, Barcelona",
@@ -624,7 +624,7 @@
       "zona": "Estudio en Carretera de Collblanc, La Maternitat i Sant Ramon, Barcelona",
       "url": "https://www.idealista.com/inmueble/110187889/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Ático en Calle de Trinxant, El Camp de l'Arpa del Clot, Barcelona",
@@ -633,7 +633,7 @@
       "zona": "Ático en Calle de Trinxant, El Camp de l'Arpa del Clot, Barcelona",
       "url": "https://www.idealista.com/inmueble/99015757/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Paseo de la Zona Franca, s/n, La Marina del Port, Barcelona",
@@ -642,7 +642,7 @@
       "zona": "Piso en Paseo de la Zona Franca, s/n, La Marina del Port, Barcelona",
       "url": "https://www.idealista.com/inmueble/107834414/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Passatge de Jaume Roig, La Maternitat i Sant Ramon, Barcelona",
@@ -651,7 +651,7 @@
       "zona": "Piso en Passatge de Jaume Roig, La Maternitat i Sant Ramon, Barcelona",
       "url": "https://www.idealista.com/inmueble/104102564/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle de la Diputació, El Fort Pienc, Barcelona",
@@ -660,7 +660,7 @@
       "zona": "Piso en Calle de la Diputació, El Fort Pienc, Barcelona",
       "url": "https://www.idealista.com/inmueble/110955470/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle de Ventalló, El Camp d'En Grassot i Gràcia Nova, Barcelona",
@@ -678,7 +678,7 @@
       "zona": "Piso en Calle del Torrent de les Flors, Vila de Gràcia, Barcelona",
       "url": "https://www.idealista.com/inmueble/103242985/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Estudio en Calle de Còrsega, Vila de Gràcia, Barcelona",
@@ -687,7 +687,7 @@
       "zona": "Estudio en Calle de Còrsega, Vila de Gràcia, Barcelona",
       "url": "https://www.idealista.com/inmueble/111014973/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle de Mozart, Vila de Gràcia, Barcelona",
@@ -696,7 +696,7 @@
       "zona": "Piso en Calle de Mozart, Vila de Gràcia, Barcelona",
       "url": "https://www.idealista.com/inmueble/34304178/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle de Lluís Sagnier, 64, El Guinardó, Barcelona",
@@ -705,7 +705,7 @@
       "zona": "Piso en Calle de Lluís Sagnier, 64, El Guinardó, Barcelona",
       "url": "https://www.idealista.com/inmueble/111033874/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle de Villarroel, Sant Antoni, Barcelona",
@@ -714,7 +714,7 @@
       "zona": "Piso en Calle de Villarroel, Sant Antoni, Barcelona",
       "url": "https://www.idealista.com/inmueble/81834047/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Estudio en Calle de Burgos, 49, Sants, Barcelona",
@@ -723,7 +723,7 @@
       "zona": "Estudio en Calle de Burgos, 49, Sants, Barcelona",
       "url": "https://www.idealista.com/inmueble/110972768/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle de l'Encarnació, El Baix Guinardó, Barcelona",
@@ -732,7 +732,7 @@
       "zona": "Piso en Calle de l'Encarnació, El Baix Guinardó, Barcelona",
       "url": "https://www.idealista.com/inmueble/110745601/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle d'en Grassot, El Camp d'En Grassot i Gràcia Nova, Barcelona",
@@ -750,7 +750,7 @@
       "zona": "Piso en Calle del Comte Borrell, Sant Antoni, Barcelona",
       "url": "https://www.idealista.com/inmueble/83073745/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Ático en Lope de vega, 44, El Poblenou, Barcelona",
@@ -759,7 +759,7 @@
       "zona": "Ático en Lope de vega, 44, El Poblenou, Barcelona",
       "url": "https://www.idealista.com/inmueble/110054566/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Gran Via de les Corts Catalanes, Sant Martí de Provençals, Barcelona",
@@ -768,7 +768,7 @@
       "zona": "Piso en Gran Via de les Corts Catalanes, Sant Martí de Provençals, Barcelona",
       "url": "https://www.idealista.com/inmueble/110799545/",
       "portal": "idealista",
-      "contactado": false
+      "contactado": true
     },
     {
       "titulo": "Piso en Calle de Sales i Ferré, El Guinardó, Barcelona",
