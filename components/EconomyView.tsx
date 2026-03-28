@@ -35,10 +35,52 @@ const EconomyView: React.FC<EconomyViewProps> = ({
    onAddDebt, onDeleteDebt, onUpdateDebt,
    onAddInvestment, onDeleteInvestment, onUpdateInvestment
 }) => {
-   const [activeTab, setActiveTab] = useState<'expenses' | 'debts' | 'investments'>('expenses');
+   const [activeTab, setActiveTab] = useState<'expenses' | 'debts' | 'investments' | 'ai-advisor'>('expenses');
    const [filterCategory, setFilterCategory] = useState('All');
    const [filterMonth, setFilterMonth] = useState('All');
    const [isUploading, setIsUploading] = useState(false);
+
+   // --- AI ADVISOR STATE ---
+   const [aiChatMsgs, setAiChatMsgs] = useState<{id:string;role:'user'|'assistant';content:string;ts:Date}[]>([]);
+   const [aiChatIn, setAiChatIn] = useState('');
+   const [aiChatLoading, setAiChatLoading] = useState(false);
+   const aiChatRef = useRef<HTMLDivElement>(null);
+   const OPENROUTER_KEY_FIN = import.meta.env.VITE_OPENROUTER_KEY || '';
+
+   React.useEffect(() => { aiChatRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [aiChatMsgs]);
+
+   const finContext = useMemo(() => {
+     const expSummary = expenses.length > 0 ? `Total gastos: ${expenses.reduce((t,e) => t + e.amount, 0).toFixed(2)}€ en ${expenses.length} transacciones` : 'Sin gastos registrados';
+     const debtList = debts.length > 0 ? debts.map(d => `- ${d.name}: ${d.totalAmount}€ (pagado: ${d.paidAmount}€, vence: ${d.dueDate}, estado: ${d.status}${d.interestRate ? `, interés: ${d.interestRate}%` : ''}${d.creditor ? `, acreedor: ${d.creditor}` : ''})`).join('\n') : 'Sin deudas';
+     const invList = investments.length > 0 ? investments.map(i => `- ${i.name}: ${i.amount}€ (${i.category}, ${i.status})`).join('\n') : 'Sin inversiones';
+     return `GASTOS:\n${expSummary}\n\nDEUDAS:\n${debtList}\n\nINVERSIONES:\n${invList}`;
+   }, [expenses, debts, investments]);
+
+   const handleAiChat = React.useCallback(async (overrideMsg?: string) => {
+     const msg = overrideMsg || aiChatIn.trim();
+     if (!msg || aiChatLoading || !OPENROUTER_KEY_FIN) return;
+     const userMsg = { id: `fm-${Date.now()}`, role: 'user' as const, content: msg, ts: new Date() };
+     setAiChatMsgs(prev => [...prev, userMsg]);
+     setAiChatIn(''); setAiChatLoading(true);
+     try {
+       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY_FIN}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+         body: JSON.stringify({
+           model: 'anthropic/claude-haiku-4.5', max_tokens: 1500,
+           messages: [
+             { role: 'system', content: `Eres un asesor financiero IA en FILEHUB. El usuario es médico.\n\nDATOS FINANCIEROS:\n${finContext}\n\nINSTRUCCIONES:\n- Responde en español con emojis\n- Analiza riesgos de deuda, prioriza qué eliminar primero (avalancha vs bola de nieve)\n- Identifica puntos críticos (vencimientos, sobreendeudamiento, ratio deuda/ingreso)\n- Si suben un extracto PDF, analiza patrones de gasto\n- Sé directo con alertas rojas si hay riesgo\n- Sugiere plan de acción concreto` },
+             ...[...aiChatMsgs.slice(-10), userMsg].map(m => ({ role: m.role, content: m.content }))
+           ]
+         })
+       });
+       const d = await res.json();
+       const reply = d.choices?.[0]?.message?.content || 'Error';
+       setAiChatMsgs(prev => [...prev, { id: `fm-${Date.now()+1}`, role: 'assistant', content: reply, ts: new Date() }]);
+     } catch (e: any) {
+       setAiChatMsgs(prev => [...prev, { id: `fm-${Date.now()+1}`, role: 'assistant', content: `❌ Error: ${e.message}`, ts: new Date() }]);
+     }
+     setAiChatLoading(false);
+   }, [aiChatIn, aiChatMsgs, aiChatLoading, finContext, OPENROUTER_KEY_FIN]);
 
    // --- EXPENSE STATE ---
    const [newExpenseLine, setNewExpenseLine] = useState({ vendor: '', amount: '', category: 'General', date: '' });
@@ -239,6 +281,13 @@ const EconomyView: React.FC<EconomyViewProps> = ({
             >
                <Briefcase size={18} className={activeTab === 'investments' ? 'text-emerald-400' : ''} />
                Inversiones
+            </button>
+            <button
+               onClick={() => setActiveTab('ai-advisor')}
+               className={`flex-1 px-8 py-5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${activeTab === 'ai-advisor' ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-2xl' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+            >
+               <Sparkles size={18} className={activeTab === 'ai-advisor' ? 'text-violet-200' : ''} />
+               🧠 Asesor IA
             </button>
          </div>
 
@@ -541,6 +590,138 @@ const EconomyView: React.FC<EconomyViewProps> = ({
                   </div>
                </section>
             </>
+         )}
+
+         {/* AI ADVISOR TAB */}
+         {activeTab === 'ai-advisor' && (
+            <div className="space-y-6 animate-in slide-in-from-bottom-4">
+               {/* Header */}
+               <div className="bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-700 rounded-[2rem] p-8 text-white relative overflow-hidden shadow-2xl">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] -mr-20 -mt-20" />
+                  <div className="relative z-10">
+                     <div className="flex items-center gap-4 mb-3">
+                        <div className="w-14 h-14 bg-white/10 backdrop-blur rounded-2xl flex items-center justify-center text-3xl">💰</div>
+                        <div>
+                           <h3 className="text-2xl font-black tracking-tight">Asesor Financiero IA</h3>
+                           <p className="text-white/60 text-sm font-bold">Claude Haiku · Analiza deudas, riesgos y puntos críticos</p>
+                        </div>
+                     </div>
+                     <div className="flex gap-4 text-[10px] font-bold uppercase tracking-wider text-white/50">
+                        <span>💳 {debts.length} deudas</span>
+                        <span>📊 {expenses.length} gastos</span>
+                        <span>📈 {investments.length} inversiones</span>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Debt Overview Table */}
+               {debts.length > 0 && (
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                     <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-red-50/50 dark:bg-red-500/5">
+                        <h4 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2"><CreditCard size={16} className="text-red-500" /> Tabla de Endeudamiento</h4>
+                     </div>
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                           <thead className="bg-slate-50 dark:bg-slate-900/50">
+                              <tr>
+                                 <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Deuda</th>
+                                 <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Acreedor</th>
+                                 <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Total</th>
+                                 <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Pagado</th>
+                                 <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Restante</th>
+                                 <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Vencimiento</th>
+                                 <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Estado</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
+                              {debts.map(d => {
+                                 const remaining = d.totalAmount - d.paidAmount;
+                                 const daysUntilDue = Math.ceil((new Date(d.dueDate).getTime() - Date.now()) / 86400000);
+                                 const isOverdue = daysUntilDue < 0;
+                                 const isUrgent = daysUntilDue >= 0 && daysUntilDue <= 30;
+                                 return (
+                                    <tr key={d.id} className={`${isOverdue ? 'bg-red-50 dark:bg-red-500/5' : isUrgent ? 'bg-amber-50 dark:bg-amber-500/5' : ''}`}>
+                                       <td className="px-4 py-3 font-bold text-slate-800 dark:text-white">{d.name}</td>
+                                       <td className="px-4 py-3 text-slate-500 text-xs">{d.creditor || '-'}</td>
+                                       <td className="px-4 py-3 font-black text-slate-800 dark:text-white">€{d.totalAmount.toLocaleString()}</td>
+                                       <td className="px-4 py-3 text-emerald-600 font-bold">€{d.paidAmount.toLocaleString()}</td>
+                                       <td className="px-4 py-3 text-red-600 font-black">€{remaining.toLocaleString()}</td>
+                                       <td className="px-4 py-3">
+                                          <span className={`text-xs font-bold ${isOverdue ? 'text-red-600' : isUrgent ? 'text-amber-600' : 'text-slate-500'}`}>
+                                             {d.dueDate} {isOverdue ? '⚠️ VENCIDA' : isUrgent ? `⏰ ${daysUntilDue}d` : ''}
+                                          </span>
+                                       </td>
+                                       <td className="px-4 py-3">
+                                          <span className={`text-[9px] font-black px-2 py-1 rounded-md ${d.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : d.status === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                             {d.status === 'paid' ? '✅ Pagada' : d.status === 'overdue' ? '🔴 Vencida' : '⏳ Pendiente'}
+                                          </span>
+                                       </td>
+                                    </tr>
+                                 );
+                              })}
+                           </tbody>
+                        </table>
+                     </div>
+                     <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex justify-between text-sm font-black">
+                        <span className="text-slate-500">Total deuda:</span>
+                        <span className="text-red-600">€{debts.reduce((t,d) => t + (d.totalAmount - d.paidAmount), 0).toLocaleString()}</span>
+                     </div>
+                  </div>
+               )}
+
+               {/* Quick prompts */}
+               {aiChatMsgs.length === 0 && (
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                     {[
+                        { emoji: '⚠️', text: 'Analiza mis riesgos financieros y puntos críticos' },
+                        { emoji: '🎯', text: '¿Qué deuda debería eliminar primero y por qué?' },
+                        { emoji: '📊', text: 'Haz un plan para reducir mi deuda total' },
+                        { emoji: '💡', text: 'Sugiere cómo optimizar mis gastos mensuales' },
+                        { emoji: '🏦', text: 'Analiza mi ratio deuda/patrimonio' },
+                        { emoji: '📈', text: '¿Son rentables mis inversiones actuales?' },
+                     ].map((p, i) => (
+                        <button key={i} onClick={() => handleAiChat(p.text)}
+                           className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-left hover:border-violet-300 hover:shadow-lg transition-all">
+                           <span className="text-2xl mb-2 block">{p.emoji}</span>
+                           <p className="text-xs font-bold text-slate-600 dark:text-slate-300">{p.text}</p>
+                        </button>
+                     ))}
+                  </div>
+               )}
+
+               {/* Chat */}
+               <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col" style={{ minHeight: '350px' }}>
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4 max-h-[500px]">
+                     {aiChatMsgs.length === 0 && (
+                        <div className="text-center py-16">
+                           <Sparkles size={36} className="mx-auto text-violet-300 mb-4" />
+                           <h4 className="font-black text-lg text-slate-800 dark:text-white mb-2">Tu asesor financiero personal</h4>
+                           <p className="text-sm text-slate-400 max-w-md mx-auto">Pregúntame sobre tus deudas, riesgos, prioridades de pago, o sube extractos PDF para analizar.</p>
+                        </div>
+                     )}
+                     {aiChatMsgs.map(m => (
+                        <div key={m.id} className={`flex gap-3 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                           <div className={`max-w-[80%] rounded-2xl px-5 py-4 ${m.role === 'user' ? 'bg-violet-600 text-white' : 'bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 text-slate-800 dark:text-slate-200'}`}>
+                              <pre className="text-sm font-sans whitespace-pre-wrap leading-relaxed break-words">{m.content}</pre>
+                           </div>
+                        </div>
+                     ))}
+                     {aiChatLoading && (
+                        <div className="flex gap-3"><div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm text-violet-600 font-bold flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Analizando datos financieros...</div></div>
+                     )}
+                     <div ref={aiChatRef} />
+                  </div>
+                  <div className="border-t border-slate-100 dark:border-slate-700 p-4 bg-slate-50/50 dark:bg-slate-900/30 flex gap-3">
+                     <input value={aiChatIn} onChange={e => setAiChatIn(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleAiChat(); }}
+                        placeholder="Pregunta sobre deudas, riesgos, gastos..." className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-violet-400" />
+                     <button onClick={() => handleAiChat()} disabled={!aiChatIn.trim() || aiChatLoading}
+                        className="px-5 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-black text-xs uppercase disabled:opacity-40 transition-all shadow-lg flex items-center gap-2">
+                        {aiChatLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Preguntar
+                     </button>
+                  </div>
+               </div>
+            </div>
          )}
       </div>
    );
