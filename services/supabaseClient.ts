@@ -1,8 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Real credentials — fallback hardcoded for GitHub Pages (no env vars available)
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://xlbtwjxyphqnjeugfxds.supabase.co';
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_CBtTyCYOl1AfusDdxDQQhg_A54tF820';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://igvadjgjpyuvzailjqwg.supabase.co';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlndmFkamdqcHl1dnphaWxqcXdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NDI3MTAsImV4cCI6MjA4ODAxODcxMH0.eAqKCHDzrkvMTseaBP0I_JICP1owX60-cp3agYqRz4Q';
 
 let _client: SupabaseClient | null = null;
 let _isOffline = false;
