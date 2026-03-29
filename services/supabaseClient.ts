@@ -25,7 +25,7 @@ function createOfflineMock(): SupabaseClient {
     auth: {
       getSession: () => Promise.resolve({ data: { session: null }, error: null }),
       getUser: () => Promise.resolve({ data: { user: null }, error: null }),
-      onAuthStateChange: (_e: any, cb: any) => {
+      onAuthStateChange: (cb: any) => {
         setTimeout(() => cb('SIGNED_OUT', null), 0);
         return { data: { subscription: { unsubscribe: () => {} } } };
       },
@@ -41,14 +41,6 @@ function createOfflineMock(): SupabaseClient {
 
 function getClient(): SupabaseClient {
   if (_client) return _client;
-
-  // On GitHub Pages, use offline mock to avoid Supabase errors in console
-  if (isGitHubPages) {
-    console.info('📡 FILEHUB running on GitHub Pages — Supabase offline mode (data from local JSON)');
-    _isOffline = true;
-    _client = createOfflineMock();
-    return _client;
-  }
 
   try {
     _client = createClient(SUPABASE_URL, SUPABASE_KEY, {
