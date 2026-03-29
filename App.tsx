@@ -38,6 +38,7 @@ import JobsView from './components/JobsView';
 import RealEstateView from './components/RealEstateView';
 import PisosDashboardView from './components/PisosDashboardView';
 import PisosBuscadorView from './components/PisosBuscadorView';
+import CoursesSessionsView from './components/CoursesSessionsView';
 import WhatsAppPisosView from './components/WhatsAppPisosView';
 import CarPlayView from './components/CarPlayView';
 import NewsView from './components/NewsView';
@@ -1271,6 +1272,7 @@ const App: React.FC = () => {
         />
       );
       case 'courses': return <LearningView />;
+      case 'courses-sessions': return <CoursesSessionsView />;
       case 'piso': return <RealEstateView />;
       case 'pisos-dashboard': return <PisosDashboardView />;
       case 'pisos-buscador': return <PisosBuscadorView />;

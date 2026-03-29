@@ -43,6 +43,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'piso',           label: 'Pisos',                 icon: Home },
     { id: 'pisos-dashboard', label: '🏠 Pisos Dashboard',    icon: Home },
     { id: 'pisos-buscador', label: '🔍 Pisos Buscador',     icon: Home },
+    { id: 'courses-sessions', label: '🎓 Cursos y Sesiones', icon: Home },
     { id: 'whatsapp-pisos', label: 'Pisos Bot WA',          icon: Home },
     { id: 'jobs',           label: 'Ofertas Empleo',        icon: Briefcase },
     { id: 'activities',     label: 'Actividades',           icon: Activity },
