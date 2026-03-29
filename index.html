@@ -52,6 +52,21 @@
   <div id="root"></div>
 
   <script>
+    // Catch Supabase auth errors globally to prevent white screen
+    window.addEventListener('error', function(e) {
+      if (e.message && (e.message.includes("reading 'user'") || e.message.includes("reading 'session'") || e.message.includes("reading 'email'") || e.message.includes("reading 'id'"))) {
+        e.preventDefault();
+        console.warn('⚠️ Auth session not ready yet — suppressed error');
+      }
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      if (e.reason?.message && (e.reason.message.includes('user') || e.reason.message.includes('session') || e.reason.message.includes('ENOTFOUND') || e.reason.message.includes('Failed to fetch'))) {
+        e.preventDefault();
+      }
+    });
+  </script>
+
+  <script>
     // Offline detection
     function updateOnlineStatus() {
       const banner = document.getElementById('offline-banner');

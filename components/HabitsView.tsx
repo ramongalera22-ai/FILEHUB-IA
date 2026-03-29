@@ -108,7 +108,7 @@ const HabitsView: React.FC<HabitsViewProps> = ({ session }) => {
     persist([...habits, h]);
     if (session) {
       await supabase.from('habits').insert({
-        id: h.id, user_id: session.user.id, title: h.title,
+        id: h.id, user_id: session?.user?.id, title: h.title,
         emoji: h.emoji, color: h.color, goal: h.goal,
         completions: JSON.stringify([]), created_at: h.created_at
       });

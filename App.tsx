@@ -198,9 +198,9 @@ const App: React.FC = () => {
       setSession(session);
       if (session) {
         setIsAuthenticated(true);
-        setCurrentUser(session.user.email);
-        syncProfile(session.user);
-        loadCloudData(session.user.id);
+        setCurrentUser(session?.user?.email);
+        syncProfile(session?.user);
+        loadCloudData(session?.user?.id);
       }
     });
 
@@ -210,9 +210,9 @@ const App: React.FC = () => {
       setSession(session);
       if (session) {
         setIsAuthenticated(true);
-        setCurrentUser(session.user.email);
-        syncProfile(session.user);
-        loadCloudData(session.user.id);
+        setCurrentUser(session?.user?.email);
+        syncProfile(session?.user);
+        loadCloudData(session?.user?.id);
       } else {
         setIsAuthenticated(false);
         setCurrentUser(null);
@@ -581,7 +581,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (session?.user) {
       const timeoutId = setTimeout(() => {
-        syncProfile(session.user);
+        syncProfile(session?.user);
       }, 2000); // Debounce saves
       return () => clearTimeout(timeoutId);
     }
@@ -606,7 +606,7 @@ const App: React.FC = () => {
         return;
       }
 
-      if (targetProfile.id === session.user.id) {
+      if (targetProfile.id === session?.user?.id) {
         alert("No puedes invitarte a ti mismo.");
         return;
       }
@@ -615,7 +615,7 @@ const App: React.FC = () => {
       const { data: newPartnership, error: partnershipError } = await supabase
         .from('partnerships')
         .insert({
-          user1_id: session.user.id,
+          user1_id: session?.user?.id,
           user2_id: targetProfile.id
         })
         .select()
@@ -692,7 +692,7 @@ const App: React.FC = () => {
     setExpenses([e, ...expenses]);
     if (session) {
       await supabase.from('expenses').insert({
-        id: e.id, user_id: session.user.id, amount: e.amount, vendor: e.vendor, date: e.date,
+        id: e.id, user_id: session?.user?.id, amount: e.amount, vendor: e.vendor, date: e.date,
         category: e.category, description: e.description, priority: e.priority, is_recurring: e.isRecurring, frequency: e.frequency
       });
     }
@@ -714,7 +714,7 @@ const App: React.FC = () => {
   const handleAddDebt = async (d: Debt) => {
     setDebts([...debts, d]);
     if (session) await supabase.from('debts').insert({
-      id: d.id, user_id: session.user.id, name: d.name, total_amount: d.totalAmount, paid_amount: d.paidAmount,
+      id: d.id, user_id: session?.user?.id, name: d.name, total_amount: d.totalAmount, paid_amount: d.paidAmount,
       due_date: d.dueDate, category: d.category, interest_rate: d.interestRate, creditor: d.creditor, status: d.status, notes: d.notes
     });
   };
@@ -737,7 +737,7 @@ const App: React.FC = () => {
   const handleAddInvestment = async (i: Investment) => {
     setInvestments([...investments, i]);
     if (session) await supabase.from('investments').insert({
-      id: i.id, user_id: session.user.id, name: i.name, amount: i.amount, date: i.date,
+      id: i.id, user_id: session?.user?.id, name: i.name, amount: i.amount, date: i.date,
       status: i.status, category: i.category, expected_return: i.expectedReturn,
       current_value: i.currentValue, purchase_price: i.purchasePrice, quantity: i.quantity, notes: i.notes
     });
@@ -762,7 +762,7 @@ const App: React.FC = () => {
   const handleAddEvent = async (e: CalendarEvent) => {
     setCalendarEvents([...calendarEvents, e]);
     if (session) await supabase.from('calendar_events').insert({
-      id: e.id, user_id: session.user.id, title: e.title, start_date: e.start, end_date: e.end, type: e.type
+      id: e.id, user_id: session?.user?.id, title: e.title, start_date: e.start, end_date: e.end, type: e.type
     });
   };
   const handleDeleteEvent = async (id: string) => {
@@ -776,7 +776,7 @@ const App: React.FC = () => {
   const handleAddTask = async (t: Task) => {
     setTasks([t, ...tasks]);
     if (session) await supabase.from('tasks').insert({
-      id: t.id, user_id: session.user.id, title: t.title, completed: t.completed, category: t.category,
+      id: t.id, user_id: session?.user?.id, title: t.title, completed: t.completed, category: t.category,
       priority: t.priority, due_date: t.dueDate, is_recurring: t.isRecurring, frequency: t.frequency
     });
   };
@@ -796,7 +796,7 @@ const App: React.FC = () => {
   const handleAddProject = async (p: Project) => {
     setProjects([p, ...projects]);
     if (session) await supabase.from('projects').insert({
-      id: p.id, user_id: session.user.id, name: p.name, budget: p.budget, spent: p.spent,
+      id: p.id, user_id: session?.user?.id, name: p.name, budget: p.budget, spent: p.spent,
       deadline: p.deadline, status: p.status, notebook_url: p.notebookUrl
     });
   };
@@ -816,7 +816,7 @@ const App: React.FC = () => {
   const handleAddGoal = async (g: Goal) => {
     setGoals([...goals, g]);
     if (session) await supabase.from('goals').insert({
-      id: g.id, user_id: session.user.id, title: g.title, target_date: g.targetDate,
+      id: g.id, user_id: session?.user?.id, title: g.title, target_date: g.targetDate,
       current_value: g.currentValue, target_value: g.targetValue, unit: g.unit, category: g.category, status: g.status
     });
   };
@@ -835,7 +835,7 @@ const App: React.FC = () => {
   const handleAddIdea = async (i: Idea) => {
     setIdeas([i, ...ideas]);
     if (session) await supabase.from('ideas').insert({
-      id: i.id, user_id: session.user.id, title: i.title, description: i.description,
+      id: i.id, user_id: session?.user?.id, title: i.title, description: i.description,
       category: i.category, priority: i.priority, status: i.status, created_at: i.createdAt
     });
   };
@@ -854,7 +854,7 @@ const App: React.FC = () => {
   const handleAddItem = async (i: ShoppingItem) => {
     setShoppingItems([...shoppingItems, i]);
     if (session) await supabase.from('shopping_items').insert({
-      id: i.id, user_id: session.user.id, name: i.name, estimated_price: i.estimatedPrice,
+      id: i.id, user_id: session?.user?.id, name: i.name, estimated_price: i.estimatedPrice,
       category: i.category, purchased: i.purchased, store: i.store
     });
   };
@@ -872,7 +872,7 @@ const App: React.FC = () => {
   const handleAddOrder = async (o: ShoppingOrder) => {
     setShoppingOrders([o, ...shoppingOrders]);
     if (session) await supabase.from('shopping_orders').insert({
-      id: o.id, user_id: session.user.id, store: o.store, date: o.date, total: o.total, status: o.status
+      id: o.id, user_id: session?.user?.id, store: o.store, date: o.date, total: o.total, status: o.status
     });
   };
 
@@ -885,14 +885,14 @@ const App: React.FC = () => {
   const handleAddSharedExpense = async (e: SharedExpense) => {
     setSharedExpenses([e, ...sharedExpenses]);
     if (session) await supabase.from('shared_expenses').insert({
-      id: e.id, user_id: session.user.id, amount: e.amount, vendor: e.vendor, date: e.date,
+      id: e.id, user_id: session?.user?.id, amount: e.amount, vendor: e.vendor, date: e.date,
       category: e.category, description: e.description, priority: e.priority, paid_by: e.paidBy, split_between: e.splitBetween
     });
   };
   const handleAddSharedDebt = async (d: SharedDebt) => {
     setSharedDebts([d, ...sharedDebts]);
     if (session) await supabase.from('shared_debts').insert({
-      id: d.id, user_id: session.user.id, from: d.from, to: d.to, amount: d.amount, description: d.description, date: d.date, status: d.status
+      id: d.id, user_id: session?.user?.id, from: d.from, to: d.to, amount: d.amount, description: d.description, date: d.date, status: d.status
     });
   };
   const handleSettleSharedDebt = async (id: string) => {
@@ -912,7 +912,7 @@ const App: React.FC = () => {
   const handleAddFile = async (f: StoredFile) => {
     setFiles([...files, f]);
     if (session) await supabase.from('files').insert({
-      id: f.id, user_id: session.user.id, name: f.name, type: f.type, size: f.size,
+      id: f.id, user_id: session?.user?.id, name: f.name, type: f.type, size: f.size,
       date: f.date, category: f.category, tags: f.tags, url: f.url, ai_summary: f.aiSummary
     });
   };
@@ -949,7 +949,7 @@ const App: React.FC = () => {
   const handleAddWeight = async (w: WeightEntry) => {
     setWeightEntries([...weightEntries, w]);
     if (session) await supabase.from('weight_entries').insert({
-      id: w.id, user_id: session.user.id, date: w.date, weight: w.weight, note: w.note
+      id: w.id, user_id: session?.user?.id, date: w.date, weight: w.weight, note: w.note
     });
   };
   const handleDeleteWeight = async (id: string) => {
@@ -959,7 +959,7 @@ const App: React.FC = () => {
   const handleAddNutritionPlan = async (p: NutritionPlan) => {
     setNutritionPlans([...nutritionPlans, p]);
     if (session) await supabase.from('nutrition_plans').insert({
-      id: p.id, user_id: session.user.id, name: p.name, upload_date: p.uploadDate, type: p.type, url: p.url
+      id: p.id, user_id: session?.user?.id, name: p.name, upload_date: p.uploadDate, type: p.type, url: p.url
     });
   };
   const handleDeletePlan = async (id: string) => {
@@ -992,7 +992,7 @@ const App: React.FC = () => {
   const handleAddPresentation = async (p: Presentation) => {
     setPresentations([p, ...presentations]);
     if (session) await supabase.from('presentations').insert({
-      id: p.id, user_id: session.user.id, title: p.title, client: p.client, status: p.status, due_date: p.dueDate, priority: p.priority
+      id: p.id, user_id: session?.user?.id, title: p.title, client: p.client, status: p.status, due_date: p.dueDate, priority: p.priority
     });
   };
 
@@ -1007,7 +1007,7 @@ const App: React.FC = () => {
   const handleAddTrip = async (t: Trip) => {
     setTrips([...trips, t]);
     if (session) await supabase.from('trips').insert({
-      id: t.id, user_id: session.user.id, destination: t.destination, start_date: t.startDate, end_date: t.endDate, budget: t.budget, notebook_url: t.notebookUrl
+      id: t.id, user_id: session?.user?.id, destination: t.destination, start_date: t.startDate, end_date: t.endDate, budget: t.budget, notebook_url: t.notebookUrl
     });
   };
   const handleDeleteTrip = async (id: string) => {
@@ -1019,7 +1019,7 @@ const App: React.FC = () => {
   const handleAddTrainingSession = async (s: TrainingSession) => {
     setTrainingSessions([...trainingSessions, s]);
     if (session) await supabase.from('training_sessions').insert({
-      id: s.id, user_id: session.user.id, title: s.title, date: s.date, type: s.type, duration: s.duration, intensity: s.intensity, status: s.status, notes: s.notes
+      id: s.id, user_id: session?.user?.id, title: s.title, date: s.date, type: s.type, duration: s.duration, intensity: s.intensity, status: s.status, notes: s.notes
     });
   };
   const handleDeleteTrainingSession = async (id: string) => {
@@ -1035,7 +1035,7 @@ const App: React.FC = () => {
   const handleAddTrainingPlan = async (p: TrainingPlan) => {
     setTrainingPlans([...trainingPlans, p]);
     if (session) await supabase.from('training_plans').insert({
-      id: p.id, user_id: session.user.id, name: p.name, description: p.description, duration_weeks: p.durationWeeks, source: p.source
+      id: p.id, user_id: session?.user?.id, name: p.name, description: p.description, duration_weeks: p.durationWeeks, source: p.source
     });
   };
   const handleDeleteTrainingPlan = async (id: string) => {
@@ -1172,7 +1172,7 @@ const App: React.FC = () => {
               const googleEvs = events.filter(e => e.source === 'google');
               for (const ev of googleEvs) {
                 await supabase.from('calendar_events').upsert({
-                  id: ev.id, user_id: session.user.id, title: ev.title,
+                  id: ev.id, user_id: session?.user?.id, title: ev.title,
                   start: ev.start, end: ev.end, type: ev.type, source: ev.source
                 });
               }

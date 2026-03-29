@@ -62,7 +62,7 @@ const VipTasksView: React.FC<VipTasksViewProps> = ({ session }) => {
         const { data, error } = await supabase
           .from('vip_tasks')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('user_id', session?.user?.id)
           .order('created_at', { ascending: false });
         if (!error && data) {
           setTasks(data);
@@ -107,7 +107,7 @@ const VipTasksView: React.FC<VipTasksViewProps> = ({ session }) => {
     persist(updated);
     if (session) {
       await supabase.from('vip_tasks').insert({
-        id: t.id, user_id: session.user.id, title: t.title,
+        id: t.id, user_id: session?.user?.id, title: t.title,
         description: t.description, completed: t.completed,
         priority: t.priority, category: t.category,
         due_date: t.due_date || null, is_recurring: t.is_recurring,
