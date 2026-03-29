@@ -1076,6 +1076,7 @@ const App: React.FC = () => {
           onAddGoal={handleAddGoal}
           onAddIdea={handleAddIdea}
           onAddEvent={handleAddEvent}
+          session={session}
         />
       );
       case 'files': return (

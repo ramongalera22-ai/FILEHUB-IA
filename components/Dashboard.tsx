@@ -48,9 +48,10 @@ interface DashboardProps {
    onDeleteExpense?: (id: string) => void;
    onAddGoal?: (goal: any) => void;
    onAddIdea?: (idea: any) => void;
-   onAddEvent?: (event: any) => void;
+   onAddEvent?: (event: CalendarEvent) => void;
    currentUser?: string | null;
    partnership?: Partnership | null;
+   session?: any;
 }
 
 const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
@@ -58,7 +59,7 @@ const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 const Dashboard: React.FC<DashboardProps> = ({
    expenses, tasks, events, globalContext,
    onAddTask, onDeleteTask, onToggleTask, onAddExpense, onDeleteExpense,
-   onAddGoal, onAddIdea, onAddEvent, currentUser, partnership
+   onAddGoal, onAddIdea, onAddEvent, currentUser, partnership, session
 }) => {
    const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'payments' | 'actions'>('overview');
    const [newExpense, setNewExpense] = useState({ vendor: '', amount: '', category: 'General', date: new Date().toISOString().split('T')[0] });
@@ -76,6 +77,47 @@ const Dashboard: React.FC<DashboardProps> = ({
    const [weatherCity, setWeatherCity] = useState<'murcia' | 'barcelona' | 'custom'>('murcia');
    const [customCity, setCustomCity] = useState('');
    const [weather, setWeather] = useState<Record<string, {temp: string; desc: string; icon: string; cityName?: string}>>({});
+
+   // ─── Quick Dashboard Tasks (separate table) ───
+   interface QuickTask { id: string; title: string; completed: boolean; priority: string; created_at: string; }
+   const [quickTasks, setQuickTasks] = useState<QuickTask[]>([]);
+   const [quickTaskInput, setQuickTaskInput] = useState('');
+   const [quickTaskPriority, setQuickTaskPriority] = useState('medium');
+
+   useEffect(() => {
+     const loadQuickTasks = async () => {
+       if (session?.user?.id) {
+         try {
+           const { data } = await supabase.from('dashboard_tasks').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false });
+           if (data) setQuickTasks(data);
+         } catch {}
+       }
+     };
+     loadQuickTasks();
+   }, [session]);
+
+   const addQuickTask = async () => {
+     if (!quickTaskInput.trim()) return;
+     const t: QuickTask = { id: crypto.randomUUID(), title: quickTaskInput.trim(), completed: false, priority: quickTaskPriority, created_at: new Date().toISOString() };
+     setQuickTasks(prev => [t, ...prev]);
+     setQuickTaskInput('');
+     if (session?.user?.id) {
+       try { await supabase.from('dashboard_tasks').insert({ ...t, user_id: session.user.id }); } catch {}
+     }
+   };
+   const toggleQuickTask = async (id: string) => {
+     setQuickTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+     if (session?.user?.id) {
+       const task = quickTasks.find(t => t.id === id);
+       try { await supabase.from('dashboard_tasks').update({ completed: !task?.completed }).eq('id', id); } catch {}
+     }
+   };
+   const deleteQuickTask = async (id: string) => {
+     setQuickTasks(prev => prev.filter(t => t.id !== id));
+     if (session?.user?.id) {
+       try { await supabase.from('dashboard_tasks').delete().eq('id', id); } catch {}
+     }
+   };
    const currentHour = new Date().getHours();
    const greeting = currentHour < 12 ? '☀️ Buenos días' : currentHour < 18 ? '🌤️ Buenas tardes' : '🌙 Buenas noches';
 
@@ -483,6 +525,40 @@ const Dashboard: React.FC<DashboardProps> = ({
                              </div>
                            )}
                          </div>
+                       </div>
+                     </div>
+
+                     {/* QUICK DASHBOARD TASKS */}
+                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-white/5 shadow-sm p-5">
+                       <div className="flex items-center justify-between mb-4">
+                         <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                           <Plus size={13} className="text-indigo-500" /> Tareas Rápidas
+                         </h4>
+                         <span className="text-[10px] bg-indigo-500/10 text-indigo-500 font-bold px-2 py-0.5 rounded-full">{quickTasks.filter(t=>!t.completed).length} pendientes</span>
+                       </div>
+                       <div className="flex gap-2 mb-3">
+                         <input value={quickTaskInput} onChange={e => setQuickTaskInput(e.target.value)}
+                           onKeyDown={e => e.key === 'Enter' && addQuickTask()}
+                           placeholder="Nueva tarea rápida..."
+                           className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-indigo-400" />
+                         <select value={quickTaskPriority} onChange={e => setQuickTaskPriority(e.target.value)}
+                           className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs">
+                           <option value="high">🔴</option><option value="medium">🟡</option><option value="low">🟢</option>
+                         </select>
+                         <button onClick={addQuickTask} className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 transition-all"><Plus size={16} /></button>
+                       </div>
+                       <div className="space-y-1.5 max-h-[250px] overflow-y-auto">
+                         {quickTasks.length === 0 ? (
+                           <p className="text-center text-xs text-slate-400 py-4">Añade tareas rápidas aquí</p>
+                         ) : quickTasks.map(t => (
+                           <div key={t.id} className="flex items-center gap-2 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                             <button onClick={() => toggleQuickTask(t.id)} className="shrink-0">
+                               {t.completed ? <CheckCircle2 size={16} className="text-emerald-500" /> : <Circle size={16} className={t.priority==='high'?'text-red-400':t.priority==='medium'?'text-amber-400':'text-slate-300'} />}
+                             </button>
+                             <span className={`text-xs font-medium flex-1 truncate ${t.completed ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>{t.title}</span>
+                             <button onClick={() => deleteQuickTask(t.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all"><Trash2 size={12} /></button>
+                           </div>
+                         ))}
                        </div>
                      </div>
 
