@@ -218,7 +218,7 @@ const App: React.FC = () => {
           setCurrentUser(session?.user?.email || null);
           syncProfile(session?.user);
           loadCloudData(session?.user?.id);
-        } else if (_event === 'SIGNED_OUT') {
+        } else {
           setIsAuthenticated(false);
           setCurrentUser(null);
         }
@@ -532,7 +532,10 @@ const App: React.FC = () => {
   };
 
   const handleLogin = (user: any) => {
-    // Handled by onAuthStateChange in useEffect
+    if (user) {
+      setIsAuthenticated(true);
+      setCurrentUser(user.email || null);
+    }
   };
 
   const handleLogout = async () => {
