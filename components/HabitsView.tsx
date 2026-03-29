@@ -106,7 +106,7 @@ const HabitsView: React.FC<HabitsViewProps> = ({ session }) => {
       user_id: session?.user?.id,
     };
     persist([...habits, h]);
-    if (session) {
+    if (session) { try {
       await supabase.from('habits').insert({
         id: h.id, user_id: session?.user?.id, title: h.title,
         emoji: h.emoji, color: h.color, goal: h.goal,
@@ -127,14 +127,14 @@ const HabitsView: React.FC<HabitsViewProps> = ({ session }) => {
     });
     persist(updated);
     const habit = updated.find(h => h.id === habitId)!;
-    if (session) {
+    if (session) { try {
       await supabase.from('habits').update({ completions: JSON.stringify(habit.completions) }).eq('id', habitId);
     }
   };
 
   const deleteHabit = async (id: string) => {
     persist(habits.filter(h => h.id !== id));
-    if (session) await supabase.from('habits').delete().eq('id', id);
+    if (session) { try { await supabase.from('habits').delete().eq('id', id); } catch (e) { console.warn('Habit delete error:', e); } }
   };
 
   const totalStreak = useMemo(() =>

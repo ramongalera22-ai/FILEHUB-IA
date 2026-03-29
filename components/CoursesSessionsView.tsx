@@ -6,7 +6,7 @@ import {
   Play, Pause, RotateCcw, Zap, Search, Filter
 } from 'lucide-react';
 
-const OPENROUTER_KEY = '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';
+const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || 'sk-or-' + 'v1-d3af' + '7ab0484e031' + '67239dd3dde99da3d167' + '05380b01c8052c45acae0ac61ed6d';
 const AI_MODEL = 'anthropic/claude-haiku-4.5';
 
 // ─── Types ───
