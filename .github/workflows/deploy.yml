@@ -39,6 +39,11 @@ jobs:
           cp dist/index.html dist/404.html
           cp sw.js dist/sw.js
           cp manifest.json dist/manifest.json
+          cp pisos.html dist/pisos.html 2>/dev/null || true
+          cp pisos-buscador.html dist/pisos-buscador.html 2>/dev/null || true
+          mkdir -p dist/data
+          cp data/data-pisos.json dist/data/data-pisos.json 2>/dev/null || true
+          touch dist/.nojekyll
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
