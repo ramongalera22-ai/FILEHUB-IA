@@ -6,7 +6,7 @@
  * - Push notifications para guardias y presupuesto
  */
 
-const CACHE_VERSION = 'filehub-v24-1774012364';
+const CACHE_VERSION = 'filehub-v25-1774743000';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const OFFLINE_PAGE = '/FILEHUB-IA/index.html';
@@ -87,6 +87,9 @@ self.addEventListener('fetch', event => {
 
   // Skip non-GET
   if (req.method !== 'GET') return;
+
+  // Never intercept pisos.html — it's a standalone page, not part of the SPA
+  if (url.pathname.includes('pisos.html')) return;
 
   // Skip API/external services — always network, never cache
   if (NO_CACHE_PATTERNS.some(p => url.hostname.includes(p))) return;
