@@ -42,6 +42,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'shared-hub',     label: 'Dashboard Hub',         icon: Heart },
     { id: 'piso',           label: 'Pisos',                 icon: Home },
     { id: 'pisos-dashboard', label: '🏠 Pisos Dashboard',    icon: Home },
+    { id: 'pisos-buscador', label: '🔍 Pisos Buscador',     icon: Home },
     { id: 'whatsapp-pisos', label: 'Pisos Bot WA',          icon: Home },
     { id: 'jobs',           label: 'Ofertas Empleo',        icon: Briefcase },
     { id: 'activities',     label: 'Actividades',           icon: Activity },
