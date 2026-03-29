@@ -197,27 +197,33 @@ const App: React.FC = () => {
   // Check Supabase Session
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        setIsAuthenticated(true);
-        setCurrentUser(session?.user?.email);
-        syncProfile(session?.user);
-        loadCloudData(session?.user?.id);
-      }
+      try {
+        setSession(session);
+        if (session?.user) {
+          setIsAuthenticated(true);
+          setCurrentUser(session?.user?.email || null);
+          syncProfile(session?.user);
+          loadCloudData(session?.user?.id);
+        }
+      } catch (e) { console.warn('getSession error:', e); }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        setIsAuthenticated(true);
-        setCurrentUser(session?.user?.email);
-        syncProfile(session?.user);
-        loadCloudData(session?.user?.id);
-      } else {
-        setIsAuthenticated(false);
-        setCurrentUser(null);
+      try {
+        setSession(session);
+        if (session?.user) {
+          setIsAuthenticated(true);
+          setCurrentUser(session?.user?.email || null);
+          syncProfile(session?.user);
+          loadCloudData(session?.user?.id);
+        } else if (_event === 'SIGNED_OUT') {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+        }
+      } catch (e) {
+        console.warn('Auth state change error:', e);
       }
     });
 

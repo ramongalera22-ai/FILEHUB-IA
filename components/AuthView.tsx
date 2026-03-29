@@ -28,10 +28,10 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
         if (error) throw error;
         
         // Improved registration handling
-        if (data.session) {
+        if (data?.session) {
           // User is logged in automatically (e.g., email confirmation disabled)
-          onLogin(data.user);
-        } else if (data.user) {
+          onLogin(data?.user);
+        } else if (data?.user) {
           // User created but needs confirmation
           alert('Registro exitoso. Por favor revisa tu bandeja de entrada para confirmar tu cuenta.');
           setMode('login');
@@ -42,8 +42,8 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           password,
         });
         if (error) throw error;
-        if (data.user) {
-          onLogin(data.user);
+        if (data?.user) {
+          onLogin(data?.user);
         }
       }
     } catch (err: any) {
