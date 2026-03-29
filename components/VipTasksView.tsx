@@ -86,6 +86,13 @@ const VipTasksView: React.FC<VipTasksViewProps> = ({ session }) => {
     localStorage.setItem('filehub_vip_tasks', JSON.stringify(updated));
   };
 
+  const syncToSupabase = async (id: string, fields: Record<string, any>) => {
+    if (!session?.user?.id) return;
+    try {
+      await supabase.from('vip_tasks').update(fields).eq('id', id);
+    } catch (e) { console.warn('VIP task sync error:', e); }
+  };
+
   const addTask = async () => {
     if (!form.title?.trim()) return;
     const t: VipTask = {
