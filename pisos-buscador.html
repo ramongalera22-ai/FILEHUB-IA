@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;0,9..40,800;1,9..40,400&family=JetBrains+Mono:wght@400;600&family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap" rel="stylesheet">
 <style>
+html,body{height:auto;min-height:100%;overflow-y:auto !important;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg-deep:#080C14;
@@ -366,6 +367,21 @@ select.btn{-webkit-appearance:none;appearance:none;padding-right:28px;
 <body>
 
 <!-- ═══ TOPBAR ═══ -->
+<script>
+// Detect if inside iframe — hide redundant navigation
+if (window.self !== window.top) {
+  document.documentElement.classList.add('in-iframe');
+}
+</script>
+<style>
+.in-iframe .topbar { display: none !important; }
+.in-iframe .hero { padding: 12px 20px !important; min-height: auto !important; }
+.in-iframe .hero h1 { font-size: 1.4rem !important; }
+.in-iframe .hero-sub { display: none !important; }
+.in-iframe .hero-badge { display: none !important; }
+.in-iframe .footer { display: none !important; }
+</style>
+
 <nav class="topbar">
   <div class="topbar-logo">FILEHUB <span>/ pisos</span></div>
   <div class="topbar-nav">
@@ -559,12 +575,13 @@ function showBanner(text, bg) {
 document.addEventListener('DOMContentLoaded', checkNucbox);
 
 // ═══ DATA ═══════════════════════════════════════════════════════════════════
-// ═══ DATA — Dynamic loader ═══
+// ═══ DATA — Dynamic loader from data/data-pisos.json ═══
 let PISOS = [];
 let _pisosLoaded = false;
 
 async function loadPisosData() {
   if (_pisosLoaded) return;
+  
   const mapPiso = (p) => ({
     titulo: p.titulo || '', zona: p.zona || p.titulo || '',
     precio: p.precio || 0, m2: p.m2 || 0, url: p.url || '',
@@ -574,15 +591,37 @@ async function loadPisosData() {
     balcon: p.balcon || false, ascensor: p.ascensor || false,
     fuente: p.portal || 'idealista', nota: p.nota || ''
   });
+
+  // 1. Try NucBox API first
   try {
     const apiRes = await fetch(NUCBOX + '/pisos', {signal: AbortSignal.timeout(4000)});
-    if (apiRes.ok) { const d = await apiRes.json(); if (d?.pisos?.length) { PISOS = d.pisos.map(mapPiso); _pisosLoaded = true; return; } }
-  } catch(e) {}
+    if (apiRes.ok) {
+      const apiData = await apiRes.json();
+      if (apiData?.pisos?.length) {
+        PISOS = apiData.pisos.map(mapPiso);
+        _pisosLoaded = true;
+        console.log('📡 Pisos from NucBox API:', PISOS.length);
+        return;
+      }
+    }
+  } catch(e) { /* NucBox offline, try JSON */ }
+
+  // 2. Fallback: static JSON from repo
   try {
     const base = window.location.pathname.includes('FILEHUB-IA') ? '/FILEHUB-IA' : '';
     const res = await fetch(base + '/data/data-pisos.json?t=' + Date.now());
-    if (res.ok) { const d = await res.json(); if (d?.pisos?.length) { PISOS = d.pisos.map(mapPiso); _pisosLoaded = true; } }
-  } catch(e) {}
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.pisos?.length) {
+        PISOS = data.pisos.map(mapPiso);
+        _pisosLoaded = true;
+        console.log('📄 Pisos from JSON:', PISOS.length);
+        return;
+      }
+    }
+  } catch(e) { console.warn('⚠️ JSON fallback failed:', e); }
+
+  console.warn('⚠️ No pisos data available');
 }
 
 
@@ -825,7 +864,9 @@ function switchTab(tab) {
 
 // ═══ EVENTS ═════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
+  // Load pisos data from API/JSON before rendering
   await loadPisosData();
+  
   renderStats();
   renderPisos();
   renderCharts();
