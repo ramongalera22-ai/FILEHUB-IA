@@ -69,7 +69,7 @@ export default function VoiceNotesView({ session }: { session: any }) {
         const { data, error } = await supabase
           .from('voice_notes')
           .select('*')
-          .eq('user_id', session.user.id)
+          .eq('user_id', session?.user?.id)
           .order('created_at', { ascending: false });
         if (!error && data?.length) {
           const mapped = data.map((n: any) => ({
@@ -101,7 +101,7 @@ export default function VoiceNotesView({ session }: { session: any }) {
     try {
       await supabase.from('voice_notes').upsert({
         id: note.id,
-        user_id: session.user.id,
+        user_id: session?.user?.id,
         title: note.title,
         transcription: note.transcription,
         ai_summary: note.ai_summary || '',
