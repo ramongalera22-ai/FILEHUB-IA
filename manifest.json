@@ -19,24 +19,33 @@
   "start_url": "/FILEHUB-IA/",
   "scope": "/FILEHUB-IA/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
-  "theme_color": "#4f46e5",
+  "display_override": ["standalone", "minimal-ui"],
+  "theme_color": "#0f172a",
   "background_color": "#0f172a",
   "orientation": "any",
-  "categories": ["productivity", "finance", "utilities"],
+  "categories": ["productivity", "finance", "utilities", "medical"],
   "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "shortcuts": [
     {
       "name": "Tareas VIP",
       "short_name": "VIP",
-      "url": "/FILEHUB-IA/",
+      "url": "/FILEHUB-IA/?view=vip-tasks",
       "icons": [{ "src": "https://img.icons8.com/ios-filled/96/f59e0b/star.png", "sizes": "96x96" }]
     },
     {
-      "name": "Planificador IA",
-      "short_name": "Plan",
-      "url": "/FILEHUB-IA/",
-      "icons": [{ "src": "https://img.icons8.com/ios-filled/96/4f46e5/brain.png", "sizes": "96x96" }]
+      "name": "Dashboard",
+      "short_name": "Dash",
+      "url": "/FILEHUB-IA/?view=dashboard",
+      "icons": [{ "src": "https://img.icons8.com/ios-filled/96/4f46e5/lightning-bolt.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Pisos",
+      "short_name": "Pisos",
+      "url": "/FILEHUB-IA/?view=pisos-buscador",
+      "icons": [{ "src": "https://img.icons8.com/ios-filled/96/10b981/home.png", "sizes": "96x96" }]
     }
   ]
 }

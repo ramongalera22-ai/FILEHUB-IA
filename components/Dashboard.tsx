@@ -492,13 +492,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                          <Calendar size={16} className="text-indigo-400" />
                          <h4 className="text-xs font-black text-white uppercase tracking-widest">Agenda Semanal</h4>
                        </div>
-                       <div className="grid grid-cols-7 gap-2">
+                       <div className="grid grid-cols-7 gap-1 md:gap-2 overflow-x-auto">
                          {weekDays.map((day, i) => {
                            const isToday = day.dateStr === new Date().toISOString().split('T')[0];
                            return (
-                             <div key={day.dateStr} className={`flex flex-col items-center p-2 rounded-xl transition-all ${isToday ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}>
-                               <span className="text-[9px] font-black uppercase">{day.dayName}</span>
-                               <span className={`text-lg font-black ${isToday ? 'text-white' : 'text-slate-300'}`}>{day.dayNumber}</span>
+                             <div key={day.dateStr} className={`flex flex-col items-center p-1 md:p-2 rounded-lg md:rounded-xl transition-all min-w-[40px] ${isToday ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}>
+                               <span className="text-[8px] md:text-[9px] font-black uppercase">{day.dayName}</span>
+                               <span className={`text-sm md:text-lg font-black ${isToday ? 'text-white' : 'text-slate-300'}`}>{day.dayNumber}</span>
                                {day.items.length > 0 ? (
                                  <div className="mt-1 space-y-0.5 w-full">
                                    {day.items.slice(0,2).map((item: any) => (
