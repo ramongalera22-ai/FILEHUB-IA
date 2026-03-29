@@ -106,12 +106,14 @@ const HabitsView: React.FC<HabitsViewProps> = ({ session }) => {
       user_id: session?.user?.id,
     };
     persist([...habits, h]);
-    if (session) { try {
-      await supabase.from('habits').insert({
-        id: h.id, user_id: session?.user?.id, title: h.title,
-        emoji: h.emoji, color: h.color, goal: h.goal,
-        completions: JSON.stringify([]), created_at: h.created_at
-      });
+    if (session) {
+      try {
+        await supabase.from('habits').insert({
+          id: h.id, user_id: session?.user?.id, title: h.title,
+          emoji: h.emoji, color: h.color, goal: h.goal,
+          completions: JSON.stringify([]), created_at: h.created_at
+        });
+      } catch (e) { console.warn('Habit insert error:', e); }
     }
     setForm({ title: '', emoji: '💪', color: 'violet', goal: 21 });
     setShowForm(false);
@@ -127,8 +129,9 @@ const HabitsView: React.FC<HabitsViewProps> = ({ session }) => {
     });
     persist(updated);
     const habit = updated.find(h => h.id === habitId)!;
-    if (session) { try {
-      await supabase.from('habits').update({ completions: JSON.stringify(habit.completions) }).eq('id', habitId);
+    if (session) {
+      try { await supabase.from('habits').update({ completions: JSON.stringify(habit.completions) }).eq('id', habitId); }
+      catch (e) { console.warn('Habit update error:', e); }
     }
   };
 
