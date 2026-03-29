@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>FILEHUB — Pisos Barcelona</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;0,9..40,800;1,9..40,400&family=JetBrains+Mono:wght@400;600&family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap" rel="stylesheet">
@@ -479,32 +482,81 @@ select.btn{-webkit-appearance:none;appearance:none;padding-right:28px;
 </footer>
 
 <script>
-const API_URL = "https://nucboxg10.tail3a7cac.ts.net";
+// ═══ NUCBOX API — Single source of truth ═══
+const NUCBOX = 'https://nucboxg10.tail3a7cac.ts.net';
+let nucboxOnline = false;
 
+// Contact a single landlord via NucBox Playwright
 async function contactarCasero(url, btn) {
+  if (!url) return;
+  const orig = btn ? btn.textContent : '';
   try {
-    btn.textContent = '⏳ Contactando...'; btn.disabled = true;
-    const res = await fetch(API_URL + '/contactar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url})});
+    if (btn) { btn.textContent = '⏳ Contactando...'; btn.disabled = true; btn.style.opacity = '0.7'; }
+    const res = await fetch(NUCBOX + '/contactar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url})});
     const data = await res.json();
-    if (data.ok) { btn.textContent = '✅ Enviado'; btn.style.background = '#16a34a'; }
-    else { btn.textContent = '❌ Error'; btn.style.background = '#dc2626'; }
-  } catch(e) { btn.textContent = '❌ Offline'; btn.style.background = '#dc2626'; }
-}
-async function contactarTodos() {
-  if (!confirm('¿Contactar TODOS los pisos no contactados?')) return;
-  const btns = document.querySelectorAll('.btn-contactar');
-  for (const btn of btns) {
-    if (btn.textContent.includes('Contactar')) { btn.click(); await new Promise(r => setTimeout(r, 12000)); }
+    if (data.ok && btn) { btn.textContent = '✅ Enviado'; btn.style.background = '#16a34a'; btn.style.opacity = '1'; }
+    else if (btn) { btn.textContent = '❌ Error'; btn.style.background = '#dc2626'; }
+  } catch(e) {
+    if (btn) { btn.textContent = '❌ Offline'; btn.style.background = '#dc2626'; }
   }
-  alert('✅ Proceso completado');
+  setTimeout(() => { if (btn) { btn.textContent = orig; btn.disabled = false; btn.style.opacity = '1'; btn.style.background = '#22c55e'; } }, 10000);
 }
+
+// Contact ALL landlords sequentially
+async function contactarTodos() {
+  if (!confirm('¿Contactar TODOS los pisos via NucBox?\\nEl bot rellenará los formularios automáticamente.\\nTardará unos minutos.')) return;
+  const btns = document.querySelectorAll('.btn-contactar');
+  let ok = 0, fail = 0, total = 0;
+  for (const btn of btns) {
+    if (btn.textContent.includes('Contactar')) {
+      total++;
+      try {
+        const url = btn.getAttribute('data-url') || btn.onclick?.toString().match(/'(https[^']+)'/)?.[1];
+        if (url) {
+          const res = await fetch(NUCBOX + '/contactar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url})});
+          const data = await res.json();
+          if (data.ok) { ok++; btn.textContent = '✅'; btn.style.background = '#16a34a'; }
+          else { fail++; btn.textContent = '❌'; }
+        }
+      } catch(e) { fail++; btn.textContent = '❌'; }
+      await new Promise(r => setTimeout(r, 15000));
+    }
+  }
+  alert(`✅ Completado: ${ok} enviados, ${fail} fallos de ${total} pisos`);
+}
+
+// Launch search on NucBox
 async function lanzarBusqueda() {
-  if (!confirm('¿Lanzar búsqueda de pisos en NucBox?')) return;
+  if (!confirm('¿Lanzar búsqueda de pisos en NucBox?\\nTardará ~25 min y actualizará el dashboard.')) return;
   try {
-    await fetch(API_URL + '/buscar', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-    alert('🔍 Búsqueda lanzada. Tardará ~20 min. Los resultados se actualizarán automáticamente.');
-  } catch(e) { alert('❌ NucBox no accesible'); }
+    await fetch(NUCBOX + '/buscar', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    alert('🔍 Búsqueda lanzada en NucBox.\\nEn ~25 min se actualizarán los datos.\\nRecarga la página después.');
+  } catch(e) { alert('❌ NucBox no accesible. Verifica que está encendido.'); }
 }
+
+// Check NucBox status on page load
+async function checkNucbox() {
+  try {
+    const res = await fetch(NUCBOX + '/status', {signal: AbortSignal.timeout(4000)});
+    const data = await res.json();
+    if (data.ok) {
+      nucboxOnline = true;
+      showBanner('🟢 NucBox conectado · ' + (data.historial || 0) + ' contactados', '#22c55e');
+    }
+  } catch(e) {
+    showBanner('🔴 NucBox offline — contacto manual disponible', '#ef4444');
+  }
+}
+
+function showBanner(text, bg) {
+  const b = document.createElement('div');
+  b.style.cssText = 'position:fixed;top:10px;right:10px;background:'+bg+';color:#fff;padding:10px 16px;border-radius:8px;font-weight:600;z-index:9999;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+  b.textContent = text;
+  document.body.appendChild(b);
+  setTimeout(() => { b.style.opacity = '0'; b.style.transition = 'opacity 0.5s'; setTimeout(() => b.remove(), 600); }, 5000);
+}
+
+document.addEventListener('DOMContentLoaded', checkNucbox);
 
 // ═══ DATA ═══════════════════════════════════════════════════════════════════
 const PISOS = [
@@ -901,103 +953,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// === API NUCBOX ===
-const NUCBOX_API = 'https://nucboxg10.tail3a7cac.ts.net';
+// (NucBox API already loaded above)
 
-// Contactar un piso via NucBox Playwright (sin abrir pestañas)
-async function contactarAPI(url, btn) {
-  if (!url) return;
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.innerHTML = '⏳'; btn.disabled = true; }
-  try {
-    const res = await fetch(NUCBOX_API + '/contactar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url})});
-    const data = await res.json();
-    if (data.ok && btn) { btn.innerHTML = '✅'; btn.style.color = '#22c55e'; }
-    else if (btn) { btn.innerHTML = '❌'; }
-  } catch(e) { if (btn) { btn.innerHTML = '❌'; } }
-  setTimeout(() => { if (btn) { btn.innerHTML = orig; btn.disabled = false; } }, 8000);
-}
-
-// Contactar TODOS via NucBox
-async function contactarTodosAPI() {
-  if (!confirm('¿Contactar TODOS los pisos via NucBox? El bot rellenará los formularios automáticamente.')) return;
-  const links = document.querySelectorAll('a[href*="idealista.com/inmueble"], a[href*="fotocasa.es/es/alquiler"], a[href*="habitaclia.com"]');
-  const urls = [...new Set([...links].map(a => a.href))];
-  let ok = 0, fail = 0;
-  for (let i = 0; i < urls.length; i++) {
-    try {
-      const res = await fetch(NUCBOX_API + '/contactar', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url: urls[i]})});
-      const data = await res.json();
-      if (data.ok) ok++;
-      else fail++;
-    } catch(e) { fail++; }
-    // Esperar 15s entre contactos para no saturar
-    if (i < urls.length - 1) await new Promise(r => setTimeout(r, 15000));
-  }
-  alert('✅ Completado: ' + ok + ' enviados, ' + fail + ' fallos de ' + urls.length + ' pisos');
-}
-
-// Buscar pisos y actualizar dashboard
-async function buscarPisosAPI() {
-  if (!confirm('¿Lanzar búsqueda de pisos? Tardará ~25 min y actualizará el dashboard.')) return;
-  try {
-    await fetch(NUCBOX_API + '/buscar', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-    alert('🔍 Búsqueda lanzada en NucBox. En ~25 min se actualizarán los datos. Recarga la página después.');
-  } catch(e) { alert('❌ NucBox no accesible. Verifica que está encendido.'); }
-}
-
-// Cargar pisos frescos desde API al abrir la página
-async function cargarPisosAPI() {
-  try {
-    const res = await fetch(NUCBOX_API + '/pisos', {timeout: 5000});
-    const data = await res.json();
-    if (data && data.pisos && data.pisos.length > 0) {
-      // Actualizar contador
-      const countEl = document.querySelector('.stat-value, [class*="stat"] span:first-child');
-      // Mostrar notificación
-      const banner = document.createElement('div');
-      banner.style.cssText = 'position:fixed;top:10px;right:10px;background:#22c55e;color:#fff;padding:10px 16px;border-radius:8px;font-weight:600;z-index:9999;font-size:13px;';
-      banner.textContent = '🟢 NucBox conectado · ' + data.pisos.length + ' pisos · ' + (data.updated || '');
-      document.body.appendChild(banner);
-      setTimeout(() => banner.remove(), 5000);
-    }
-  } catch(e) {
-    const banner = document.createElement('div');
-    banner.style.cssText = 'position:fixed;top:10px;right:10px;background:#ef4444;color:#fff;padding:10px 16px;border-radius:8px;font-weight:600;z-index:9999;font-size:13px;';
-    banner.textContent = '🔴 NucBox offline';
-    document.body.appendChild(banner);
-    setTimeout(() => banner.remove(), 5000);
-  }
-}
-
-// Reemplazar botones existentes al cargar
-document.addEventListener('DOMContentLoaded', () => {
-  cargarPisosAPI();
-  
-  // Reemplazar "Auto-contactar caseros"
-  document.querySelectorAll('button, [role="button"]').forEach(btn => {
-    const t = btn.textContent.toLowerCase();
-    if (t.includes('auto-contactar') || t.includes('contactar caseros') || t.includes('contactar todos')) {
-      btn.onclick = function(e) { e.preventDefault(); e.stopPropagation(); contactarTodosAPI(); return false; };
-    }
-    if (t.includes('actualizar')) {
-      btn.onclick = function(e) { e.preventDefault(); e.stopPropagation(); buscarPisosAPI(); return false; };
-    }
-  });
-  
-  // Reemplazar iconos de contactar individuales (el avión ✈️)
-  document.querySelectorAll('[onclick*="window.open"], [onclick*="contactar"]').forEach(el => {
-    const parent = el.closest('.piso, [class*="piso"], article, [class*="card"]');
-    if (!parent) return;
-    const link = parent.querySelector('a[href*="idealista"], a[href*="fotocasa"], a[href*="habitaclia"]');
-    if (!link) return;
-    // Solo reemplazar los botones de contactar, no los de abrir URL
-    if (el.title && (el.title.includes('Contactar') || el.title.includes('contactar'))) {
-      el.onclick = function(e) { e.preventDefault(); e.stopPropagation(); contactarAPI(link.href, el); return false; };
-    }
-  });
-});
-// === FIN API NUCBOX ===
 
 </script>
 </body>
