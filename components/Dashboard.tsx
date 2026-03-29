@@ -78,45 +78,29 @@ const Dashboard: React.FC<DashboardProps> = ({
    const [customCity, setCustomCity] = useState('');
    const [weather, setWeather] = useState<Record<string, {temp: string; desc: string; icon: string; cityName?: string}>>({});
 
-   // ─── Quick Dashboard Tasks (separate table) ───
+   // ─── Quick Dashboard Tasks (localStorage) ───
    interface QuickTask { id: string; title: string; completed: boolean; priority: string; created_at: string; }
-   const [quickTasks, setQuickTasks] = useState<QuickTask[]>([]);
+   const [quickTasks, setQuickTasks] = useState<QuickTask[]>(() => {
+     try { return JSON.parse(localStorage.getItem('filehub_dashboard_tasks') || '[]'); } catch { return []; }
+   });
    const [quickTaskInput, setQuickTaskInput] = useState('');
    const [quickTaskPriority, setQuickTaskPriority] = useState('medium');
 
    useEffect(() => {
-     const loadQuickTasks = async () => {
-       if (session?.user?.id) {
-         try {
-           const { data } = await supabase.from('dashboard_tasks').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false });
-           if (data) setQuickTasks(data);
-         } catch {}
-       }
-     };
-     loadQuickTasks();
-   }, [session]);
+     localStorage.setItem('filehub_dashboard_tasks', JSON.stringify(quickTasks));
+   }, [quickTasks]);
 
-   const addQuickTask = async () => {
+   const addQuickTask = () => {
      if (!quickTaskInput.trim()) return;
      const t: QuickTask = { id: crypto.randomUUID(), title: quickTaskInput.trim(), completed: false, priority: quickTaskPriority, created_at: new Date().toISOString() };
      setQuickTasks(prev => [t, ...prev]);
      setQuickTaskInput('');
-     if (session?.user?.id) {
-       try { await supabase.from('dashboard_tasks').insert({ ...t, user_id: session.user.id }); } catch {}
-     }
    };
-   const toggleQuickTask = async (id: string) => {
+   const toggleQuickTask = (id: string) => {
      setQuickTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
-     if (session?.user?.id) {
-       const task = quickTasks.find(t => t.id === id);
-       try { await supabase.from('dashboard_tasks').update({ completed: !task?.completed }).eq('id', id); } catch {}
-     }
    };
-   const deleteQuickTask = async (id: string) => {
+   const deleteQuickTask = (id: string) => {
      setQuickTasks(prev => prev.filter(t => t.id !== id));
-     if (session?.user?.id) {
-       try { await supabase.from('dashboard_tasks').delete().eq('id', id); } catch {}
-     }
    };
    const currentHour = new Date().getHours();
    const greeting = currentHour < 12 ? '☀️ Buenos días' : currentHour < 18 ? '🌤️ Buenas tardes' : '🌙 Buenas noches';
