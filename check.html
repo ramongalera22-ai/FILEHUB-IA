@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FILEHUB — DB Check</title>
+<style>body{font-family:system-ui;background:#0f172a;color:#e2e8f0;padding:20px;max-width:600px;margin:0 auto}
+h1{color:#818cf8}pre{background:#1e293b;padding:12px;border-radius:8px;overflow-x:auto;font-size:12px}
+.ok{color:#34d399}.err{color:#f87171}.warn{color:#fbbf24}button{background:#6366f1;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;margin:5px}
+</style>
+</head><body>
+<h1>⚡ FILEHUB DB Check</h1>
+<div id="log"></div>
+<button onclick="runCheck()">🔄 Verificar de nuevo</button>
+<button onclick="forceSync()">☁️ Forzar sync</button>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const log = document.getElementById('log');
+const add = (msg, cls='') => log.innerHTML += `<p class="${cls}">${msg}</p>`;
+
+const supabase = createClient(
+  'https://igvadjgjpyuvzailjqwg.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlndmFkamdqcHl1dnphaWxqcXdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NDI3MTAsImV4cCI6MjA4ODAxODcxMH0.eAqKCHDzrkvMTseaBP0I_JICP1owX60-cp3agYqRz4Q'
+);
+
+window.runCheck = async function() {
+  log.innerHTML = '<p>Verificando...</p>';
+  
+  // 1. Check session
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) {
+    add(`✅ Sesión activa: ${session.user.email}`, 'ok');
+  } else {
+    add('❌ No hay sesión — haz login primero en la webapp', 'err');
+    return;
+  }
+
+  // 2. Check user_data table
+  const { data: ud, error: udErr } = await supabase.from('user_data').select('key, updated_at').eq('user_id', session.user.id).order('updated_at', { ascending: false }).limit(20);
+  if (udErr) {
+    add(`❌ Tabla user_data: ${udErr.message}`, 'err');
+  } else if (ud?.length) {
+    add(`✅ user_data: ${ud.length} keys guardados en Supabase`, 'ok');
+    add('<pre>' + ud.map(r => `${r.key} → ${r.updated_at}`).join('\n') + '</pre>');
+  } else {
+    add('⚠️ user_data: tabla existe pero 0 keys guardados', 'warn');
+  }
+
+  // 3. Check dashboard_tasks
+  const { data: dt, error: dtErr } = await supabase.from('dashboard_tasks').select('id, title, completed').eq('user_id', session.user.id).limit(20);
+  if (dtErr) {
+    add(`⚠️ dashboard_tasks: ${dtErr.message}`, 'warn');
+  } else if (dt?.length) {
+    add(`✅ dashboard_tasks: ${dt.length} tareas`, 'ok');
+    add('<pre>' + dt.map(r => `${r.completed?'✅':'⭕'} ${r.title}`).join('\n') + '</pre>');
+  } else {
+    add('⚠️ dashboard_tasks: 0 tareas', 'warn');
+  }
+
+  // 4. Check other key tables
+  for (const table of ['tasks','vip_tasks','habits','expenses','voice_notes']) {
+    const { data, error } = await supabase.from(table).select('id').eq('user_id', session.user.id).limit(1);
+    if (error) {
+      add(`⚠️ ${table}: ${error.message}`, 'warn');
+    } else {
+      add(`${data?.length ? '✅' : '⭕'} ${table}: ${data?.length || 0} registros`, data?.length ? 'ok' : '');
+    }
+  }
+
+  // 5. Check localStorage keys
+  let lsKeys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k?.startsWith('filehub_')) lsKeys.push(k);
+  }
+  add(`📱 localStorage: ${lsKeys.length} keys con prefijo filehub_`);
+  if (lsKeys.length) add('<pre>' + lsKeys.sort().join('\n') + '</pre>');
+}
+
+window.forceSync = async function() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) { add('❌ No hay sesión', 'err'); return; }
+  
+  add('☁️ Forzando sync...', 'warn');
+  let count = 0;
+  const rows = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith('filehub_')) {
+      rows.push({ user_id: session.user.id, key, value: localStorage.getItem(key) || '', updated_at: new Date().toISOString() });
+      count++;
+    }
+  }
+  if (rows.length) {
+    const { error } = await supabase.from('user_data').upsert(rows, { onConflict: 'user_id,key' });
+    if (error) add(`❌ Error sync: ${error.message}`, 'err');
+    else add(`✅ ${count} keys sincronizados a Supabase`, 'ok');
+  } else {
+    add('⚠️ No hay keys filehub_ en localStorage', 'warn');
+  }
+}
+
+// Auto-run
+runCheck();
+</script>
+</body></html>
