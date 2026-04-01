@@ -55,6 +55,7 @@ import TimeBlockView from './components/TimeBlockView';
 import WhatsAppInboxView from './components/WhatsAppInboxView';
 import { processUniversalDocument } from './services/openrouterService';
 import { supabase } from './services/supabaseClient';
+import { initCloudSync, enableAutoSync } from './services/cloudSync';
 import { dbService } from './services/databaseService';
 import {
   Search,
@@ -204,6 +205,8 @@ const App: React.FC = () => {
           setCurrentUser(session?.user?.email || null);
           syncProfile(session?.user);
           loadCloudData(session?.user?.id);
+          initCloudSync(session.user.id);
+          enableAutoSync();
         }
       } catch (e) { console.warn('getSession error:', e); }
     });
@@ -218,6 +221,8 @@ const App: React.FC = () => {
           setCurrentUser(session?.user?.email || null);
           syncProfile(session?.user);
           loadCloudData(session?.user?.id);
+          initCloudSync(session.user.id);
+          enableAutoSync();
         } else {
           setIsAuthenticated(false);
           setCurrentUser(null);
