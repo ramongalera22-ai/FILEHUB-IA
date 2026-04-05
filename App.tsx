@@ -29,6 +29,7 @@ import FilePreviewModal from './components/FilePreviewModal';
 import WhatsAppBotView from './components/WhatsAppBotView';
 import VipTasksView from './components/VipTasksView';
 import ShiftsCalendarView from './components/ShiftsCalendarView';
+import FloatingCalendar from './components/FloatingCalendar';
 import WorkPlannerView from './components/WorkPlannerView';
 import HabitsView from './components/HabitsView';
 import BudgetAlertsView from './components/BudgetAlertsView';
@@ -1501,6 +1502,12 @@ const App: React.FC = () => {
           <p className="text-indigo-300/60 mt-2 font-bold text-[10px] uppercase tracking-widest">Extrayendo flujo de datos...</p>
         </div>
       )}
+      {/* Floating Calendar Button */}
+      <FloatingCalendar
+        calendarEvents={calendarEvents}
+        tasks={tasks}
+        onSyncEvents={(evts) => setCalendarEvents(evts)}
+      />
     </div>
   );
 };
