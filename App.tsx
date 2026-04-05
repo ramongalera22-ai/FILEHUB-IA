@@ -30,6 +30,7 @@ import WhatsAppBotView from './components/WhatsAppBotView';
 import VipTasksView from './components/VipTasksView';
 import ShiftsCalendarView from './components/ShiftsCalendarView';
 import FloatingCalendar from './components/FloatingCalendar';
+import FloatingAgenda from './components/FloatingAgenda';
 import WorkPlannerView from './components/WorkPlannerView';
 import HabitsView from './components/HabitsView';
 import BudgetAlertsView from './components/BudgetAlertsView';
@@ -1507,6 +1508,14 @@ const App: React.FC = () => {
         calendarEvents={calendarEvents}
         tasks={tasks}
         onSyncEvents={(evts) => setCalendarEvents(evts)}
+      />
+      {/* Floating Daily Agenda */}
+      <FloatingAgenda
+        calendarEvents={calendarEvents}
+        tasks={tasks}
+        onToggleTask={(id, done) => {
+          setTasks(tasks.map(t => t.id === id ? { ...t, completed: done } : t));
+        }}
       />
     </div>
   );
