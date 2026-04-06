@@ -54,7 +54,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row overflow-hidden font-sans">
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col md:flex-row overflow-y-auto font-sans" style={{ WebkitOverflowScrolling: 'touch' }}>
       {/* Visual Side */}
       <div className="hidden lg:flex lg:w-1/2 bg-slate-900 relative items-center justify-center p-20 overflow-hidden">
         <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-indigo-600/20 rounded-full -mr-96 -mt-96 blur-[120px] animate-pulse"></div>
@@ -116,7 +116,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
              </div>
            )}
 
-           <form onSubmit={handleSubmit} className="space-y-6">
+           <form onSubmit={handleSubmit} className="space-y-6" action="#" method="post">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
                 <div className="relative group">
@@ -130,6 +130,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                     autoComplete="email"
                     autoCapitalize="none"
                     inputMode="email"
+                    name="email"
                     required
                   />
                 </div>
@@ -146,6 +147,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     autoComplete="current-password"
+                    name="password"
                     required
                   />
                 </div>

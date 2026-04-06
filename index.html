@@ -94,11 +94,20 @@
     /* ═══ PWA Standalone — no browser UI ═══ */
     @media (display-mode: standalone) {
       body { padding-top: env(safe-area-inset-top, 0); }
+      /* iOS PWA: ensure inputs work properly */
+      input, textarea, select {
+        -webkit-appearance: none;
+        -webkit-user-select: text !important;
+        user-select: text !important;
+        touch-action: manipulation;
+        font-size: 16px !important;
+      }
     }
     .custom-scrollbar::-webkit-scrollbar { width: 4px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     button, nav { user-select: none; }
+    input, textarea, select { user-select: text; -webkit-user-select: text; }
 
     /* Offline banner */
     #offline-banner {
