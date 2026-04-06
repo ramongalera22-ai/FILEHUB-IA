@@ -635,26 +635,26 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
       {
         showModal && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl z-[500] flex items-center justify-center p-6">
-            <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl">
-              <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 className="text-2xl font-black text-slate-900">{editingGoal ? 'Editar Objetivo' : 'Nueva Meta'}</h3>
+            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl">
+              <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white">{editingGoal ? 'Editar Objetivo' : 'Nueva Meta'}</h3>
                 <button onClick={() => setShowModal(false)}><X className="text-slate-400 hover:text-slate-600" /></button>
               </div>
               <form onSubmit={handleSave} className="p-8 space-y-6">
                 <input
-                  className="w-full bg-slate-50 rounded-xl p-4 font-bold border border-slate-200"
+                  className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl p-4 font-bold border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white placeholder-slate-400"
                   placeholder="Título"
                   value={formData.title}
                   onChange={e => setFormData({ ...formData, title: e.target.value })}
                   required
                 />
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="number" className="bg-slate-50 rounded-xl p-4 font-bold border border-slate-200" placeholder="Meta" value={formData.targetValue} onChange={e => setFormData({ ...formData, targetValue: e.target.value })} required />
-                  <input type="number" className="bg-slate-50 rounded-xl p-4 font-bold border border-slate-200" placeholder="Actual" value={formData.currentValue} onChange={e => setFormData({ ...formData, currentValue: e.target.value })} required />
+                  <input type="number" className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 font-bold border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white placeholder-slate-400" placeholder="Meta" value={formData.targetValue} onChange={e => setFormData({ ...formData, targetValue: e.target.value })} required />
+                  <input type="number" className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 font-bold border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white placeholder-slate-400" placeholder="Actual" value={formData.currentValue} onChange={e => setFormData({ ...formData, currentValue: e.target.value })} required />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <input className="bg-slate-50 rounded-xl p-4 font-bold border border-slate-200" placeholder="Unidad (€, kg)" value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} required />
-                  <input type="date" className="bg-slate-50 rounded-xl p-4 font-bold border border-slate-200" value={formData.targetDate} onChange={e => setFormData({ ...formData, targetDate: e.target.value })} required />
+                  <input className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 font-bold border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white placeholder-slate-400" placeholder="Unidad (€, kg)" value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} required />
+                  <input type="date" className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 font-bold border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white placeholder-slate-400" value={formData.targetDate} onChange={e => setFormData({ ...formData, targetDate: e.target.value })} required />
                 </div>
                 <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-indigo-700">Guardar</button>
               </form>
