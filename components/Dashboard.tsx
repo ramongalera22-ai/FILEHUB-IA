@@ -99,6 +99,106 @@ const Dashboard: React.FC<DashboardProps> = ({
 
    const persistQuick = (updated: QuickTask[]) => { setQuickTasks(updated); localStorage.setItem('filehub_dashboard_tasks', JSON.stringify(updated)); };
 
+   // ─── Daily Action Plan (AI-powered checklist) ───
+   interface ActionItem { id: string; text: string; done: boolean; source: 'event' | 'task' | 'ai'; sourceId?: string; day: 'today' | 'tomorrow'; }
+   const [actionPlan, setActionPlan] = useState<ActionItem[]>([]);
+   const [actionPlanLoading, setActionPlanLoading] = useState(false);
+   const [showTomorrow, setShowTomorrow] = useState(false);
+
+   // Build action plan from events + tasks
+   const buildActionPlan = () => {
+     const todayStr = new Date().toISOString().split('T')[0];
+     const tmrw = new Date(); tmrw.setDate(tmrw.getDate() + 1);
+     const tomorrowStr = tmrw.toISOString().split('T')[0];
+     const saved: Record<string, boolean> = JSON.parse(localStorage.getItem('filehub_action_plan_done') || '{}');
+     const items: ActionItem[] = [];
+
+     // Today's events → actions
+     events.filter(e => e.start.startsWith(todayStr)).sort((a, b) => a.start.localeCompare(b.start)).forEach(e => {
+       const time = e.start.includes('T') ? e.start.split('T')[1]?.substring(0, 5) : '';
+       items.push({ id: `ev-${e.id}`, text: `${time ? time + ' — ' : ''}${e.title}`, done: saved[`ev-${e.id}`] || false, source: 'event', sourceId: e.id, day: 'today' });
+     });
+
+     // Today's urgent/high tasks
+     tasks.filter(t => !t.completed && (t.priority === 'high' || t.priority === 'urgent')).slice(0, 6).forEach(t => {
+       items.push({ id: `task-${t.id}`, text: t.title, done: saved[`task-${t.id}`] || false, source: 'task', sourceId: t.id, day: 'today' });
+     });
+
+     // VIP tasks (from quickTasks that are not completed)
+     quickTasks.filter(t => !t.completed && t.priority === 'high').slice(0, 4).forEach(t => {
+       items.push({ id: `vip-${t.id}`, text: t.title, done: saved[`vip-${t.id}`] || false, source: 'task', sourceId: t.id, day: 'today' });
+     });
+
+     // Tomorrow's events
+     events.filter(e => e.start.startsWith(tomorrowStr)).sort((a, b) => a.start.localeCompare(b.start)).forEach(e => {
+       const time = e.start.includes('T') ? e.start.split('T')[1]?.substring(0, 5) : '';
+       items.push({ id: `ev-tmrw-${e.id}`, text: `${time ? time + ' — ' : ''}${e.title}`, done: saved[`ev-tmrw-${e.id}`] || false, source: 'event', sourceId: e.id, day: 'tomorrow' });
+     });
+
+     // Tomorrow's due tasks
+     tasks.filter(t => !t.completed && t.dueDate === tomorrowStr).forEach(t => {
+       items.push({ id: `task-tmrw-${t.id}`, text: t.title, done: saved[`task-tmrw-${t.id}`] || false, source: 'task', sourceId: t.id, day: 'tomorrow' });
+     });
+
+     setActionPlan(items);
+   };
+
+   const toggleAction = (id: string) => {
+     setActionPlan(prev => prev.map(a => a.id === id ? { ...a, done: !a.done } : a));
+     const saved: Record<string, boolean> = JSON.parse(localStorage.getItem('filehub_action_plan_done') || '{}');
+     const item = actionPlan.find(a => a.id === id);
+     if (item) { saved[id] = !item.done; localStorage.setItem('filehub_action_plan_done', JSON.stringify(saved)); }
+     // If it's a real task, also toggle it
+     if (item?.source === 'task' && item.sourceId && item.id.startsWith('task-') && !item.id.includes('tmrw')) {
+       onToggleTask(item.sourceId);
+     }
+   };
+
+   const generateAISuggestions = async () => {
+     if (!OPENROUTER_KEY) return;
+     setActionPlanLoading(true);
+     try {
+       const todayStr = new Date().toISOString().split('T')[0];
+       const todayEvents = events.filter(e => e.start.startsWith(todayStr));
+       const pendingTasks = tasks.filter(t => !t.completed).slice(0, 10);
+       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
+         body: JSON.stringify({
+           model: 'anthropic/claude-haiku-4.5', max_tokens: 400,
+           messages: [{ role: 'user', content: `Eres el asistente de productividad de Carlos (médico residente). Genera EXACTAMENTE 3 acciones concretas y breves para hoy basándote en:\nEventos hoy: ${todayEvents.map(e=>e.title).join(', ') || 'ninguno'}\nTareas pendientes: ${pendingTasks.map(t=>t.title).join(', ') || 'ninguna'}\nResponde SOLO con un JSON array de strings, sin explicación. Ejemplo: ["Acción 1","Acción 2","Acción 3"]` }]
+         })
+       });
+       const d = await res.json();
+       const text = d.choices?.[0]?.message?.content || '';
+       const match = text.match(/\[[\s\S]*?\]/);
+       if (match) {
+         const suggestions: string[] = JSON.parse(match[0]);
+         const saved: Record<string, boolean> = JSON.parse(localStorage.getItem('filehub_action_plan_done') || '{}');
+         const aiItems = suggestions.map((s, i) => ({
+           id: `ai-${todayStr}-${i}`,
+           text: s,
+           done: saved[`ai-${todayStr}-${i}`] || false,
+           source: 'ai' as const,
+           day: 'today' as const
+         }));
+         setActionPlan(prev => [...prev.filter(a => a.source !== 'ai'), ...aiItems]);
+       }
+     } catch (e) { console.warn('AI suggestions failed', e); }
+     finally { setActionPlanLoading(false); }
+   };
+
+   useEffect(() => { buildActionPlan(); }, [events, tasks, quickTasks]);
+   // Clear done states at midnight
+   useEffect(() => {
+     const lastReset = localStorage.getItem('filehub_action_plan_reset');
+     const todayStr = new Date().toISOString().split('T')[0];
+     if (lastReset !== todayStr) {
+       localStorage.setItem('filehub_action_plan_done', '{}');
+       localStorage.setItem('filehub_action_plan_reset', todayStr);
+     }
+   }, []);
+
    const addQuickTask = async () => {
      if (!quickTaskInput.trim()) return;
      const t: QuickTask = { id: crypto.randomUUID(), title: quickTaskInput.trim(), completed: false, priority: quickTaskPriority, created_at: new Date().toISOString() };
@@ -857,6 +957,83 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <p className="text-center text-slate-400 text-xs font-bold py-4">Sin archivos</p>
                      )}
                   </div>
+               </div>
+
+               {/* ─── Daily Action Plan ─── */}
+               <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                     <h4 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-widest">
+                        <Target className="text-emerald-500" size={16} /> Plan de Acción
+                     </h4>
+                     <div className="flex items-center gap-2">
+                        <button onClick={generateAISuggestions} disabled={actionPlanLoading} className="text-[9px] font-black bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-all flex items-center gap-1 disabled:opacity-50">
+                           {actionPlanLoading ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} IA
+                        </button>
+                        <button onClick={() => setShowTomorrow(!showTomorrow)} className={`text-[9px] font-black px-2.5 py-1 rounded-lg transition-all ${showTomorrow ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                           {showTomorrow ? 'Mañana ✓' : 'Mañana'}
+                        </button>
+                     </div>
+                  </div>
+
+                  {/* Today */}
+                  {(() => {
+                     const todayItems = actionPlan.filter(a => a.day === 'today');
+                     const doneCount = todayItems.filter(a => a.done).length;
+                     const total = todayItems.length;
+                     return (
+                        <div className="space-y-2">
+                           {total > 0 && (
+                              <div className="flex items-center gap-2 mb-2">
+                                 <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-500" style={{ width: `${total > 0 ? (doneCount / total) * 100 : 0}%` }} />
+                                 </div>
+                                 <span className="text-[10px] font-black text-slate-400">{doneCount}/{total}</span>
+                              </div>
+                           )}
+                           {todayItems.length === 0 ? (
+                              <p className="text-center text-[10px] text-slate-400 py-3">Sin acciones para hoy</p>
+                           ) : todayItems.map(item => (
+                              <button key={item.id} onClick={() => toggleAction(item.id)} className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left transition-all group ${item.done ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+                                 <div className={`mt-0.5 shrink-0 w-4.5 h-4.5 rounded-md border-2 flex items-center justify-center transition-all ${item.done ? 'bg-emerald-500 border-emerald-500 text-white' : item.source === 'event' ? 'border-indigo-300' : item.source === 'ai' ? 'border-violet-300' : 'border-slate-300'}`}>
+                                    {item.done && <CheckCircle2 size={10} />}
+                                 </div>
+                                 <div className="flex-1 min-w-0">
+                                    <p className={`text-xs font-semibold leading-tight ${item.done ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>{item.text}</p>
+                                    <span className={`text-[8px] font-black uppercase tracking-wider ${item.source === 'event' ? 'text-indigo-400' : item.source === 'ai' ? 'text-violet-400' : 'text-amber-400'}`}>
+                                       {item.source === 'event' ? '📅 Evento' : item.source === 'ai' ? '✨ Sugerencia IA' : '📋 Tarea'}
+                                    </span>
+                                 </div>
+                              </button>
+                           ))}
+                        </div>
+                     );
+                  })()}
+
+                  {/* Tomorrow */}
+                  {showTomorrow && (() => {
+                     const tmrwItems = actionPlan.filter(a => a.day === 'tomorrow');
+                     const tmrwDate = new Date(); tmrwDate.setDate(tmrwDate.getDate() + 1);
+                     return (
+                        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                              Mañana — {tmrwDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' })}
+                           </p>
+                           {tmrwItems.length === 0 ? (
+                              <p className="text-[10px] text-slate-400 py-2">Sin eventos ni tareas para mañana</p>
+                           ) : tmrwItems.map(item => (
+                              <div key={item.id} className="flex items-start gap-2.5 p-2 rounded-xl">
+                                 <div className={`mt-0.5 shrink-0 w-3.5 h-3.5 rounded border-2 ${item.source === 'event' ? 'border-indigo-300 bg-indigo-50' : 'border-slate-300 bg-slate-50'}`} />
+                                 <div className="flex-1 min-w-0">
+                                    <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{item.text}</p>
+                                    <span className={`text-[8px] font-black uppercase ${item.source === 'event' ? 'text-indigo-400' : 'text-amber-400'}`}>
+                                       {item.source === 'event' ? '📅' : '📋'}
+                                    </span>
+                                 </div>
+                              </div>
+                           ))}
+                        </div>
+                     );
+                  })()}
                </div>
             </div>
          </div>
