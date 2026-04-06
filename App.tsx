@@ -1244,7 +1244,7 @@ const App: React.FC = () => {
   };
 
   if (!isAuthenticated) {
-    return <AuthView onLogin={handleLogin} />;
+    return <AuthView onLogin={handleLogin} onSkip={() => setIsAuthenticated(true)} />;
   }
 
   const renderContent = () => {

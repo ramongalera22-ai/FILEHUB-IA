@@ -5,9 +5,10 @@ import { supabase } from '../services/supabaseClient';
 
 interface AuthViewProps {
   onLogin: (user: any) => void;
+  onSkip?: () => void;
 }
 
-const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
+const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -162,6 +163,15 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                 {!loading && <ArrowRight size={18} />}
               </button>
            </form>
+
+           {onSkip && (
+             <button 
+               onClick={onSkip}
+               className="w-full py-4 mt-2 bg-slate-100 text-slate-500 font-bold rounded-2xl hover:bg-slate-200 transition-all text-xs uppercase tracking-widest"
+             >
+               Continuar sin cuenta (modo offline)
+             </button>
+           )}
 
            <p className="text-center text-[9px] text-slate-400 font-bold uppercase tracking-widest pt-10">
               Powered by Supabase • Secure Cloud Storage

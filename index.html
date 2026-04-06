@@ -8,6 +8,9 @@
   <!-- PWA -->
   <meta name="theme-color" content="#4f46e5">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="FileHub">
   <meta name="mobile-web-app-capable" content="yes">
@@ -152,21 +155,39 @@
     window.addEventListener('offline', updateOnlineStatus);
     updateOnlineStatus();
 
-    // Service Worker registration
+    // Service Worker — Force update for iOS PWA
+    const SW_EXPECTED_VERSION = 'filehub-v27';
     if ('serviceWorker' in navigator) {
+      // Nuke old SWs on iOS standalone
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+      const lastSWVersion = localStorage.getItem('filehub_sw_version');
+      
+      if (lastSWVersion && lastSWVersion !== SW_EXPECTED_VERSION) {
+        console.log('[SW] Old version detected, nuking caches...');
+        caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => {
+          navigator.serviceWorker.getRegistrations().then(regs => {
+            regs.forEach(r => r.unregister());
+            localStorage.setItem('filehub_sw_version', SW_EXPECTED_VERSION);
+            if (isStandalone) window.location.reload();
+          });
+        });
+      } else {
+        localStorage.setItem('filehub_sw_version', SW_EXPECTED_VERSION);
+      }
+
       window.addEventListener('load', async () => {
         const swBase = location.pathname.startsWith('/FILEHUB-IA') ? '/FILEHUB-IA' : '';
         try {
           const reg = await navigator.serviceWorker.register(swBase + '/sw.js', { scope: swBase + '/' });
           console.log('[SW] Registered:', reg.scope);
+          // Force check for updates on every load in standalone mode
+          if (isStandalone) reg.update();
 
-          // Check for updates
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             if (newWorker) {
               newWorker.addEventListener('statechange', () => {
                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  // New version available — send SKIP_WAITING
                   newWorker.postMessage({ type: 'SKIP_WAITING' });
                 }
               });
