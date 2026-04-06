@@ -22,29 +22,47 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
 
     try {
       if (mode === 'register') {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
+        const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        
-        // Improved registration handling
         if (data?.session) {
-          // User is logged in automatically (e.g., email confirmation disabled)
           onLogin(data?.user);
         } else if (data?.user) {
-          // User created but needs confirmation
-          alert('Registro exitoso. Por favor revisa tu bandeja de entrada para confirmar tu cuenta.');
-          setMode('login');
+          // Try signing in immediately (works if email confirmation is disabled)
+          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+          if (!loginError && loginData?.user) {
+            onLogin(loginData.user);
+          } else {
+            alert('Cuenta creada. Si necesitas confirmar email, revisa tu bandeja.');
+            setMode('login');
+          }
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
+        // Try login
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          // If user doesn't exist, auto-register and login
+          if (error.message?.includes('Invalid login') || error.message?.includes('invalid_credentials') || error.message?.includes('Email not confirmed')) {
+            console.log('Auto-registering user...');
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
+            if (signUpError) throw signUpError;
+            
+            if (signUpData?.session) {
+              onLogin(signUpData.user);
+              return;
+            }
+            
+            // Try login again after registration
+            const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({ email, password });
+            if (retryError) throw retryError;
+            if (retryData?.user) {
+              onLogin(retryData.user);
+              return;
+            }
+          }
+          throw error;
+        }
         if (data?.user) {
-          onLogin(data?.user);
+          onLogin(data.user);
         }
       }
     } catch (err: any) {
