@@ -26,17 +26,15 @@ export async function initCloudSync(userId: string) {
   try {
     const { data, error } = await supabase
       .from('user_data')
-      .select('key, value')
+      .select('key, value, updated_at')
       .eq('user_id', userId);
 
     if (!error && data?.length) {
       console.log(`☁️ CloudSync: loaded ${data.length} keys from Supabase`);
       for (const row of data) {
-        const localVal = localStorage.getItem(row.key);
         const cloudVal = row.value;
-
-        // Cloud wins if local is empty; otherwise keep local (user might have newer data)
-        if (!localVal && cloudVal) {
+        if (cloudVal) {
+          // Cloud always wins — this ensures cross-device sync
           localStorage.setItem(row.key, cloudVal);
         }
       }

@@ -123,7 +123,7 @@ const FloatingCalendar: React.FC<FloatingCalendarProps> = ({ calendarEvents, tas
   return (
     <>
       <style>{`
-        .fc-fab{position:fixed;bottom:24px;right:24px;z-index:99999;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;cursor:pointer;box-shadow:0 4px 20px rgba(99,102,241,.45);display:flex;align-items:center;justify-content:center;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:fc-glow 3s ease-in-out infinite}
+        .fc-fab{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom,0px));right:24px;z-index:99999;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;cursor:pointer;box-shadow:0 4px 20px rgba(99,102,241,.45);display:flex;align-items:center;justify-content:center;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:fc-glow 3s ease-in-out infinite}
         .fc-fab:hover{transform:scale(1.1)}
         .fc-fab:active{transform:scale(.95)}
         .fc-fab.open{background:#ef4444;animation:none;transform:rotate(45deg)}

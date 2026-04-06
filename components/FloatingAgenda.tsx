@@ -181,7 +181,7 @@ const FloatingAgenda: React.FC<FloatingAgendaProps> = ({ calendarEvents, tasks, 
   return (
     <>
       <style>{`
-        .fa-fab{position:fixed;bottom:24px;left:24px;z-index:99999;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);border:none;cursor:pointer;box-shadow:0 4px 20px rgba(16,185,129,.45);display:flex;align-items:center;justify-content:center;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:fa-glow 3s ease-in-out infinite}
+        .fa-fab{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom,0px));left:24px;z-index:99999;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);border:none;cursor:pointer;box-shadow:0 4px 20px rgba(16,185,129,.45);display:flex;align-items:center;justify-content:center;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:fa-glow 3s ease-in-out infinite}
         .fa-fab:hover{transform:scale(1.1)}
         .fa-fab:active{transform:scale(.95)}
         .fa-fab.open{background:#ef4444;animation:none;transform:rotate(45deg)}

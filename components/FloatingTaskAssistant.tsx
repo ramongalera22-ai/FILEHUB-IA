@@ -292,7 +292,7 @@ La fecha actual es ${ctx.fecha}. Usa fechas en formato YYYY-MM-DD o YYYY-MM-DDTH
   return (
     <>
       <style>{`
-        .fta-fab{position:fixed;bottom:92px;left:24px;z-index:99999;width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;cursor:pointer;box-shadow:0 4px 18px rgba(245,158,11,.4);display:flex;align-items:center;justify-content:center;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:fta-glow 4s ease-in-out infinite}
+        .fta-fab{position:fixed;bottom:calc(92px + env(safe-area-inset-bottom,0px));left:24px;z-index:99999;width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;cursor:pointer;box-shadow:0 4px 18px rgba(245,158,11,.4);display:flex;align-items:center;justify-content:center;transition:all .3s cubic-bezier(.34,1.56,.64,1);animation:fta-glow 4s ease-in-out infinite}
         .fta-fab:hover{transform:scale(1.12)}
         .fta-fab:active{transform:scale(.93)}
         .fta-fab.open{background:#ef4444;animation:none;transform:rotate(45deg)}

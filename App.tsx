@@ -724,6 +724,12 @@ const App: React.FC = () => {
     if (user) {
       setIsAuthenticated(true);
       setCurrentUser(user.email || null);
+      // Force full sync after login
+      initCloudSync(user.id);
+      enableAutoSync();
+      loadCloudData(user.id);
+      // Delayed force push of all localStorage data
+      setTimeout(() => forceSyncAll(), 5000);
     }
   };
 
