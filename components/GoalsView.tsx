@@ -213,15 +213,15 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
     <div className="space-y-10 animate-in fade-in duration-700 pb-20">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
-          <h2 className="text-4xl font-black text-slate-900 tracking-tight">Visiómetro & Metas</h2>
-          <p className="text-slate-500 font-bold mt-1">Línea de tiempo estratégica y ejecución de objetivos</p>
+          <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Visiómetro & Metas</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-bold mt-1">Línea de tiempo estratégica y ejecución de objetivos</p>
         </div>
         <div className="flex gap-4">
           {/* AI Generation Button */}
           {!showAIChat ? (
             <button
               onClick={() => setShowAIChat(true)}
-              className="bg-white text-indigo-600 border border-indigo-100 p-4 rounded-[1.25rem] hover:bg-indigo-50 transition-all shadow-sm hover:shadow-md"
+              className="bg-white dark:bg-slate-800 text-indigo-600 border border-indigo-100 dark:border-indigo-800 p-4 rounded-[1.25rem] hover:bg-indigo-50 transition-all shadow-sm hover:shadow-md"
               title="Generar nueva meta con IA"
             >
               <Sparkles size={20} />
@@ -264,14 +264,14 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="bg-white text-slate-600 border border-slate-200 p-4 rounded-[1.25rem] hover:bg-slate-50 transition-all shadow-sm hover:shadow-md"
+              className="bg-white dark:bg-slate-800 text-slate-600 border border-slate-200 dark:border-slate-700 p-4 rounded-[1.25rem] hover:bg-slate-50 transition-all shadow-sm hover:shadow-md"
               title="Subir documento para extraer metas"
             >
               {isUploading ? <Loader2 size={20} className="animate-spin text-indigo-600" /> : <UploadCloud size={20} />}
             </button>
           </div>
 
-          <div className="flex bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar gap-1">
+          <div className="flex bg-white dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-x-auto no-scrollbar gap-1">
             {[
               { id: 'weekly', label: 'Semanal' },
               { id: 'monthly', label: 'Mensual' },
@@ -297,102 +297,92 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
       </header>
 
       {/* Visual Timeline (Scatter Chart) */}
-      <section className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/50 mb-10 relative overflow-hidden">
+      {chartData.length > 0 ? (
+      <section className="bg-white dark:bg-slate-900 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none mb-10 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-20" />
-        <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2">
+        <h3 className="text-lg font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
           <CalendarDays size={20} className="text-indigo-600" />
           Mapa de Objetivos
         </h3>
         <div className="h-[350px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} stroke="#e2e8f0" opacity={0.5} />
-              <XAxis
-                type="number"
-                dataKey="x"
-                name="Fecha"
-                domain={['auto', 'auto']}
-                tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                stroke="#64748b"
-                tick={{ fontSize: 11, fontWeight: 600 }}
-                tickMargin={10}
-              />
-              <YAxis
-                type="number"
-                dataKey="y"
-                name="Categoría"
-                domain={[-0.5, 3.5]}
-                ticks={[0, 1, 2, 3]}
-                tickFormatter={(value) => {
-                  const labels = ['Finanzas', 'Carrera', 'Salud', 'Personal'];
-                  return labels[value] || '';
-                }}
-                stroke="#64748b"
-                tick={{ fontSize: 11, fontWeight: 700 }}
-                width={80}
-              />
+              <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} stroke="#334155" opacity={0.3} />
+              <XAxis type="number" dataKey="x" name="Fecha" domain={['auto', 'auto']}
+                tickFormatter={(t) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                stroke="#64748b" tick={{ fontSize: 11, fontWeight: 600, fill: '#94a3b8' }} tickMargin={10} />
+              <YAxis type="number" dataKey="y" name="Categoría" domain={[-0.5, 3.5]} ticks={[0, 1, 2, 3]}
+                tickFormatter={(v) => ['Finanzas', 'Carrera', 'Salud', 'Personal'][v] || ''}
+                stroke="#64748b" tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }} width={80} />
               <ZAxis type="number" dataKey="z" range={[400, 400]} />
               <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3', stroke: '#94a3b8' }} />
               <ReferenceLine x={new Date().getTime()} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'top', value: 'HOY', fill: '#ef4444', fontSize: 10, fontWeight: 800 }} />
               <Scatter name="Metas" data={chartData} shape="circle">
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={
-                    entry.category === 'financial' ? '#10b981' :
-                      entry.category === 'career' ? '#3b82f6' :
-                        entry.category === 'health' ? '#f43f5e' : '#f59e0b'
-                  } strokeWidth={2} stroke="#fff" />
+                    entry.category === 'financial' ? '#10b981' : entry.category === 'career' ? '#3b82f6' : entry.category === 'health' ? '#f43f5e' : '#f59e0b'
+                  } strokeWidth={2} stroke="rgba(255,255,255,0.3)" />
                 ))}
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
         </div>
       </section>
+      ) : (
+      <section className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-[3rem] p-10 mb-10 relative overflow-hidden text-white">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20" />
+        <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
+          <div className="w-24 h-24 bg-white/10 rounded-3xl flex items-center justify-center shrink-0">
+            <Target size={48} className="text-white/80" />
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <h3 className="text-2xl font-black mb-2">Define tus objetivos</h3>
+            <p className="text-indigo-200 text-sm mb-4">Crea metas con plazos y valores medibles. El mapa de objetivos y las gráficas se generarán automáticamente.</p>
+            <div className="flex flex-wrap gap-3 justify-center md:justify-start">
+              <button onClick={() => openModal()} className="px-6 py-3 bg-white text-indigo-700 font-black rounded-2xl text-xs uppercase tracking-wider hover:bg-indigo-50 transition-all shadow-lg">
+                <Plus size={14} className="inline mr-2" /> Crear primera meta
+              </button>
+              <div className="flex gap-2">
+                {['💰 Ahorrar 5000€', '🏃 Correr 10K', '📚 3 certificaciones'].map(s => (
+                  <span key={s} className="px-3 py-2 bg-white/10 rounded-xl text-[10px] font-bold">{s}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      )}
 
       {/* Visual Progress (Bar Chart) */}
-      <section className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/50 mb-10 overflow-hidden">
-        <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2">
+      {chartData.length > 0 && (
+      <section className="bg-white dark:bg-slate-900 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none mb-10 overflow-hidden">
+        <h3 className="text-lg font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
           <TrendingUp size={20} className="text-indigo-600" />
           Progreso Detallado
         </h3>
         <div className="h-[400px] w-full pr-4">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              layout="vertical"
-              data={chartData}
-              margin={{ top: 20, right: 30, bottom: 20, left: 20 }}
-              barSize={20}
-            >
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+            <BarChart layout="vertical" data={chartData} margin={{ top: 20, right: 30, bottom: 20, left: 20 }} barSize={20}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#334155" opacity={0.3} />
               <XAxis type="number" domain={[0, 100]} hide />
-              <YAxis
-                type="category"
-                dataKey="title"
-                stroke="#64748b"
-                tick={{ fontSize: 11, fontWeight: 600 }}
-                width={150}
-                tickFormatter={(value) => value.length > 20 ? `${value.substring(0, 20)}...` : value}
-              />
-              <Tooltip
-                cursor={{ fill: 'rgba(241, 245, 249, 0.4)' }}
+              <YAxis type="category" dataKey="title" stroke="#64748b"
+                tick={{ fontSize: 11, fontWeight: 600, fill: '#94a3b8' }} width={150}
+                tickFormatter={(v) => v.length > 20 ? `${v.substring(0, 20)}...` : v} />
+              <Tooltip cursor={{ fill: 'rgba(99,102,241,0.08)' }}
                 content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const data = payload[0].payload;
-                    return (
-                      <div className="bg-slate-900 text-white p-3 rounded-lg shadow-xl text-xs">
-                        <p className="font-bold mb-1">{data.title}</p>
-                        <p className="text-slate-400">Progreso: <span className="text-white font-bold">{data.progress.toFixed(1)}%</span></p>
-                      </div>
-                    );
+                  if (active && payload?.length) {
+                    const d = payload[0].payload;
+                    return (<div className="bg-slate-900 text-white p-3 rounded-lg shadow-xl text-xs">
+                      <p className="font-bold mb-1">{d.title}</p>
+                      <p className="text-slate-400">Progreso: <span className="text-white font-bold">{d.progress.toFixed(1)}%</span></p>
+                    </div>);
                   }
                   return null;
-                }}
-              />
+                }} />
               <Bar dataKey="progress" radius={[0, 10, 10, 0]}>
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={
-                    entry.category === 'financial' ? '#10b981' :
-                      entry.category === 'career' ? '#3b82f6' :
-                        entry.category === 'health' ? '#f43f5e' : '#f59e0b'
+                    entry.category === 'financial' ? '#10b981' : entry.category === 'career' ? '#3b82f6' : entry.category === 'health' ? '#f43f5e' : '#f59e0b'
                   } />
                 ))}
               </Bar>
@@ -400,6 +390,7 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
           </ResponsiveContainer>
         </div>
       </section>
+      )}
 
       {/* ── LONG-TERM vs SHORT-TERM GOALS ──────────────────────── */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
