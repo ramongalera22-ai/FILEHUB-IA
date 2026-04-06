@@ -31,6 +31,7 @@ import VipTasksView from './components/VipTasksView';
 import ShiftsCalendarView from './components/ShiftsCalendarView';
 import FloatingCalendar from './components/FloatingCalendar';
 import FloatingAgenda from './components/FloatingAgenda';
+import { SHIFTER_EVENTS } from './data/shifterEvents';
 import WorkPlannerView from './components/WorkPlannerView';
 import HabitsView from './components/HabitsView';
 import BudgetAlertsView from './components/BudgetAlertsView';
@@ -93,7 +94,8 @@ const App: React.FC = () => {
     { id: 'march-5-2026', title: 'Inferior', start: '2026-03-05', end: '2026-03-05', type: 'work', source: 'manual' },
     { id: 'march-11-2026', title: 'Inferior', start: '2026-03-11', end: '2026-03-11', type: 'work', source: 'manual' },
     { id: 'march-26-2026', title: 'Inferior', start: '2026-03-26', end: '2026-03-26', type: 'work', source: 'manual' },
-    { id: 'march-29-2026', title: 'Guardia', start: '2026-03-29', end: '2026-03-29', type: 'work', source: 'manual' }
+    { id: 'march-29-2026', title: 'Guardia', start: '2026-03-29', end: '2026-03-29', type: 'work', source: 'manual' },
+    ...SHIFTER_EVENTS,
   ]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
