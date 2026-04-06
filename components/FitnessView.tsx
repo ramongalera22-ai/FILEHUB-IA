@@ -10,10 +10,9 @@ import {
   Download, Copy, Wand2, BookOpen, PenTool
 } from 'lucide-react';
 import { extractTrainingPlanFromPDF, generateTrainingPlan } from '../services/openrouterService';
+import { callAI } from '../services/aiProxy';
 
-const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
-
-// ── AI Chat with Haiku via OpenRouter ──────────────────────────────
+// ── AI Chat via aiProxy chain (DeepSeek→NAS→Railway) ──────────────────
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -26,79 +25,43 @@ async function chatWithHaiku(
   sessionsContext: string,
   plansContext: string
 ): Promise<string> {
-  if (!OPENROUTER_KEY) return '⚠️ Configura tu API key de OpenRouter en los ajustes para usar el cuaderno IA.';
   try {
     const systemPrompt = `Eres un entrenador personal IA experto integrado en la app FILEHUB. El usuario es médico con guardias de 24h, necesita entrenamientos de 30-45 min máximo.
 
 CONTEXTO ACTUAL DEL USUARIO:
-═══════════════════════════
 SESIONES REGISTRADAS:
 ${sessionsContext || 'No hay sesiones registradas aún.'}
 
 PLANES ACTIVOS:
 ${plansContext || 'No hay planes activos.'}
-═══════════════════════════
 
 INSTRUCCIONES:
-- Responde SIEMPRE en español con emojis para hacerlo visual
-- Cuando te pidan adaptar un plan a la semana, usa los días reales (lunes a domingo) con fechas
-- Si te piden crear una rutina, incluye: ejercicio, series×reps, descanso, duración estimada
-- Ten en cuenta las guardias de 24h: post-guardia = descanso activo o libre
+- Responde SIEMPRE en español con emojis
+- Cuando te pidan adaptar un plan, usa los días reales (lunes a domingo) con fechas
+- Incluye: ejercicio, series×reps, descanso, duración estimada
+- Ten en cuenta guardias de 24h: post-guardia = descanso activo o libre
 - Sé conciso pero completo. Usa formato con viñetas y emojis
-- Si el usuario pregunta por su progreso, analiza sus sesiones completadas vs planificadas
-- Puedes sugerir ajustes basados en la intensidad y tipo de sesiones previas`;
+- Si preguntan por progreso, analiza sesiones completadas vs planificadas`;
 
-    const models = ['anthropic/claude-haiku-4.5', 'anthropic/claude-3-haiku', 'google/gemini-flash-1.5'];
-    for (const model of models) {
-      try {
-        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${OPENROUTER_KEY}`,
-            'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA'
-          },
-          body: JSON.stringify({
-            model,
-            max_tokens: 1500,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              ...messages
-            ]
-          })
-        });
-        const d = await res.json();
-        if (d.error) continue;
-        const reply = d.choices?.[0]?.message?.content;
-        if (reply) return reply;
-      } catch { continue; }
-    }
-    return '⚠️ No se pudo conectar con la IA. Verifica tu API key de OpenRouter en Configuración.';
+    const userMsgs = messages.filter(m => m.role !== 'system').map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+    return await callAI(userMsgs, { system: systemPrompt, maxTokens: 1500 });
   } catch (err: any) {
-    return `❌ Error de conexión: ${err.message}`;
+    return `❌ Error: ${err.message}`;
   }
 }
 
 async function generatePlanAI(goal: string, days: number): Promise<string> {
-  if (!OPENROUTER_KEY) return '⚠️ Configura tu API key de OpenRouter en Configuración.';
-  const models = ['anthropic/claude-haiku-4.5', 'anthropic/claude-3-haiku', 'google/gemini-flash-1.5'];
-  for (const model of models) {
-    try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
-        body: JSON.stringify({
-          model, max_tokens: 1200,
-          messages: [{ role: 'user', content: `Crea un plan de entrenamiento de ${days} días para: ${goal}. Soy médico con guardias de 24h, necesito entrenamientos de 30-45 min máximo. Incluye: día, tipo de ejercicio, duración, series/reps, intensidad y consejo de recuperación. Responde en español con emojis.` }]
-        })
-      });
-      const d = await res.json();
-      if (d.error) continue;
-      const reply = d.choices?.[0]?.message?.content;
-      if (reply) return reply;
-    } catch { continue; }
+  try {
+    return await callAI(
+      [{ role: 'user', content: `Crea un plan de entrenamiento de ${days} días para: ${goal}. Soy médico con guardias de 24h, necesito entrenamientos de 30-45 min máximo. Incluye: día, tipo de ejercicio, duración, series/reps, intensidad y consejo de recuperación. Responde en español con emojis.` }],
+      { maxTokens: 1200 }
+    );
+  } catch {
+    return '⚠️ No se pudo generar el plan. Verifica la conexión.';
   }
-  return '⚠️ No se pudo generar el plan. Verifica tu API key de OpenRouter.';
 }
 
 import { BotPanelFitness } from './BotPanel';
