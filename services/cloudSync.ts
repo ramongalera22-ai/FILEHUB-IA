@@ -43,6 +43,9 @@ export async function initCloudSync(userId: string) {
     console.warn('☁️ CloudSync: initial load failed', e);
   }
 
+  // Notify all components to re-read localStorage
+  window.dispatchEvent(new CustomEvent('filehub_cloud_ready'));
+
   // Push any localStorage keys that aren't in cloud yet
   try {
     const localKeys: string[] = [];

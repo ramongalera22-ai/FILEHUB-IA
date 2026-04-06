@@ -136,6 +136,7 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [scanResults, setScanResults] = useState<any>(null);
   const [isDBReady, setIsDBReady] = useState(false);
+  const [cloudSyncKey, setCloudSyncKey] = useState(0);
   const [partnership, setPartnership] = useState<Partnership | null>(null);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [hubTab, setHubTab] = useState<string>('dashboard');
@@ -238,6 +239,16 @@ const App: React.FC = () => {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Force re-mount all components when cloud sync loads data
+  useEffect(() => {
+    const handler = () => {
+      console.log('☁️ Cloud data ready — refreshing components');
+      setCloudSyncKey(k => k + 1);
+    };
+    window.addEventListener('filehub_cloud_ready', handler);
+    return () => window.removeEventListener('filehub_cloud_ready', handler);
   }, []);
 
   // Persist Configs
@@ -1665,7 +1676,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="animate-in slide-in-from-bottom-2 duration-500 fill-mode-both">
-            {renderContent()}
+            <div key={cloudSyncKey}>{renderContent()}</div>
           </div>
         </div>
 

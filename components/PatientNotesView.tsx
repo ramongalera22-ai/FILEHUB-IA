@@ -44,6 +44,23 @@ const PatientNotesView: React.FC<{ session?: any }> = ({ session }) => {
 
   useEffect(() => { localStorage.setItem('filehub_patient_notes', JSON.stringify(notes)); }, [notes]);
 
+  // Re-read from localStorage when cloud sync completes (cross-device)
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const fresh = JSON.parse(localStorage.getItem('filehub_patient_notes') || '[]');
+        if (fresh.length > 0) setNotes(prev => {
+          const ids = new Set(prev.map(n => n.id));
+          const merged = [...prev];
+          fresh.forEach((n: PatientNote) => { if (!ids.has(n.id)) merged.push(n); });
+          return merged.length !== prev.length ? merged : prev;
+        });
+      } catch {}
+    };
+    window.addEventListener('filehub_cloud_ready', handler);
+    return () => window.removeEventListener('filehub_cloud_ready', handler);
+  }, []);
+
   // ═══ Load from Supabase on mount ═══
   const didLoadCloud = useRef(false);
   useEffect(() => {
