@@ -60,7 +60,7 @@ import TimeBlockView from './components/TimeBlockView';
 import WhatsAppInboxView from './components/WhatsAppInboxView';
 import { processUniversalDocument } from './services/openrouterService';
 import { supabase } from './services/supabaseClient';
-import { initCloudSync, enableAutoSync } from './services/cloudSync';
+import { initCloudSync, enableAutoSync, forceSyncAll } from './services/cloudSync';
 import { dbService } from './services/databaseService';
 import {
   Search,
@@ -469,6 +469,42 @@ const App: React.FC = () => {
 
     return () => { if (cloudSyncTimer.current) clearTimeout(cloudSyncTimer.current); };
   }, [tasks, calendarEvents, expenses, goals, ideas, projects, trips, shoppingItems, debts, weightEntries, files, session, isDBReady]);
+
+  // ═══ INITIAL FORCE PUSH — run once when session + data are both ready ═══
+  const didInitialPush = useRef(false);
+  useEffect(() => {
+    if (!session?.user?.id || !isDBReady || didInitialPush.current) return;
+    if (tasks.length === 0 && calendarEvents.length === 0) return; // data not loaded yet
+    didInitialPush.current = true;
+    const uid = session.user.id;
+    console.log('☁️ Initial force push to Supabase...');
+    (async () => {
+      try {
+        // Push tasks
+        if (tasks.length > 0) {
+          await supabase.from('tasks').upsert(
+            tasks.map(t => ({
+              id: t.id, user_id: uid, title: t.title, completed: t.completed,
+              category: t.category, priority: t.priority, due_date: t.dueDate,
+              is_recurring: t.isRecurring, frequency: t.frequency,
+            })), { onConflict: 'id' }
+          );
+        }
+        // Push calendar events
+        if (calendarEvents.length > 0) {
+          await supabase.from('calendar_events').upsert(
+            calendarEvents.map(e => ({
+              id: e.id, user_id: uid, title: e.title, start_date: e.start,
+              end_date: e.end, type: e.type, source: e.source || 'manual',
+            })), { onConflict: 'id' }
+          );
+        }
+        // Force sync all localStorage filehub_ keys
+        forceSyncAll();
+        console.log(`☁️ Initial push done: ${tasks.length} tasks, ${calendarEvents.length} events`);
+      } catch (e) { console.warn('☁️ Initial push error:', e); }
+    })();
+  }, [session, isDBReady, tasks, calendarEvents]);
 
   // Load Data from Supabase
   const loadCloudData = async (userId: string) => {
