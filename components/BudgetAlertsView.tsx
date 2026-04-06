@@ -37,14 +37,54 @@ const BudgetAlertsView: React.FC<BudgetAlertsViewProps> = ({ expenses, session }
   const [adviceReady, setAdviceReady] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // ─── Cloud Sync helpers ───
+  const cloudSave = async (key: string, value: any) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    if (session?.user?.id) {
+      try {
+        await supabase.from('user_data').upsert(
+          { user_id: session.user.id, key, value: JSON.stringify(value), updated_at: new Date().toISOString() },
+          { onConflict: 'user_id,key' }
+        );
+      } catch (e) { console.warn('Budget cloud save failed:', e); }
+    }
+  };
+
+  const cloudLoad = async (key: string): Promise<any | null> => {
+    // Try cloud first
+    if (session?.user?.id) {
+      try {
+        const { data } = await supabase.from('user_data').select('value').eq('user_id', session.user.id).eq('key', key).maybeSingle();
+        if (data?.value) {
+          const parsed = JSON.parse(data.value);
+          localStorage.setItem(key, JSON.stringify(parsed)); // sync to local
+          return parsed;
+        }
+      } catch {}
+    }
+    // Fallback to localStorage
+    try { const s = localStorage.getItem(key); if (s) return JSON.parse(s); } catch {}
+    return null;
+  };
+
+  // ─── Load data on mount ───
   useEffect(() => {
     setNotifPerm(getNotificationPermission());
-    try { const s = localStorage.getItem('filehub_budget_alerts'); if(s) setAlerts(JSON.parse(s)); } catch{}
-    try { const s = localStorage.getItem('filehub_parsed_tx'); if(s) setParsedTx(JSON.parse(s)); } catch{}
-    try { const s = localStorage.getItem('filehub_budget_advice'); if(s){ setAdvice(JSON.parse(s)); setAdviceReady(true); } } catch{}
-  }, []);
+    (async () => {
+      const [a, tx, adv] = await Promise.all([
+        cloudLoad('filehub_budget_alerts'),
+        cloudLoad('filehub_parsed_tx'),
+        cloudLoad('filehub_budget_advice'),
+      ]);
+      if (a) setAlerts(a);
+      if (tx) setParsedTx(tx);
+      if (adv) { setAdvice(adv); setAdviceReady(true); }
+    })();
+  }, [session]);
 
-  const persist = (u: BudgetAlert[]) => { setAlerts(u); localStorage.setItem('filehub_budget_alerts', JSON.stringify(u)); };
+  const persist = (u: BudgetAlert[]) => { setAlerts(u); cloudSave('filehub_budget_alerts', u); };
+  const persistTx = (tx: ParsedTx[]) => { setParsedTx(tx); cloudSave('filehub_parsed_tx', tx); };
+  const persistAdvice = (a: AIAdvice[]) => { setAdvice(a); setAdviceReady(true); cloudSave('filehub_budget_advice', a); };
   const addAlert = () => { if(alerts.some(a=>a.category===form.category)) return; persist([...alerts, { id:`alert_${Date.now()}`, ...form }]); setShowForm(false); };
   const deleteAlert = (id:string) => persist(alerts.filter(a=>a.id!==id));
 
@@ -77,12 +117,12 @@ Categorías: ${EXPENSE_CATEGORIES.join(', ')}, Nómina, Transferencia, Ahorro. F
       }));
       const merged = [...parsedTx, ...txs];
       setParsedTx(merged);
-      localStorage.setItem('filehub_parsed_tx', JSON.stringify(merged));
+      persistTx(merged);
     } catch(err:any) { alert('Error: '+(err.message||'Formato no reconocido')); }
     finally { setUploading(false); if(fileRef.current) fileRef.current.value=''; }
   };
 
-  const clearTx = () => { setParsedTx([]); localStorage.removeItem('filehub_parsed_tx'); };
+  const clearTx = () => { setParsedTx([]); cloudSave('filehub_parsed_tx', []); };
 
   // ─── AI Advice ───
   const generateAdvice = async () => {
@@ -108,7 +148,7 @@ Prioridades: critical(🔴), high(🟠), medium(🟡), low(🟢). Solo JSON.`, m
       const clean = result.replace(/```json\n?|\n?```/g,'').trim();
       const parsed: AIAdvice[] = JSON.parse(clean);
       setAdvice(parsed); setAdviceReady(true);
-      localStorage.setItem('filehub_budget_advice', JSON.stringify(parsed));
+      persistAdvice(parsed);
     } catch(e:any) { console.error(e); }
     finally { setAdviceLoading(false); }
   };
