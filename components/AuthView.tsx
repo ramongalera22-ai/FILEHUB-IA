@@ -120,13 +120,16 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
                 <div className="relative group">
-                  <User className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors" size={20} />
+                  <User className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors pointer-events-none" size={20} />
                   <input 
                     type="email" 
-                    className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-16 pr-8 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-600 transition-all font-bold text-slate-700 outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-16 pr-8 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-600 transition-all font-bold text-slate-700 outline-none text-[16px]"
                     placeholder="usuario@ejemplo.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    inputMode="email"
                     required
                   />
                 </div>
@@ -135,13 +138,14 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Contraseña</label>
                 <div className="relative group">
-                  <Lock className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors" size={20} />
+                  <Lock className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors pointer-events-none" size={20} />
                   <input 
                     type="password" 
-                    className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-16 pr-8 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-600 transition-all font-bold text-slate-700 outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-16 pr-8 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-600 transition-all font-bold text-slate-700 outline-none text-[16px]"
                     placeholder="••••••••"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
+                    autoComplete="current-password"
                     required
                   />
                 </div>
