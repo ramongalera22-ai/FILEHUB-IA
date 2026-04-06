@@ -32,6 +32,8 @@ import ShiftsCalendarView from './components/ShiftsCalendarView';
 import FloatingCalendar from './components/FloatingCalendar';
 import FloatingAgenda from './components/FloatingAgenda';
 import { SHIFTER_EVENTS } from './data/shifterEvents';
+import { PENDING_TASKS } from './data/pendingTasks';
+import FloatingTaskAssistant from './components/FloatingTaskAssistant';
 import WorkPlannerView from './components/WorkPlannerView';
 import HabitsView from './components/HabitsView';
 import BudgetAlertsView from './components/BudgetAlertsView';
@@ -95,7 +97,6 @@ const App: React.FC = () => {
     { id: 'march-11-2026', title: 'Inferior', start: '2026-03-11', end: '2026-03-11', type: 'work', source: 'manual' },
     { id: 'march-26-2026', title: 'Inferior', start: '2026-03-26', end: '2026-03-26', type: 'work', source: 'manual' },
     { id: 'march-29-2026', title: 'Guardia', start: '2026-03-29', end: '2026-03-29', type: 'work', source: 'manual' },
-    ...SHIFTER_EVENTS,
   ]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -307,6 +308,21 @@ const App: React.FC = () => {
     };
     initOffline();
   }, []);
+
+  // Merge pre-loaded pending tasks (only adds missing ones)
+  useEffect(() => {
+    if (!isDBReady) return;
+    setTasks(prev => {
+      const existingIds = new Set(prev.map(t => t.id));
+      const newTasks = PENDING_TASKS.filter(t => !existingIds.has(t.id));
+      return newTasks.length > 0 ? [...prev, ...newTasks] : prev;
+    });
+    setCalendarEvents(prev => {
+      const existingIds = new Set(prev.map(e => e.id));
+      const newEvts = SHIFTER_EVENTS.filter(e => !existingIds.has(e.id));
+      return newEvts.length > 0 ? [...prev, ...newEvts] : prev;
+    });
+  }, [isDBReady]);
 
   // Auto-save to IndexedDB for safety
   useEffect(() => {
@@ -1518,6 +1534,12 @@ const App: React.FC = () => {
         onToggleTask={(id, done) => {
           setTasks(tasks.map(t => t.id === id ? { ...t, completed: done } : t));
         }}
+      />
+      {/* AI Task Assistant */}
+      <FloatingTaskAssistant
+        calendarEvents={calendarEvents}
+        tasks={tasks}
+        onReorderTasks={(reordered) => setTasks(reordered)}
       />
     </div>
   );
