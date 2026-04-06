@@ -38,7 +38,8 @@ export async function callAI(
 
   // 0. DeepSeek (prioridad máxima)
   const dsKey = cfg.deepseekKey();
-  if (dsKey?.length > 10) {
+  console.log('🤖 AI chain starting, DS key length:', dsKey?.length);
+  if (dsKey && dsKey.length > 5) {
     try {
       const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
       const r = await fetchWithTimeout('https://api.deepseek.com/chat/completions', {
@@ -46,14 +47,17 @@ export async function callAI(
         headers: { ...jsonHeaders, 'Authorization': `Bearer ${dsKey}` },
         body: JSON.stringify({ model: 'deepseek-chat', messages: msgs, max_tokens: maxTokens }),
       }, 30000);
+      console.log('🤖 DeepSeek response:', r.status);
       if (r.ok) {
         const d = await r.json();
         const t = d.choices?.[0]?.message?.content;
         if (t) return t;
       }
       const err = await r?.text().catch(() => '');
-      errors.push(`DS: ${r?.status} ${err?.slice(0, 60)}`);
+      errors.push(`DS: ${r?.status} ${err?.slice(0, 80)}`);
     } catch (e: any) { errors.push(`DS: ${e.message}`); }
+  } else {
+    errors.push(`DS: key not found (len=${dsKey?.length})`);
   }
 
   // 1. Cloudflare Worker del usuario (configurado en Settings)
