@@ -216,6 +216,27 @@ Dame el plan para hoy y ordena mis tareas por prioridad real.`;
     if (addedItems.length > 0) {
       cleanText += '\n\n' + addedItems.join('\n');
     }
+
+    // Extract [ADD_ACTION]{...} blocks → dispatch to Dashboard Action Plan
+    const actionRegex = /\[ADD_ACTION\]\s*(\{[^}]+\})/g;
+    while ((match = actionRegex.exec(response)) !== null) {
+      try {
+        const data = JSON.parse(match[1]);
+        const text = data.text || data.title || data.titulo || '';
+        const day = data.day || data.dia || 'today';
+        if (text) {
+          window.dispatchEvent(new CustomEvent('filehub-add-action', { detail: { text, day } }));
+          addedItems.push(`🎯 Acción añadida al Plan: "${text}"`);
+        }
+      } catch {}
+      cleanText = cleanText.replace(match[0], '');
+    }
+
+    cleanText = cleanText.trim();
+    if (addedItems.length > 0 && !cleanText.includes('🎯')) {
+      cleanText += '\n\n' + addedItems.filter(i => i.startsWith('🎯')).join('\n');
+    }
+
     return cleanText;
   };
 
@@ -237,12 +258,17 @@ Próximas guardias: ${ctx.proximasGuardias.map(g => `${g.fecha}: ${g.titulo}`).j
 Responde de forma concisa. Si te pide reorganizar tareas, da una lista ordenada.
 
 IMPORTANTE: Cuando el usuario te pida AÑADIR una tarea, evento, recordatorio o cualquier cosa a su agenda/calendario, DEBES incluir en tu respuesta uno o más bloques de acción con este formato exacto:
+Si el usuario menciona "plan de acción", "acción", "checklist", "plan del día" o similares, usa [ADD_ACTION]. Si es una tarea completa, usa [ADD_TASK]. Si es un evento con hora, usa [ADD_EVENT]. Puedes combinar varios bloques.
 
 Para tareas:
 [ADD_TASK]{"title":"título de la tarea","priority":"high","category":"work","dueDate":"2026-04-07"}
 
 Para eventos del calendario:
 [ADD_EVENT]{"title":"título del evento","start":"2026-04-09T21:00:00","end":"2026-04-09T22:00:00","type":"personal"}
+
+Para acciones al Plan de Acción del dashboard (checklist diario):
+[ADD_ACTION]{"text":"descripción de la acción","day":"today"}
+El campo day puede ser "today" o "tomorrow".
 
 Categorías de tarea válidas: work, personal, finance, fitness, other
 Prioridades válidas: low, medium, high

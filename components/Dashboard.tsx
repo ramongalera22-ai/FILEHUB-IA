@@ -100,10 +100,39 @@ const Dashboard: React.FC<DashboardProps> = ({
    const persistQuick = (updated: QuickTask[]) => { setQuickTasks(updated); localStorage.setItem('filehub_dashboard_tasks', JSON.stringify(updated)); };
 
    // ─── Daily Action Plan (AI-powered checklist) ───
-   interface ActionItem { id: string; text: string; done: boolean; source: 'event' | 'task' | 'ai'; sourceId?: string; day: 'today' | 'tomorrow'; }
+   interface ActionItem { id: string; text: string; done: boolean; source: 'event' | 'task' | 'ai' | 'manual'; sourceId?: string; day: 'today' | 'tomorrow'; }
    const [actionPlan, setActionPlan] = useState<ActionItem[]>([]);
    const [actionPlanLoading, setActionPlanLoading] = useState(false);
    const [showTomorrow, setShowTomorrow] = useState(false);
+   const [actionInput, setActionInput] = useState('');
+
+   // Persist manual/AI actions separately so they survive rebuilds
+   const getManualActions = (): ActionItem[] => { try { return JSON.parse(localStorage.getItem('filehub_action_plan_manual') || '[]'); } catch { return []; } };
+   const saveManualActions = (items: ActionItem[]) => { localStorage.setItem('filehub_action_plan_manual', JSON.stringify(items)); };
+
+   const addManualAction = (text: string, day: 'today' | 'tomorrow' = 'today') => {
+     if (!text.trim()) return;
+     const item: ActionItem = { id: `manual-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, text: text.trim(), done: false, source: 'manual', day };
+     const manuals = [...getManualActions(), item];
+     saveManualActions(manuals);
+     setActionPlan(prev => [...prev, item]);
+   };
+
+   const handleAddActionInput = () => {
+     if (!actionInput.trim()) return;
+     addManualAction(actionInput);
+     setActionInput('');
+   };
+
+   // Listen for actions added from FloatingTaskAssistant
+   useEffect(() => {
+     const handler = (e: Event) => {
+       const detail = (e as CustomEvent).detail;
+       if (detail?.text) addManualAction(detail.text, detail.day || 'today');
+     };
+     window.addEventListener('filehub-add-action', handler);
+     return () => window.removeEventListener('filehub-add-action', handler);
+   }, []);
 
    // Build action plan from events + tasks
    const buildActionPlan = () => {
@@ -141,6 +170,14 @@ const Dashboard: React.FC<DashboardProps> = ({
      });
 
      setActionPlan(items);
+     // Merge manual actions from localStorage
+     const manuals = getManualActions().filter(m => {
+       // Only show today's manual items for today, etc
+       const todayCheck = m.day === 'today' && m.id.includes(todayStr.replace(/-/g, ''));
+       // Show all manual items that aren't date-specific
+       return !items.find(i => i.id === m.id);
+     });
+     setActionPlan([...items, ...getManualActions().filter(m => !items.find(i => i.id === m.id))]);
    };
 
    const toggleAction = (id: string) => {
@@ -148,10 +185,21 @@ const Dashboard: React.FC<DashboardProps> = ({
      const saved: Record<string, boolean> = JSON.parse(localStorage.getItem('filehub_action_plan_done') || '{}');
      const item = actionPlan.find(a => a.id === id);
      if (item) { saved[id] = !item.done; localStorage.setItem('filehub_action_plan_done', JSON.stringify(saved)); }
+     // If manual, update manual storage
+     if (item?.source === 'manual') {
+       const manuals = getManualActions().map(m => m.id === id ? { ...m, done: !m.done } : m);
+       saveManualActions(manuals);
+     }
      // If it's a real task, also toggle it
      if (item?.source === 'task' && item.sourceId && item.id.startsWith('task-') && !item.id.includes('tmrw')) {
        onToggleTask(item.sourceId);
      }
+   };
+
+   const deleteAction = (id: string) => {
+     setActionPlan(prev => prev.filter(a => a.id !== id));
+     const manuals = getManualActions().filter(m => m.id !== id);
+     saveManualActions(manuals);
    };
 
    const generateAISuggestions = async () => {
@@ -195,6 +243,7 @@ const Dashboard: React.FC<DashboardProps> = ({
      const todayStr = new Date().toISOString().split('T')[0];
      if (lastReset !== todayStr) {
        localStorage.setItem('filehub_action_plan_done', '{}');
+       localStorage.setItem('filehub_action_plan_manual', '[]');
        localStorage.setItem('filehub_action_plan_reset', todayStr);
      }
    }, []);
@@ -975,13 +1024,27 @@ const Dashboard: React.FC<DashboardProps> = ({
                      </div>
                   </div>
 
+                  {/* Add action input */}
+                  <div className="flex gap-1.5 mb-3">
+                     <input
+                        value={actionInput}
+                        onChange={e => setActionInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddActionInput()}
+                        placeholder="Añadir acción..."
+                        className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-[11px] font-medium focus:outline-none focus:border-emerald-400"
+                     />
+                     <button onClick={handleAddActionInput} className="bg-emerald-500 text-white px-2.5 rounded-lg hover:bg-emerald-600 transition-all">
+                        <Plus size={14} />
+                     </button>
+                  </div>
+
                   {/* Today */}
                   {(() => {
                      const todayItems = actionPlan.filter(a => a.day === 'today');
                      const doneCount = todayItems.filter(a => a.done).length;
                      const total = todayItems.length;
                      return (
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                            {total > 0 && (
                               <div className="flex items-center gap-2 mb-2">
                                  <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -993,17 +1056,22 @@ const Dashboard: React.FC<DashboardProps> = ({
                            {todayItems.length === 0 ? (
                               <p className="text-center text-[10px] text-slate-400 py-3">Sin acciones para hoy</p>
                            ) : todayItems.map(item => (
-                              <button key={item.id} onClick={() => toggleAction(item.id)} className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left transition-all group ${item.done ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
-                                 <div className={`mt-0.5 shrink-0 w-4.5 h-4.5 rounded-md border-2 flex items-center justify-center transition-all ${item.done ? 'bg-emerald-500 border-emerald-500 text-white' : item.source === 'event' ? 'border-indigo-300' : item.source === 'ai' ? 'border-violet-300' : 'border-slate-300'}`}>
+                              <div key={item.id} className={`flex items-start gap-2 p-2 rounded-xl transition-all group ${item.done ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+                                 <button onClick={() => toggleAction(item.id)} className={`mt-0.5 shrink-0 w-4 h-4 rounded-md border-2 flex items-center justify-center transition-all ${item.done ? 'bg-emerald-500 border-emerald-500 text-white' : item.source === 'event' ? 'border-indigo-300' : item.source === 'ai' ? 'border-violet-300' : item.source === 'manual' ? 'border-emerald-300' : 'border-slate-300'}`}>
                                     {item.done && <CheckCircle2 size={10} />}
-                                 </div>
-                                 <div className="flex-1 min-w-0">
-                                    <p className={`text-xs font-semibold leading-tight ${item.done ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>{item.text}</p>
-                                    <span className={`text-[8px] font-black uppercase tracking-wider ${item.source === 'event' ? 'text-indigo-400' : item.source === 'ai' ? 'text-violet-400' : 'text-amber-400'}`}>
-                                       {item.source === 'event' ? '📅 Evento' : item.source === 'ai' ? '✨ Sugerencia IA' : '📋 Tarea'}
+                                 </button>
+                                 <div className="flex-1 min-w-0" onClick={() => toggleAction(item.id)} style={{ cursor: 'pointer' }}>
+                                    <p className={`text-[11px] font-semibold leading-tight ${item.done ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>{item.text}</p>
+                                    <span className={`text-[8px] font-black uppercase tracking-wider ${item.source === 'event' ? 'text-indigo-400' : item.source === 'ai' ? 'text-violet-400' : item.source === 'manual' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                       {item.source === 'event' ? '📅 Evento' : item.source === 'ai' ? '✨ IA' : item.source === 'manual' ? '✏️ Manual' : '📋 Tarea'}
                                     </span>
                                  </div>
-                              </button>
+                                 {(item.source === 'manual' || item.source === 'ai') && (
+                                    <button onClick={() => deleteAction(item.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all mt-0.5">
+                                       <Trash2 size={11} />
+                                    </button>
+                                 )}
+                              </div>
                            ))}
                         </div>
                      );
