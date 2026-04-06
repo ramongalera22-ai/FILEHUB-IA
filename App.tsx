@@ -1540,6 +1540,8 @@ const App: React.FC = () => {
         calendarEvents={calendarEvents}
         tasks={tasks}
         onReorderTasks={(reordered) => setTasks(reordered)}
+        onAddTask={(task) => setTasks(prev => [...prev, task])}
+        onAddEvent={(event) => setCalendarEvents(prev => [...prev, event])}
       />
     </div>
   );

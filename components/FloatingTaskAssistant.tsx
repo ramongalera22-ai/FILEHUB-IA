@@ -12,6 +12,8 @@ interface Props {
   calendarEvents: CalendarEvent[];
   tasks: Task[];
   onReorderTasks?: (tasks: Task[]) => void;
+  onAddTask?: (task: Task) => void;
+  onAddEvent?: (event: CalendarEvent) => void;
 }
 
 interface Suggestion {
@@ -29,7 +31,7 @@ const PRIORITY_STYLE: Record<string, { color: string; bg: string; icon: string }
   low:    { color: '#10b981', bg: 'rgba(16,185,129,.12)', icon: '🟢' },
 };
 
-const FloatingTaskAssistant: React.FC<Props> = ({ calendarEvents, tasks, onReorderTasks }) => {
+const FloatingTaskAssistant: React.FC<Props> = ({ calendarEvents, tasks, onReorderTasks, onAddTask, onAddEvent }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -161,6 +163,62 @@ Dame el plan para hoy y ordena mis tareas por prioridad real.`;
   }, [buildContext]);
 
   // Chat with assistant
+  // Parse and execute actions from AI response
+  const processActions = (response: string): string => {
+    let cleanText = response;
+    const addedItems: string[] = [];
+
+    // Extract [ADD_TASK]{...} blocks
+    const taskRegex = /\[ADD_TASK\]\s*(\{[^}]+\})/g;
+    let match;
+    while ((match = taskRegex.exec(response)) !== null) {
+      try {
+        const data = JSON.parse(match[1]);
+        const task: Task = {
+          id: `ai_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+          title: data.title || data.titulo || '',
+          completed: false,
+          category: data.category || data.categoria || 'work',
+          priority: data.priority || data.prioridad || 'high',
+          dueDate: data.dueDate || data.fecha || undefined,
+          isRecurring: false,
+        };
+        if (task.title && onAddTask) {
+          onAddTask(task);
+          addedItems.push(`✅ Tarea añadida: "${task.title}"${task.dueDate ? ` (${task.dueDate})` : ''}`);
+        }
+      } catch {}
+      cleanText = cleanText.replace(match[0], '');
+    }
+
+    // Extract [ADD_EVENT]{...} blocks
+    const eventRegex = /\[ADD_EVENT\]\s*(\{[^}]+\})/g;
+    while ((match = eventRegex.exec(response)) !== null) {
+      try {
+        const data = JSON.parse(match[1]);
+        const event: CalendarEvent = {
+          id: `ai_ev_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+          title: data.title || data.titulo || '',
+          start: data.start || data.fecha || data.date || '',
+          end: data.end || data.start || data.fecha || data.date || '',
+          type: data.type || data.tipo || 'personal',
+          source: 'manual',
+        };
+        if (event.title && event.start && onAddEvent) {
+          onAddEvent(event);
+          addedItems.push(`📅 Evento añadido: "${event.title}" (${event.start.slice(0,10)})`);
+        }
+      } catch {}
+      cleanText = cleanText.replace(match[0], '');
+    }
+
+    cleanText = cleanText.trim();
+    if (addedItems.length > 0) {
+      cleanText += '\n\n' + addedItems.join('\n');
+    }
+    return cleanText;
+  };
+
   const sendChat = async () => {
     if (!chatInput.trim()) return;
     const userText = chatInput.trim();
@@ -176,15 +234,31 @@ Tareas pendientes: ${ctx.tareasPendientes.map(t => `${t.titulo} [${t.prioridad},
 Eventos hoy: ${ctx.eventosHoy.map(e => `${e.hora}: ${e.titulo}`).join('; ') || 'ninguno'}
 Próximas guardias: ${ctx.proximasGuardias.map(g => `${g.fecha}: ${g.titulo}`).join('; ')}
 
-Responde de forma concisa. Si te pide reorganizar tareas, da una lista ordenada. Si pregunta cuándo hacer algo, considera guardias y disponibilidad.`;
+Responde de forma concisa. Si te pide reorganizar tareas, da una lista ordenada.
+
+IMPORTANTE: Cuando el usuario te pida AÑADIR una tarea, evento, recordatorio o cualquier cosa a su agenda/calendario, DEBES incluir en tu respuesta uno o más bloques de acción con este formato exacto:
+
+Para tareas:
+[ADD_TASK]{"title":"título de la tarea","priority":"high","category":"work","dueDate":"2026-04-07"}
+
+Para eventos del calendario:
+[ADD_EVENT]{"title":"título del evento","start":"2026-04-09T21:00:00","end":"2026-04-09T22:00:00","type":"personal"}
+
+Categorías de tarea válidas: work, personal, finance, fitness, other
+Prioridades válidas: low, medium, high
+Tipos de evento válidos: work, personal, fitness, trip, expense, project
+
+Siempre incluye estos bloques cuando el usuario pida añadir algo. Puedes incluir varios bloques en una misma respuesta. Añade también un mensaje confirmando lo que has añadido.
+La fecha actual es ${ctx.fecha}. Usa fechas en formato YYYY-MM-DD o YYYY-MM-DDTHH:MM:SS.`;
 
       const messages: AIMessage[] = [
         ...chatHistory.map(m => ({ role: m.role, content: m.text })),
         { role: 'user' as const, content: userText },
       ];
 
-      const response = await callAI(messages, { system: systemPrompt, maxTokens: 800 });
-      setChatHistory(prev => [...prev, { role: 'assistant', text: response }]);
+      const response = await callAI(messages, { system: systemPrompt, maxTokens: 1000 });
+      const processed = processActions(response);
+      setChatHistory(prev => [...prev, { role: 'assistant', text: processed }]);
     } catch (e: any) {
       setChatHistory(prev => [...prev, { role: 'assistant', text: `❌ Error: ${e.message}` }]);
     }
@@ -382,6 +456,7 @@ Responde de forma concisa. Si te pide reorganizar tareas, da una lista ordenada.
                       <button className="fta-qbtn" onClick={() => { setChatInput('¿Cuándo tengo huecos libres esta semana?'); }}>📅 Huecos libres</button>
                       <button className="fta-qbtn" onClick={() => { setChatInput('Ordena todas mis tareas por urgencia real'); }}>🔥 Ordenar por urgencia</button>
                       <button className="fta-qbtn" onClick={() => { setChatInput('¿Qué puedo hacer entre guardias?'); }}>🏥 Entre guardias</button>
+                      <button className="fta-qbtn" onClick={() => { setChatInput('Añade estas tareas a mi agenda: '); setTimeout(() => inputRef.current?.focus(), 50); }}>➕ Añadir tareas</button>
                     </div>
                   </>
                 )}
