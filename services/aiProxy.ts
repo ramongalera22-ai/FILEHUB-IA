@@ -36,6 +36,26 @@ export async function callAI(
   const body = JSON.stringify({ messages, system, max_tokens: maxTokens });
   const jsonHeaders = { 'Content-Type': 'application/json' };
 
+  // 0. DeepSeek (prioridad máxima)
+  const dsKey = cfg.deepseekKey();
+  if (dsKey?.length > 10) {
+    try {
+      const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
+      const r = await fetchWithTimeout('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { ...jsonHeaders, 'Authorization': `Bearer ${dsKey}` },
+        body: JSON.stringify({ model: 'deepseek-chat', messages: msgs, max_tokens: maxTokens }),
+      }, 30000);
+      if (r.ok) {
+        const d = await r.json();
+        const t = d.choices?.[0]?.message?.content;
+        if (t) return t;
+      }
+      const err = await r?.text().catch(() => '');
+      errors.push(`DS: ${r?.status} ${err?.slice(0, 60)}`);
+    } catch (e: any) { errors.push(`DS: ${e.message}`); }
+  }
+
   // 1. Cloudflare Worker del usuario (configurado en Settings)
   const proxyUrl = getProxyUrl();
   if (proxyUrl) {
