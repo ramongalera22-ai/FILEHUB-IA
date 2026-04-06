@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ShieldCheck, User, Lock, ArrowRight, Sparkles, Fingerprint, Zap, Loader2 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
@@ -15,20 +15,38 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Refs to read DOM values directly — fixes iOS PWA standalone where
+  // onChange doesn't fire for autofill / password manager entries
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e && 'preventDefault' in e) e.preventDefault();
+
+    // Read values from DOM refs as fallback (iOS PWA fix)
+    const finalEmail = (emailRef.current?.value || email || '').trim();
+    const finalPassword = passwordRef.current?.value || password || '';
+
+    if (!finalEmail || !finalPassword) {
+      setError('Introduce email y contraseña');
+      return;
+    }
+
+    // Sync state in case refs had newer values
+    setEmail(finalEmail);
+    setPassword(finalPassword);
+
     setLoading(true);
     setError(null);
 
     try {
       if (mode === 'register') {
-        const { data, error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({ email: finalEmail, password: finalPassword });
         if (error) throw error;
         if (data?.session) {
           onLogin(data?.user);
         } else if (data?.user) {
-          // Try signing in immediately (works if email confirmation is disabled)
-          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email: finalEmail, password: finalPassword });
           if (!loginError && loginData?.user) {
             onLogin(loginData.user);
           } else {
@@ -37,13 +55,11 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
           }
         }
       } else {
-        // Try login
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email: finalEmail, password: finalPassword });
         if (error) {
-          // If user doesn't exist, auto-register and login
           if (error.message?.includes('Invalid login') || error.message?.includes('invalid_credentials') || error.message?.includes('Email not confirmed')) {
             console.log('Auto-registering user...');
-            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email: finalEmail, password: finalPassword });
             if (signUpError) throw signUpError;
             
             if (signUpData?.session) {
@@ -51,8 +67,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
               return;
             }
             
-            // Try login again after registration
-            const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({ email, password });
+            const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({ email: finalEmail, password: finalPassword });
             if (retryError) throw retryError;
             if (retryData?.user) {
               onLogin(retryData.user);
@@ -141,11 +156,14 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
                 <div className="relative group">
                   <User className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors pointer-events-none" size={20} />
                   <input 
+                    ref={emailRef}
                     type="email" 
                     className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-16 pr-8 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-600 transition-all font-bold text-slate-700 outline-none text-[16px]"
                     placeholder="usuario@ejemplo.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
+                    onInput={e => setEmail((e.target as HTMLInputElement).value)}
+                    onBlur={e => setEmail(e.target.value)}
                     autoComplete="email"
                     autoCapitalize="none"
                     inputMode="email"
@@ -160,11 +178,14 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
                 <div className="relative group">
                   <Lock className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors pointer-events-none" size={20} />
                   <input 
+                    ref={passwordRef}
                     type="password" 
                     className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-16 pr-8 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-600 transition-all font-bold text-slate-700 outline-none text-[16px]"
                     placeholder="••••••••"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
+                    onInput={e => setPassword((e.target as HTMLInputElement).value)}
+                    onBlur={e => setPassword(e.target.value)}
                     autoComplete="current-password"
                     name="password"
                     required
