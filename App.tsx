@@ -342,6 +342,134 @@ const App: React.FC = () => {
     saveState();
   }, [expenses, debts, investments, projects, presentations, tasks, goals, shoppingItems, shoppingOrders, calendarEvents, ideas, sharedExpenses, sharedDebts, weightEntries, nutritionPlans, files, trips, privateNotes, privateDocuments, isDBReady]);
 
+  // ═══════ AUTO-PUSH TO SUPABASE (real-time cloud sync) ═══════
+  const cloudSyncTimer = useRef<any>(null);
+  useEffect(() => {
+    if (!session?.user?.id || !isDBReady) return;
+    // Debounce: wait 3s after last change before pushing
+    if (cloudSyncTimer.current) clearTimeout(cloudSyncTimer.current);
+    cloudSyncTimer.current = setTimeout(async () => {
+      const uid = session.user.id;
+      console.log('☁️ Auto-pushing to Supabase...');
+      try {
+        // Tasks
+        if (tasks.length > 0) {
+          await supabase.from('tasks').upsert(
+            tasks.map(t => ({
+              id: t.id, user_id: uid, title: t.title, completed: t.completed,
+              category: t.category, priority: t.priority, due_date: t.dueDate,
+              is_recurring: t.isRecurring, frequency: t.frequency,
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Calendar Events
+        if (calendarEvents.length > 0) {
+          await supabase.from('calendar_events').upsert(
+            calendarEvents.map(e => ({
+              id: e.id, user_id: uid, title: e.title, start_date: e.start,
+              end_date: e.end, type: e.type, source: e.source || 'manual',
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Expenses
+        if (expenses.length > 0) {
+          await supabase.from('expenses').upsert(
+            expenses.map(e => ({
+              id: e.id, user_id: uid, amount: e.amount, vendor: e.vendor,
+              date: e.date, category: e.category, description: e.description,
+              priority: e.priority, is_recurring: e.isRecurring, frequency: e.frequency,
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Goals
+        if (goals.length > 0) {
+          await supabase.from('goals').upsert(
+            goals.map(g => ({
+              id: g.id, user_id: uid, title: g.title, target_date: g.targetDate,
+              current_value: g.currentValue, target_value: g.targetValue, category: g.category,
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Ideas
+        if (ideas.length > 0) {
+          await supabase.from('ideas').upsert(
+            ideas.map(i => ({
+              id: i.id, user_id: uid, title: i.title, description: i.description,
+              category: i.category, priority: i.priority,
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Projects
+        if (projects.length > 0) {
+          await supabase.from('projects').upsert(
+            projects.map(p => ({
+              id: p.id, user_id: uid, name: p.name, description: p.description,
+              status: p.status, progress: p.progress, deadline: p.deadline,
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Trips
+        if (trips.length > 0) {
+          await supabase.from('trips').upsert(
+            trips.map(t => ({
+              id: t.id, user_id: uid, destination: t.destination, start_date: t.startDate,
+              end_date: t.endDate, budget: t.budget, status: t.status,
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Shopping Items
+        if (shoppingItems.length > 0) {
+          await supabase.from('shopping_items').upsert(
+            shoppingItems.map(s => ({
+              id: s.id, user_id: uid, name: s.name, purchased: s.purchased,
+              price: s.price, priority: s.priority, category: s.category,
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Debts
+        if (debts.length > 0) {
+          await supabase.from('debts').upsert(
+            debts.map(d => ({
+              id: d.id, user_id: uid, name: d.name, amount: d.amount,
+              remaining: d.remaining, type: d.type, monthly_payment: d.monthlyPayment,
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Weight entries
+        if (weightEntries.length > 0) {
+          await supabase.from('weight_entries').upsert(
+            weightEntries.map(w => ({ ...w, user_id: uid })),
+            { onConflict: 'id' }
+          );
+        }
+        // Files
+        if (files.length > 0) {
+          await supabase.from('files').upsert(
+            files.map(f => ({
+              id: f.id, user_id: uid, name: f.name, type: f.type,
+              size: f.size, date: f.date, category: f.category,
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        console.log('☁️ Auto-push complete');
+      } catch (err) {
+        console.warn('☁️ Auto-push error (will retry next change):', err);
+      }
+    }, 3000);
+
+    return () => { if (cloudSyncTimer.current) clearTimeout(cloudSyncTimer.current); };
+  }, [tasks, calendarEvents, expenses, goals, ideas, projects, trips, shoppingItems, debts, weightEntries, files, session, isDBReady]);
+
   // Load Data from Supabase
   const loadCloudData = async (userId: string) => {
     console.log("Sincronizando con Supabase...");
@@ -1324,7 +1452,7 @@ const App: React.FC = () => {
       case 'whatsapp-inbox': return <WhatsAppInboxView />;
       case 'openwebui': return <OpenWebUIView url={openWebUIConfig.baseUrl} />;
       case 'notebook-ai': return <NotebookAIView />;
-      case 'patient-notes': return <PatientNotesView />;
+      case 'patient-notes': return <PatientNotesView session={session} />;
       case 'hangouts': return <HangoutsView />;
       case 'activities': return <ActivitiesView />;
       case 'vip-tasks': return <VipTasksView session={session} />;

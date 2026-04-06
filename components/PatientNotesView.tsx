@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Stethoscope, Plus, Trash2, Search, Clock, AlertCircle, CheckCircle2, Edit3, X, Save, User, FileText, Filter } from 'lucide-react';
+import { supabase } from '../services/supabaseClient';
 
 interface PatientNote {
   id: string;
@@ -28,7 +29,7 @@ const PRIORITIES = [
   { id: 'urgent', label: 'Urgente', color: 'text-red-500', dot: 'bg-red-500' },
 ];
 
-const PatientNotesView: React.FC = () => {
+const PatientNotesView: React.FC<{ session?: any }> = ({ session }) => {
   const [notes, setNotes] = useState<PatientNote[]>(() => {
     try { return JSON.parse(localStorage.getItem('filehub_patient_notes') || '[]'); } catch { return []; }
   });
@@ -42,6 +43,53 @@ const PatientNotesView: React.FC = () => {
   const [form, setForm] = useState({ patientId: '', patientName: '', content: '', category: 'pending' as PatientNote['category'], priority: 'medium' as PatientNote['priority'] });
 
   useEffect(() => { localStorage.setItem('filehub_patient_notes', JSON.stringify(notes)); }, [notes]);
+
+  // ═══ Load from Supabase on mount ═══
+  const didLoadCloud = useRef(false);
+  useEffect(() => {
+    if (!session?.user?.id || didLoadCloud.current) return;
+    didLoadCloud.current = true;
+    (async () => {
+      try {
+        const { data } = await supabase.from('patient_notes').select('*').eq('user_id', session.user.id);
+        if (data && data.length > 0) {
+          const cloudNotes: PatientNote[] = data.map((r: any) => ({
+            id: r.id, patientId: r.patient_id || '', patientName: r.patient_name || '',
+            content: r.content || '', category: r.category || 'pending', priority: r.priority || 'medium',
+            completed: r.completed || false, createdAt: r.created_at, updatedAt: r.updated_at,
+          }));
+          setNotes(prev => {
+            const ids = new Set(prev.map(n => n.id));
+            const merged = [...prev];
+            cloudNotes.forEach(cn => { if (!ids.has(cn.id)) merged.push(cn); });
+            return merged;
+          });
+          console.log(`☁️ PatientNotes: loaded ${data.length} from cloud`);
+        }
+      } catch (e) { console.warn('☁️ PatientNotes cloud load failed', e); }
+    })();
+  }, [session]);
+
+  // ═══ Auto-push to Supabase on change ═══
+  const syncTimer = useRef<any>(null);
+  useEffect(() => {
+    if (!session?.user?.id || notes.length === 0) return;
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(async () => {
+      try {
+        await supabase.from('patient_notes').upsert(
+          notes.map(n => ({
+            id: n.id, user_id: session.user.id, patient_id: n.patientId,
+            patient_name: n.patientName, content: n.content, category: n.category,
+            priority: n.priority, completed: n.completed,
+            created_at: n.createdAt, updated_at: n.updatedAt || new Date().toISOString(),
+          })),
+          { onConflict: 'id' }
+        );
+      } catch (e) { console.warn('☁️ PatientNotes push failed', e); }
+    }, 3000);
+    return () => { if (syncTimer.current) clearTimeout(syncTimer.current); };
+  }, [notes, session]);
 
   const handleSave = () => {
     if (!form.patientName.trim() || !form.content.trim()) return;
