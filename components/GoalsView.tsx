@@ -518,74 +518,118 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
         </div>
       </section>
 
-      {/* Tabla Dinámica por Periodo */}
-      <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-10 border-b border-slate-50 flex items-center justify-between bg-slate-50/20">
-          <h3 className="text-xl font-black text-slate-900 flex items-center gap-3 uppercase tracking-tight">
+      {/* ── Goal Cards Grid ── */}
+      <section className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="p-8 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between bg-slate-50/20 dark:bg-slate-800/20">
+          <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-3">
             <BarChart3 className="text-indigo-600" size={24} />
-            Objetivos: {selectedPeriod === 'yearly' ? selectedYear : selectedPeriod === 'monthly' ? new Date().toLocaleString('es-ES', { month: 'long' }) : selectedPeriod}
+            Todas las Metas ({filteredGoals.length})
           </h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-slate-50 bg-slate-50/30">
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Objetivo</th>
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoría</th>
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Deadline</th>
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Progreso</th>
-                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filteredGoals.length === 0 ? (
-                <tr><td colSpan={5} className="py-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">No hay metas para este periodo</td></tr>
-              ) : (
-                filteredGoals.map(goal => {
-                  const progress = (goal.currentValue / goal.targetValue) * 100;
-                  return (
-                    <tr key={goal.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="px-10 py-6">
-                        <h4 className="font-black text-slate-800 text-sm group-hover:text-indigo-600 transition-colors">{goal.title}</h4>
-                      </td>
-                      <td className="px-10 py-6">
-                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${goal.category === 'financial' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                          goal.category === 'career' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                            'bg-amber-50 text-amber-600 border-amber-100'
-                          }`}>
-                          {goal.category}
-                        </span>
-                      </td>
-                      <td className="px-10 py-6">
-                        <div className="flex items-center gap-2 text-slate-500 font-bold text-xs">
-                          <CalendarDays size={14} className="text-indigo-400" /> {goal.targetDate}
-                        </div>
-                      </td>
-                      <td className="px-10 py-6">
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full transition-all duration-1000 ${progress >= 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`}
-                              style={{ width: `${Math.min(progress, 100)}%` }}
-                            ></div>
+        <div className="p-6">
+          {filteredGoals.length === 0 ? (
+            <div className="py-16 text-center text-slate-400">
+              <Target size={40} className="mx-auto mb-3 opacity-30" />
+              <p className="text-xs font-bold uppercase tracking-widest">No hay metas para este periodo</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredGoals.map(goal => {
+                const progress = goal.targetValue > 0 ? Math.min((goal.currentValue / goal.targetValue) * 100, 100) : 0;
+                const daysLeft = Math.ceil((new Date(goal.targetDate).getTime() - Date.now()) / 86400000);
+                const isOverdue = daysLeft < 0;
+                const isUrgent = daysLeft >= 0 && daysLeft <= 14;
+                const isCompleted = progress >= 100;
+                const catColors: Record<string, { ring: string; bg: string; text: string }> = {
+                  financial: { ring: '#10b981', bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600' },
+                  career: { ring: '#3b82f6', bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-600' },
+                  health: { ring: '#f43f5e', bg: 'bg-rose-50 dark:bg-rose-500/10', text: 'text-rose-600' },
+                  personal: { ring: '#f59e0b', bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600' },
+                };
+                const cc = catColors[goal.category] || catColors.personal;
+                const circumference = 2 * Math.PI * 36;
+                const strokeDashoffset = circumference - (progress / 100) * circumference;
+
+                return (
+                  <div key={goal.id} className={`bg-white dark:bg-slate-800 rounded-2xl border overflow-hidden group hover:shadow-lg transition-all ${
+                    isCompleted ? 'border-emerald-300 dark:border-emerald-500/40' :
+                    isOverdue ? 'border-red-300 dark:border-red-500/40' :
+                    isUrgent ? 'border-amber-300 dark:border-amber-500/40' :
+                    'border-slate-200 dark:border-slate-700'
+                  }`}>
+                    <div className="p-5">
+                      <div className="flex items-start gap-4">
+                        {/* SVG Progress Ring */}
+                        <div className="relative shrink-0">
+                          <svg width="84" height="84" viewBox="0 0 84 84" className="transform -rotate-90">
+                            <circle cx="42" cy="42" r="36" fill="none" stroke="currentColor" strokeWidth="5"
+                              className="text-slate-100 dark:text-slate-700" />
+                            <circle cx="42" cy="42" r="36" fill="none"
+                              stroke={isCompleted ? '#10b981' : isOverdue ? '#ef4444' : cc.ring}
+                              strokeWidth="5" strokeLinecap="round"
+                              strokeDasharray={circumference} strokeDashoffset={strokeDashoffset}
+                              className="transition-all duration-1000" />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-lg font-black text-slate-800 dark:text-white">{Math.round(progress)}%</span>
+                            {isCompleted && <CheckCircle2 size={12} className="text-emerald-500 -mt-0.5" />}
                           </div>
-                          <span className="text-[9px] font-black text-slate-400">{progress.toFixed(0)}%</span>
                         </div>
-                      </td>
-                      <td className="px-10 py-6 text-right">
-                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => openModal(goal)} className="p-2 bg-slate-100 hover:bg-indigo-100 rounded-lg text-slate-400 hover:text-indigo-600 transition-all"><Edit3 size={16} /></button>
-                          <button onClick={() => handleDelete(goal.id)} className="p-2 bg-slate-100 hover:bg-red-100 rounded-lg text-slate-400 hover:text-red-600 transition-all"><Trash2 size={16} /></button>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-1">
+                            <h4 className="font-black text-sm text-slate-800 dark:text-white leading-tight pr-2">{goal.title}</h4>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                              <button onClick={() => openModal(goal)} className="p-1 text-slate-400 hover:text-indigo-500"><Edit3 size={12} /></button>
+                              <button onClick={() => handleDelete(goal.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
+                            </div>
+                          </div>
+
+                          <span className={`inline-block text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider ${cc.bg} ${cc.text} mb-2`}>
+                            {goal.category === 'financial' ? '💰 Finanzas' : goal.category === 'career' ? '💼 Carrera' : goal.category === 'health' ? '🏥 Salud' : '🧠 Personal'}
+                          </span>
+
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold">
+                            <span>{goal.currentValue} / {goal.targetValue} {goal.unit}</span>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                      </div>
+
+                      {/* Deadline bar */}
+                      <div className={`mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-[10px] font-bold ${
+                        isCompleted ? 'text-emerald-500' : isOverdue ? 'text-red-500' : isUrgent ? 'text-amber-500' : 'text-slate-400'
+                      }`}>
+                        <span className="flex items-center gap-1">
+                          <CalendarDays size={11} /> {goal.targetDate}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          {isCompleted ? (
+                            <><CheckCircle2 size={11} /> Completada</>
+                          ) : isOverdue ? (
+                            <><AlertCircle size={11} /> {Math.abs(daysLeft)}d vencida</>
+                          ) : (
+                            <><Clock size={11} /> {daysLeft}d restantes</>
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Quick update slider */}
+                      <div className="mt-3 flex items-center gap-2">
+                        <input type="range" min="0" max={goal.targetValue} value={goal.currentValue}
+                          onChange={(e) => onUpdateGoal({ ...goal, currentValue: parseFloat(e.target.value) })}
+                          className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                        />
+                        <span className="text-[9px] font-black text-slate-400 w-12 text-right">{goal.currentValue}{goal.unit}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      </section >
+      </section>
 
       {/* Modal Reused */}
       {
