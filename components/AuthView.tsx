@@ -15,8 +15,8 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e && 'preventDefault' in e) e.preventDefault();
     setLoading(true);
     setError(null);
 
@@ -135,7 +135,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
              </div>
            )}
 
-           <form onSubmit={handleSubmit} className="space-y-6" action="#" method="post">
+           <form onSubmit={handleSubmit} className="space-y-6" action="javascript:void(0)">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
                 <div className="relative group">
@@ -173,9 +173,11 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onSkip }) => {
               </div>
 
               <button 
-                type="submit"
+                type="button"
+                onClick={handleSubmit as any}
                 disabled={loading}
                 className="w-full py-6 bg-indigo-600 text-white font-black rounded-2xl shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 disabled:opacity-70"
+                style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
               >
                 {loading ? <Loader2 className="animate-spin" /> : (mode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta')} 
                 {!loading && <ArrowRight size={18} />}

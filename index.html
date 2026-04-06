@@ -156,7 +156,7 @@
     updateOnlineStatus();
 
     // Service Worker — Force update for iOS PWA
-    const SW_EXPECTED_VERSION = 'filehub-v27';
+    const SW_EXPECTED_VERSION = 'filehub-v28';
     if ('serviceWorker' in navigator) {
       // Nuke old SWs on iOS standalone
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
