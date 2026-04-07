@@ -1,4 +1,8 @@
 
+import { callAI } from '../services/aiProxy';
+import { cfg } from '../services/config';
+const OPENROUTER_KEY = cfg.openrouterKey();
+
 import React, { useState, useMemo, useRef } from 'react';
 import { Expense, Project, CalendarEvent, Task, Goal, CalendarSource } from '../types';
 import {
@@ -23,7 +27,6 @@ import {
 } from 'lucide-react';
 import { analyzeCalendarIntelligence, extractEventsFromICS } from '../services/openrouterService';
 
-const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
 const ICAL_URL = 'https://calendar.google.com/calendar/ical/carlosgalera2roman%40gmail.com/public/basic.ics';
 
 async function analyzeCalendarAI(events: string): Promise<string> {

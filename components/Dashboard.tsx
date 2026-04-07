@@ -1,3 +1,7 @@
+
+import { callAI } from '../services/aiProxy';
+import { cfg } from '../services/config';
+const OPENROUTER_KEY = cfg.openrouterKey();
 import React, { useState, useMemo, useEffect } from 'react';
 import {
    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
@@ -13,7 +17,6 @@ import {
 import { analyzeFinancialDocument } from '../services/openrouterService';
 import { supabase } from '../services/supabaseClient';
 
-const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
 const MURCIA_WEATHER_URL = 'https://wttr.in/Murcia?format=j1';
 
 async function generateDailyBriefing(tasks: Task[], events: CalendarEvent[], hour: number): Promise<string> {

@@ -95,7 +95,7 @@ export async function callAI(
       const r = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { ...jsonHeaders, 'Authorization': `Bearer ${orKey}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io', 'X-Title': 'FileHub' },
-        body: JSON.stringify({ model: 'anthropic/claude-haiku-4-5', messages: msgs, max_tokens: maxTokens }),
+        body: JSON.stringify({ model: 'anthropic/claude-haiku-4.5', messages: msgs, max_tokens: maxTokens }),
       }, 45000);
       if (r.ok) {
         const d = await r.json();

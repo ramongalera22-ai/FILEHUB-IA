@@ -1,4 +1,8 @@
 
+import { callAI } from '../services/aiProxy';
+import { cfg } from '../services/config';
+const OPENROUTER_KEY = cfg.openrouterKey();
+
 import React, { useState, useMemo, useRef } from 'react';
 import { ShoppingItem, DayPlan, Meal, WeightEntry, NutritionPlan, WorkDocument } from '../types';
 import {
@@ -9,7 +13,6 @@ import {
 } from 'lucide-react';
 import { analyzeNutritionDocument, generateNutritionPlan } from '../services/openrouterService';
 
-const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
 
 async function generateMealPlanAI(preferences: string, days: number): Promise<string> {
   if (!OPENROUTER_KEY) return '⚠️ Configura tu API key de OpenRouter en Configuración.';

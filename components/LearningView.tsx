@@ -1,3 +1,7 @@
+
+import { callAI } from '../services/aiProxy';
+import { cfg } from '../services/config';
+const OPENROUTER_KEY = cfg.openrouterKey();
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Course } from '../types';
 import {
@@ -6,7 +10,6 @@ import {
   Brain, Upload, FileText, Send, Sparkles, RefreshCw, Zap, Copy, Check, MessageCircle
 } from 'lucide-react';
 
-const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || '';
 
 // PDF text extraction
 async function extractPdfText(file: File): Promise<string> {

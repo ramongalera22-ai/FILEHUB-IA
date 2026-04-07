@@ -1,3 +1,7 @@
+
+import { callAI } from '../services/aiProxy';
+import { cfg } from '../services/config';
+const OPENROUTER_KEY = cfg.openrouterKey();
 import React, { useState, useEffect } from 'react';
 import { ShoppingItem, ShoppingOrder } from '../types';
 import {
