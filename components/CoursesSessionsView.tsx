@@ -3,8 +3,9 @@ import {
   GraduationCap, Plus, Trash2, X, Save, Clock, BookOpen, Upload, FileText,
   Send, Sparkles, Brain, Eye, ChevronDown, ChevronUp, CheckCircle2, Circle,
   Presentation, File, Loader2, Copy, Check, Star, Calendar, Tag, MessageCircle,
-  Play, Pause, RotateCcw, Zap, Search, Filter
+  Play, Pause, RotateCcw, Zap, Search, Filter, Download
 } from 'lucide-react';
+import { supabase } from '../services/supabaseClient';
 
 const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY || 'sk-or-' + 'v1-d3af' + '7ab0484e031' + '67239dd3dde99da3d167' + '05380b01c8052c45acae0ac61ed6d';
 const AI_MODEL = 'anthropic/claude-haiku-4.5';
@@ -32,6 +33,7 @@ interface SessionItem {
   fileContent?: string;
   fileName?: string;
   fileType?: 'pdf' | 'pptx';
+  fileUrl?: string;
   aiSummary?: string;
   aiFlashcards?: string[];
   notes: string;
@@ -101,7 +103,12 @@ function loadData(): { courses: CourseItem[]; sessions: SessionItem[] } {
   catch { return { courses: [], sessions: [] }; }
 }
 function saveData(courses: CourseItem[], sessions: SessionItem[]) {
-  const clean = sessions.map(s => ({ ...s, fileContent: s.fileContent?.substring(0, 50000) }));
+  const clean = sessions.map(s => ({
+    ...s,
+    fileContent: s.fileContent?.substring(0, 50000),
+    // Only persist fileUrl if it's a real URL (not huge base64)
+    fileUrl: s.fileUrl?.startsWith('data:') ? undefined : s.fileUrl,
+  }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ courses, sessions: clean }));
 }
 
@@ -192,6 +199,7 @@ export default function CoursesSessionsView() {
     let fileContent = '';
     let fileName = '';
     let fileType: 'pdf' | 'pptx' | undefined;
+    let fileUrl = '';
 
     if (uploadFile) {
       setUploading(true);
@@ -203,14 +211,31 @@ export default function CoursesSessionsView() {
         fileType = 'pptx';
       }
       fileName = uploadFile.name;
+
+      // Upload to Supabase Storage or fallback to base64
+      try {
+        const filePath = `sessions/${Date.now()}_${fileName}`;
+        const { error: upErr } = await supabase.storage.from('session-files').upload(filePath, uploadFile, { upsert: true });
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from('session-files').getPublicUrl(filePath);
+          fileUrl = urlData?.publicUrl || '';
+        } else {
+          // Fallback: base64 data URL
+          const reader = new FileReader();
+          fileUrl = await new Promise<string>((r) => { reader.onload = () => r(reader.result as string); reader.readAsDataURL(uploadFile); });
+        }
+      } catch {
+        const reader = new FileReader();
+        fileUrl = await new Promise<string>((r) => { reader.onload = () => r(reader.result as string); reader.readAsDataURL(uploadFile); });
+      }
       setUploading(false);
     }
 
     if (editId) {
-      setSessions(prev => prev.map(s => s.id === editId ? { ...s, ...sf, ...(fileContent ? { fileContent, fileName, fileType } : {}) } : s));
+      setSessions(prev => prev.map(s => s.id === editId ? { ...s, ...sf, ...(fileContent ? { fileContent, fileName, fileType, fileUrl } : {}) } : s));
       setEditId(null);
     } else {
-      setSessions(prev => [{ ...sf, id: crypto.randomUUID(), fileContent, fileName, fileType, createdAt: new Date().toISOString() }, ...prev]);
+      setSessions(prev => [{ ...sf, id: crypto.randomUUID(), fileContent, fileName, fileType, fileUrl, createdAt: new Date().toISOString() }, ...prev]);
     }
     setSf({ title: '', description: '', courseId: '', status: 'pending', date: new Date().toISOString().split('T')[0], notes: '' });
     setUploadFile(null);
@@ -531,6 +556,23 @@ export default function CoursesSessionsView() {
                           {s.fileType === 'pdf' ? <FileText size={10} className="text-red-400" /> : <Presentation size={10} className="text-orange-400" />}
                           {s.fileName}
                         </span>
+                        {(s.fileUrl || s.fileContent) && (
+                          <a
+                            href={s.fileUrl || '#'}
+                            download={s.fileName}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => {
+                              if (!s.fileUrl) {
+                                e.preventDefault();
+                                alert('Archivo solo disponible como texto extraído. Vuelve a subirlo para descargarlo.');
+                              }
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 transition-all"
+                          >
+                            <Download size={10} /> Descargar
+                          </a>
+                        )}
                       </div>
                     )}
                     {/* AI Actions */}
