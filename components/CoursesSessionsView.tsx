@@ -34,6 +34,10 @@ interface SessionItem {
   fileName?: string;
   fileType?: 'pdf' | 'pptx';
   fileUrl?: string;
+  file2Content?: string;
+  file2Name?: string;
+  file2Type?: 'pdf' | 'pptx';
+  file2Url?: string;
   aiSummary?: string;
   aiFlashcards?: string[];
   notes: string;
@@ -108,6 +112,8 @@ function saveData(courses: CourseItem[], sessions: SessionItem[]) {
     fileContent: s.fileContent?.substring(0, 50000),
     // Only persist fileUrl if it's a real URL (not huge base64)
     fileUrl: s.fileUrl?.startsWith('data:') ? undefined : s.fileUrl,
+    file2Content: s.file2Content?.substring(0, 50000),
+    file2Url: s.file2Url?.startsWith('data:') ? undefined : s.file2Url,
   }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ courses, sessions: clean }));
 }
@@ -145,6 +151,7 @@ export default function CoursesSessionsView() {
   // Session form
   const [sf, setSf] = useState({ title: '', description: '', courseId: '', status: 'pending' as SessionItem['status'], date: new Date().toISOString().split('T')[0], notes: '' });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFile2, setUploadFile2] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
   // AI Chat
@@ -154,6 +161,7 @@ export default function CoursesSessionsView() {
   const [activeSessionForAI, setActiveSessionForAI] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef2 = useRef<HTMLInputElement>(null);
 
   // Load
   useEffect(() => {
@@ -193,52 +201,63 @@ export default function CoursesSessionsView() {
     setTab('courses');
   };
 
+  // ─── Helper: upload file to Supabase Storage ───
+  const uploadToStorage = async (file: File): Promise<string> => {
+    try {
+      const filePath = `sessions/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from('session-files').upload(filePath, file, { upsert: true });
+      if (!error) {
+        const { data } = supabase.storage.from('session-files').getPublicUrl(filePath);
+        return data?.publicUrl || '';
+      }
+    } catch {}
+    // Fallback base64
+    const reader = new FileReader();
+    return new Promise<string>((r) => { reader.onload = () => r(reader.result as string); reader.readAsDataURL(file); });
+  };
+
   // ─── Session CRUD ───
   const addSession = async () => {
     if (!sf.title.trim()) return;
-    let fileContent = '';
-    let fileName = '';
+    setUploading(true);
+
+    let fileContent = '', fileName = '', fileUrl = '';
     let fileType: 'pdf' | 'pptx' | undefined;
-    let fileUrl = '';
+    let file2Content = '', file2Name = '', file2Url = '';
+    let file2Type: 'pdf' | 'pptx' | undefined;
 
+    // File 1 (presentación principal)
     if (uploadFile) {
-      setUploading(true);
-      if (uploadFile.name.endsWith('.pdf')) {
-        fileContent = await extractPdfText(uploadFile);
-        fileType = 'pdf';
-      } else if (uploadFile.name.endsWith('.pptx')) {
-        fileContent = await extractPptxText(uploadFile);
-        fileType = 'pptx';
-      }
+      if (uploadFile.name.endsWith('.pdf')) { fileContent = await extractPdfText(uploadFile); fileType = 'pdf'; }
+      else if (uploadFile.name.endsWith('.pptx')) { fileContent = await extractPptxText(uploadFile); fileType = 'pptx'; }
       fileName = uploadFile.name;
-
-      // Upload to Supabase Storage or fallback to base64
-      try {
-        const filePath = `sessions/${Date.now()}_${fileName}`;
-        const { error: upErr } = await supabase.storage.from('session-files').upload(filePath, uploadFile, { upsert: true });
-        if (!upErr) {
-          const { data: urlData } = supabase.storage.from('session-files').getPublicUrl(filePath);
-          fileUrl = urlData?.publicUrl || '';
-        } else {
-          // Fallback: base64 data URL
-          const reader = new FileReader();
-          fileUrl = await new Promise<string>((r) => { reader.onload = () => r(reader.result as string); reader.readAsDataURL(uploadFile); });
-        }
-      } catch {
-        const reader = new FileReader();
-        fileUrl = await new Promise<string>((r) => { reader.onload = () => r(reader.result as string); reader.readAsDataURL(uploadFile); });
-      }
-      setUploading(false);
+      fileUrl = await uploadToStorage(uploadFile);
     }
 
+    // File 2 (guion, apuntes, material extra)
+    if (uploadFile2) {
+      if (uploadFile2.name.endsWith('.pdf')) { file2Content = await extractPdfText(uploadFile2); file2Type = 'pdf'; }
+      else if (uploadFile2.name.endsWith('.pptx')) { file2Content = await extractPptxText(uploadFile2); file2Type = 'pptx'; }
+      file2Name = uploadFile2.name;
+      file2Url = await uploadToStorage(uploadFile2);
+    }
+
+    setUploading(false);
+
+    const fileFields = {
+      ...(fileContent ? { fileContent, fileName, fileType, fileUrl } : {}),
+      ...(file2Content ? { file2Content, file2Name, file2Type, file2Url } : {}),
+    };
+
     if (editId) {
-      setSessions(prev => prev.map(s => s.id === editId ? { ...s, ...sf, ...(fileContent ? { fileContent, fileName, fileType, fileUrl } : {}) } : s));
+      setSessions(prev => prev.map(s => s.id === editId ? { ...s, ...sf, ...fileFields } : s));
       setEditId(null);
     } else {
-      setSessions(prev => [{ ...sf, id: crypto.randomUUID(), fileContent, fileName, fileType, fileUrl, createdAt: new Date().toISOString() }, ...prev]);
+      setSessions(prev => [{ ...sf, id: crypto.randomUUID(), ...fileFields, createdAt: new Date().toISOString() } as SessionItem, ...prev]);
     }
     setSf({ title: '', description: '', courseId: '', status: 'pending', date: new Date().toISOString().split('T')[0], notes: '' });
     setUploadFile(null);
+    setUploadFile2(null);
     setShowForm(false);
   };
 
@@ -274,7 +293,7 @@ export default function CoursesSessionsView() {
 
     const session = activeSessionForAI ? sessions.find(s => s.id === activeSessionForAI) : null;
     const contextMsg = session?.fileContent
-      ? `Contexto: Tengo un archivo "${session.fileName}" con este contenido:\n\n${session.fileContent.substring(0, 15000)}\n\n---\nResponde en español. Sé conciso y útil. Si te piden flashcards, usa formato "P: ... / R: ...". Si te piden resumen, usa bullets cortos.`
+      ? `Contexto: Tengo un archivo "${session.fileName}" con este contenido:\n\n${((session.fileContent || "") + (session.file2Content ? "\n\n--- GUIÓN ---\n" + session.file2Content : "")).substring(0, 20000)}\n\n---\nResponde en español. Sé conciso y útil. Si te piden flashcards, usa formato "P: ... / R: ...". Si te piden resumen, usa bullets cortos.`
       : 'Eres un asistente de estudio para un médico de familia. Responde en español, sé conciso y práctico.';
 
     const messages = [
@@ -294,7 +313,7 @@ export default function CoursesSessionsView() {
     setChatLoading(true);
     const summary = await callAI([
       { role: 'system', content: 'Eres un asistente de estudio. Genera un resumen conciso en español con los puntos clave.' },
-      { role: 'user', content: `Resume este contenido en bullets concisos:\n\n${session.fileContent.substring(0, 20000)}` }
+      { role: 'user', content: `Resume este contenido en bullets concisos:\n\n${((session.fileContent || "") + (session.file2Content ? "\n\n--- GUIÓN ---\n" + session.file2Content : "")).substring(0, 25000)}` }
     ]);
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, aiSummary: summary } : s));
     setChatLoading(false);
@@ -306,7 +325,7 @@ export default function CoursesSessionsView() {
     setChatLoading(true);
     const result = await callAI([
       { role: 'system', content: 'Genera 10 flashcards en formato "P: pregunta\nR: respuesta" basadas en el contenido. En español.' },
-      { role: 'user', content: session.fileContent.substring(0, 20000) }
+      { role: 'user', content: ((session.fileContent || "") + (session.file2Content ? "\n\n--- GUIÓN ---\n" + session.file2Content : "")).substring(0, 25000) }
     ]);
     const cards = result.split('\n').filter(l => l.startsWith('P:') || l.startsWith('R:'));
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, aiFlashcards: cards } : s));
@@ -471,6 +490,25 @@ export default function CoursesSessionsView() {
                     </>
                   )}
                 </div>
+                {/* File 2 upload — Guión / Material extra */}
+                <div className="border-2 border-dashed border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/50 transition-colors cursor-pointer"
+                  onClick={() => fileInputRef2.current?.click()}>
+                  <input ref={fileInputRef2} type="file" accept=".pdf,.pptx" className="hidden"
+                    onChange={e => setUploadFile2(e.target.files?.[0] || null)} />
+                  {uploadFile2 ? (
+                    <div className="flex items-center justify-center gap-2">
+                      {uploadFile2.name.endsWith('.pdf') ? <FileText size={20} className="text-red-400" /> : <Presentation size={20} className="text-orange-400" />}
+                      <span className="text-xs font-bold">{uploadFile2.name}</span>
+                      <button onClick={e => { e.stopPropagation(); setUploadFile2(null); }} className="text-slate-500 hover:text-red-400"><X size={14} /></button>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload size={20} className="mx-auto text-slate-500 mb-1" />
+                      <p className="text-xs text-emerald-400">📝 Guión / Material extra</p>
+                      <p className="text-[10px] text-slate-600 mt-1">PDF o PPTX adicional (opcional)</p>
+                    </>
+                  )}
+                </div>
                 <textarea value={sf.notes} onChange={e => setSf({ ...sf, notes: e.target.value })} placeholder="Notas..."
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm h-16 resize-none focus:border-violet-500 focus:outline-none" />
               </>
@@ -576,7 +614,28 @@ export default function CoursesSessionsView() {
                       </div>
                     )}
                     {/* AI Actions */}
-                    {s.fileContent && (
+                    {s.file2Name && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] px-2 py-1 bg-emerald-500/5 rounded-lg text-slate-400 flex items-center gap-1">
+                          📝 {s.file2Type === 'pdf' ? <FileText size={10} className="text-red-400" /> : <Presentation size={10} className="text-orange-400" />}
+                          {s.file2Name}
+                        </span>
+                        {(s.file2Url || s.file2Content) && (
+                          <a
+                            href={s.file2Url || '#'}
+                            download={s.file2Name}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => { if (!s.file2Url) { e.preventDefault(); alert('Re-sube el archivo para descargarlo.'); } }}
+                            className="flex items-center gap-1 px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 transition-all"
+                          >
+                            <Download size={10} /> Descargar
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {/* AI Actions — uses both files */}
+                    {(s.fileContent || s.file2Content) && (
                       <div className="flex gap-2 mt-3">
                         <button onClick={() => generateSummary(s.id)} disabled={chatLoading}
                           className="flex items-center gap-1 px-2 py-1 bg-violet-500/10 hover:bg-violet-500/20 rounded-lg text-[10px] font-bold text-violet-400 transition-all disabled:opacity-50">
