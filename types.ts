@@ -73,8 +73,9 @@ export interface Idea {
   description: string;
   category: string;
   priority: 'low' | 'medium' | 'high';
-  status: 'draft' | 'brainstorming' | 'approved';
+  status: 'draft' | 'brainstorming' | 'approved' | 'in_progress' | 'done';
   createdAt: string;
+  files?: { name: string; url: string; type: string; size: number }[];
 }
 
 export interface OllamaConfig {

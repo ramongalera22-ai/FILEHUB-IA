@@ -2,9 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { Idea } from '../types';
 import {
   Lightbulb, Plus, Trash2, Search, Brain, Sparkles, X, Loader2, Zap, Edit3,
-  ArrowRight, Star, Tag, Filter, LayoutGrid, List, Clock, TrendingUp, CheckCircle2
+  ArrowRight, Star, Tag, Filter, LayoutGrid, List, Clock, TrendingUp, CheckCircle2,
+  Upload, Download, FileText, Image, Archive, Paperclip, Presentation
 } from 'lucide-react';
 import { callAI } from '../services/aiProxy';
+import { supabase } from '../services/supabaseClient';
 
 interface IdeasViewProps {
   ideas: Idea[];
@@ -48,6 +50,34 @@ const IdeasView: React.FC<IdeasViewProps> = ({ ideas, onAddIdea, onDeleteIdea, o
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [formData, setFormData] = useState({ title: '', description: '', category: 'General', priority: 'medium' as string, status: 'draft' });
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const uploadFile = async (file: File): Promise<{ name: string; url: string; type: string; size: number }> => {
+    const path = `ideas/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    try {
+      const { error } = await supabase.storage.from('session-files').upload(path, file, { upsert: true });
+      if (!error) {
+        const { data } = supabase.storage.from('session-files').getPublicUrl(path);
+        return { name: file.name, url: data?.publicUrl || '', type: file.type, size: file.size };
+      }
+    } catch {}
+    // Fallback base64
+    const reader = new FileReader();
+    const url = await new Promise<string>((r) => { reader.onload = () => r(reader.result as string); reader.readAsDataURL(file); });
+    return { name: file.name, url, type: file.type, size: file.size };
+  };
+
+  const fileIcon = (name: string) => {
+    if (name.match(/\.pdf$/i)) return <FileText size={14} className="text-red-400" />;
+    if (name.match(/\.pptx?$/i)) return <Presentation size={14} className="text-orange-400" />;
+    if (name.match(/\.(jpe?g|png|gif|webp)$/i)) return <Image size={14} className="text-blue-400" />;
+    if (name.match(/\.zip$/i)) return <Archive size={14} className="text-violet-400" />;
+    return <Paperclip size={14} className="text-slate-400" />;
+  };
+
+  const fmtSize = (b: number) => b < 1024 ? `${b}B` : b < 1048576 ? `${(b/1024).toFixed(0)}KB` : `${(b/1048576).toFixed(1)}MB`;
 
   const handleQuickAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,20 +89,28 @@ const IdeasView: React.FC<IdeasViewProps> = ({ ideas, onAddIdea, onDeleteIdea, o
     setQuickTitle('');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.title.trim()) return;
-    if (editing) {
-      onUpdateIdea({ ...editing, ...formData });
-    } else {
-      onAddIdea({ id: `idea-${Date.now()}`, ...formData, createdAt: new Date().toISOString().split('T')[0] } as Idea);
+    setUploading(true);
+    let files: { name: string; url: string; type: string; size: number }[] = editing?.files || [];
+    if (pendingFiles.length > 0) {
+      const uploaded = await Promise.all(pendingFiles.map(f => uploadFile(f)));
+      files = [...files, ...uploaded];
     }
-    setShowForm(false); setEditing(null);
+    if (editing) {
+      onUpdateIdea({ ...editing, ...formData, files } as any);
+    } else {
+      onAddIdea({ id: `idea-${Date.now()}`, ...formData, files, createdAt: new Date().toISOString().split('T')[0] } as Idea);
+    }
+    setShowForm(false); setEditing(null); setPendingFiles([]);
     setFormData({ title: '', description: '', category: 'General', priority: 'medium', status: 'draft' });
+    setUploading(false);
   };
 
   const openEdit = (idea: Idea) => {
     setEditing(idea);
     setFormData({ title: idea.title, description: idea.description || '', category: idea.category, priority: idea.priority, status: idea.status || 'draft' });
+    setPendingFiles([]);
     setShowForm(true);
   };
 
@@ -146,7 +184,7 @@ const IdeasView: React.FC<IdeasViewProps> = ({ ideas, onAddIdea, onDeleteIdea, o
             className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 text-white font-bold rounded-xl shadow-lg text-xs disabled:opacity-50">
             {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />} Brainstorm IA
           </button>
-          <button onClick={() => { setEditing(null); setFormData({ title:'', description:'', category:'General', priority:'medium', status:'draft' }); setShowForm(true); }}
+          <button onClick={() => { setEditing(null); setFormData({ title:'', description:'', category:'General', priority:'medium', status:'draft' }); setPendingFiles([]); setShowForm(true); }}
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-xl shadow-lg text-xs">
             <Plus size={14} /> Nueva Idea
           </button>
@@ -216,8 +254,48 @@ const IdeasView: React.FC<IdeasViewProps> = ({ ideas, onAddIdea, onDeleteIdea, o
           </div>
           <input value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} placeholder="Título de la idea..."
             className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold" />
-          <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Descripción, contexto, enlaces..."
-            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm h-24 resize-none" />
+          <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Descripción larga, contexto, enlaces, notas..."
+            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm h-40 resize-y" />
+          {/* File Upload */}
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">📎 Archivos adjuntos</label>
+            <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-4 hover:border-amber-500/50 transition-colors cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}>
+              <input ref={fileInputRef} type="file" multiple accept=".pdf,.pptx,.ppt,.zip,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.txt,.csv,.xlsx" className="hidden"
+                onChange={e => { if (e.target.files) setPendingFiles(prev => [...prev, ...Array.from(e.target.files!)]); }} />
+              <div className="text-center">
+                <Upload size={20} className="mx-auto text-slate-400 mb-1" />
+                <p className="text-xs text-slate-500">PDF, PPTX, ZIP, JPEG, PNG, DOCX...</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Pulsa o arrastra archivos aquí</p>
+              </div>
+            </div>
+            {/* Pending files */}
+            {pendingFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {pendingFiles.map((f, i) => (
+                  <div key={i} className="flex items-center gap-1.5 px-2 py-1 bg-amber-500/10 rounded-lg text-xs">
+                    {fileIcon(f.name)}
+                    <span className="font-bold text-slate-600 dark:text-slate-300 max-w-[150px] truncate">{f.name}</span>
+                    <span className="text-slate-400 text-[10px]">{fmtSize(f.size)}</span>
+                    <button onClick={e => { e.stopPropagation(); setPendingFiles(prev => prev.filter((_, j) => j !== i)); }} className="text-slate-400 hover:text-red-400"><X size={12} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Already uploaded files (editing) */}
+            {editing?.files && editing.files.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {editing.files.map((f, i) => (
+                  <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" download={f.name}
+                    className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 rounded-lg text-xs hover:bg-emerald-500/20 transition-all">
+                    {fileIcon(f.name)}
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 max-w-[150px] truncate">{f.name}</span>
+                    <Download size={10} className="text-emerald-500" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">Categoría</label>
@@ -245,8 +323,8 @@ const IdeasView: React.FC<IdeasViewProps> = ({ ideas, onAddIdea, onDeleteIdea, o
               </select>
             </div>
           </div>
-          <button onClick={handleSave} className="w-full py-3 bg-amber-600 text-white font-black rounded-xl shadow-lg">
-            {editing ? '✓ Actualizar' : '✓ Crear Idea'}
+          <button onClick={handleSave} disabled={uploading} className="w-full py-3 bg-amber-600 text-white font-black rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
+            {uploading ? <><Loader2 size={16} className="animate-spin" /> Subiendo archivos...</> : editing ? '✓ Actualizar' : '✓ Crear Idea'}
           </button>
         </div>
       )}
@@ -290,7 +368,22 @@ const IdeasView: React.FC<IdeasViewProps> = ({ ideas, onAddIdea, onDeleteIdea, o
                   </div>
 
                   <h4 className="font-black text-slate-800 dark:text-white text-sm mb-2 leading-tight">{idea.title}</h4>
-                  {idea.description && <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">{idea.description}</p>}
+                  {idea.description && <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-3 mb-3 whitespace-pre-wrap">{idea.description}</p>}
+
+                  {/* Attached files */}
+                  {idea.files && idea.files.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {idea.files.map((f, fi) => (
+                        <a key={fi} href={f.url} target="_blank" rel="noopener noreferrer" download={f.name}
+                          onClick={e => { if (f.url.startsWith('data:')) { e.preventDefault(); const a = document.createElement('a'); a.href = f.url; a.download = f.name; a.click(); } }}
+                          className="flex items-center gap-1 px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-600 dark:text-emerald-400 transition-all">
+                          {fileIcon(f.name)}
+                          <span className="max-w-[100px] truncate">{f.name}</span>
+                          <Download size={9} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
