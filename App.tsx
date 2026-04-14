@@ -1040,7 +1040,8 @@ const App: React.FC = () => {
   const handleUpdateGoal = async (g: Goal) => {
     setGoals(prev => prev.map(go => go.id === g.id ? g : go));
     if (session) await supabase.from('goals').update({
-      title: g.title, target_date: g.targetDate, current_value: g.currentValue, target_value: g.targetValue
+      title: g.title, target_date: g.targetDate, current_value: g.currentValue,
+      target_value: g.targetValue, unit: g.unit, category: g.category, status: g.status
     }).eq('id', g.id);
   };
   const handleDeleteGoal = async (id: string) => {

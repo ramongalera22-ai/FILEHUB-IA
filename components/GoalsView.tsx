@@ -296,6 +296,81 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
         </div>
       </header>
 
+      {/* KPI Dashboard */}
+      {goals.length > 0 && (() => {
+        const total = goals.length;
+        const completed = goals.filter(g => g.currentValue >= g.targetValue).length;
+        const overdue = goals.filter(g => new Date(g.targetDate) < new Date() && g.currentValue < g.targetValue).length;
+        const avgProgress = goals.reduce((t, g) => t + (g.targetValue > 0 ? Math.min(g.currentValue / g.targetValue * 100, 100) : 0), 0) / total;
+        const byCat = ['financial', 'career', 'health', 'personal'].map(cat => ({
+          cat, count: goals.filter(g => g.category === cat).length,
+          avg: goals.filter(g => g.category === cat).length > 0
+            ? goals.filter(g => g.category === cat).reduce((t, g) => t + (g.targetValue > 0 ? Math.min(g.currentValue / g.targetValue * 100, 100) : 0), 0) / goals.filter(g => g.category === cat).length
+            : 0,
+        })).filter(c => c.count > 0);
+        const catInfo: Record<string, { emoji: string; color: string; label: string }> = {
+          financial: { emoji: '💰', color: '#10b981', label: 'Finanzas' },
+          career: { emoji: '💼', color: '#3b82f6', label: 'Carrera' },
+          health: { emoji: '🏥', color: '#f43f5e', label: 'Salud' },
+          personal: { emoji: '🧠', color: '#f59e0b', label: 'Personal' },
+        };
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700 text-center">
+              <p className="text-3xl font-black text-indigo-600">{total}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Metas totales</p>
+            </div>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700 text-center">
+              <p className="text-3xl font-black text-emerald-500">{completed}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Completadas</p>
+            </div>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700 text-center">
+              <p className="text-3xl font-black" style={{ color: overdue > 0 ? '#ef4444' : '#10b981' }}>{overdue}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Vencidas</p>
+            </div>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700 text-center">
+              <div className="relative w-16 h-16 mx-auto mb-1">
+                <svg viewBox="0 0 80 80" className="w-full h-full transform -rotate-90">
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="currentColor" strokeWidth="6" className="text-slate-100 dark:text-slate-700" />
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="#6366f1" strokeWidth="6" strokeLinecap="round"
+                    strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - avgProgress / 100)} className="transition-all duration-700" />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-black text-slate-800 dark:text-white">{Math.round(avgProgress)}%</span>
+              </div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Progreso medio</p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Category Progress Bars */}
+      {goals.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700 mb-6 space-y-3">
+          {['financial', 'career', 'health', 'personal'].map(cat => {
+            const catGoals = goals.filter(g => g.category === cat);
+            if (catGoals.length === 0) return null;
+            const avg = catGoals.reduce((t, g) => t + (g.targetValue > 0 ? Math.min(g.currentValue / g.targetValue * 100, 100) : 0), 0) / catGoals.length;
+            const info: Record<string, { emoji: string; color: string; label: string }> = {
+              financial: { emoji: '💰', color: '#10b981', label: 'Finanzas' },
+              career: { emoji: '💼', color: '#3b82f6', label: 'Carrera' },
+              health: { emoji: '🏥', color: '#f43f5e', label: 'Salud' },
+              personal: { emoji: '🧠', color: '#f59e0b', label: 'Personal' },
+            };
+            const c = info[cat] || info.personal;
+            return (
+              <div key={cat} className="flex items-center gap-3">
+                <span className="text-sm w-24 font-bold text-slate-500">{c.emoji} {c.label}</span>
+                <div className="flex-1 h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${avg}%`, background: c.color }} />
+                </div>
+                <span className="text-xs font-black text-slate-500 w-12 text-right">{Math.round(avg)}%</span>
+                <span className="text-[10px] text-slate-400">({catGoals.length})</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Visual Timeline (Scatter Chart) */}
       {chartData.length > 0 ? (
       <section className="bg-white dark:bg-slate-900 rounded-[3rem] p-8 border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none mb-10 relative overflow-hidden">
@@ -605,14 +680,30 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
                         </span>
                       </div>
 
-                      {/* Quick update slider */}
+                      {/* Quick update slider + buttons */}
                       <div className="mt-3 flex items-center gap-2">
+                        <button onClick={() => onUpdateGoal({ ...goal, currentValue: Math.max(0, goal.currentValue - (goal.targetValue > 100 ? 10 : 1)) })}
+                          className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center justify-center text-sm font-black transition-all">−</button>
                         <input type="range" min="0" max={goal.targetValue} value={goal.currentValue}
                           onChange={(e) => onUpdateGoal({ ...goal, currentValue: parseFloat(e.target.value) })}
                           className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full appearance-none cursor-pointer accent-indigo-600"
                         />
-                        <span className="text-[9px] font-black text-slate-400 w-12 text-right">{goal.currentValue}{goal.unit}</span>
+                        <button onClick={() => onUpdateGoal({ ...goal, currentValue: Math.min(goal.targetValue, goal.currentValue + (goal.targetValue > 100 ? 10 : 1)) })}
+                          className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 flex items-center justify-center text-sm font-black transition-all">+</button>
+                        <span className="text-[9px] font-black text-slate-400 w-16 text-right">{goal.currentValue}{goal.unit}</span>
                       </div>
+                      {/* Mark complete / reactivate */}
+                      {isCompleted ? (
+                        <button onClick={() => onUpdateGoal({ ...goal, status: 'achieved' })}
+                          className="mt-2 w-full py-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 rounded-xl text-[10px] font-black">
+                          🏆 ¡Meta completada!
+                        </button>
+                      ) : (
+                        <button onClick={() => onUpdateGoal({ ...goal, currentValue: goal.targetValue })}
+                          className="mt-2 w-full py-2 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 rounded-xl text-[10px] font-black opacity-0 group-hover:opacity-100 transition-all">
+                          Marcar completada
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -646,6 +737,19 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onAddGoal, onUpdateGoal, o
                 <div className="grid grid-cols-2 gap-4">
                   <input className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 font-bold border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white placeholder-slate-400" placeholder="Unidad (€, kg)" value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} required />
                   <input type="date" className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 font-bold border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white placeholder-slate-400" value={formData.targetDate} onChange={e => setFormData({ ...formData, targetDate: e.target.value })} required />
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { id: 'financial', label: '💰 Finanzas', color: 'bg-emerald-500' },
+                    { id: 'career', label: '💼 Carrera', color: 'bg-blue-500' },
+                    { id: 'health', label: '🏥 Salud', color: 'bg-rose-500' },
+                    { id: 'personal', label: '🧠 Personal', color: 'bg-amber-500' },
+                  ].map(c => (
+                    <button key={c.id} type="button" onClick={() => setFormData({ ...formData, category: c.id as any })}
+                      className={`py-3 rounded-xl text-[10px] font-black transition-all ${formData.category === c.id ? `${c.color} text-white` : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'}`}>
+                      {c.label}
+                    </button>
+                  ))}
                 </div>
                 <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-indigo-700">Guardar</button>
               </form>
