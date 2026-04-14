@@ -400,7 +400,8 @@ const App: React.FC = () => {
           await supabase.from('goals').upsert(
             goals.map(g => ({
               id: g.id, user_id: uid, title: g.title, target_date: g.targetDate,
-              current_value: g.currentValue, target_value: g.targetValue, category: g.category,
+              current_value: g.currentValue, target_value: g.targetValue,
+              category: g.category, unit: g.unit || '€', status: g.status || 'active',
             })),
             { onConflict: 'id' }
           );
@@ -410,7 +411,8 @@ const App: React.FC = () => {
           await supabase.from('ideas').upsert(
             ideas.map(i => ({
               id: i.id, user_id: uid, title: i.title, description: i.description,
-              category: i.category, priority: i.priority,
+              category: i.category, priority: i.priority, status: i.status || 'draft',
+              files: i.files ? JSON.stringify(i.files) : null,
             })),
             { onConflict: 'id' }
           );
@@ -449,8 +451,22 @@ const App: React.FC = () => {
         if (debts.length > 0) {
           await supabase.from('debts').upsert(
             debts.map(d => ({
-              id: d.id, user_id: uid, name: d.name, amount: d.amount,
-              remaining: d.remaining, type: d.type, monthly_payment: d.monthlyPayment,
+              id: d.id, user_id: uid, name: d.name, total_amount: d.totalAmount,
+              paid_amount: d.paidAmount, due_date: d.dueDate, category: d.category,
+              interest_rate: d.interestRate || 0, creditor: d.creditor || '',
+              status: d.status || 'pending', notes: d.notes || '',
+            })),
+            { onConflict: 'id' }
+          );
+        }
+        // Investments
+        if (investments.length > 0) {
+          await supabase.from('investments').upsert(
+            investments.map(i => ({
+              id: i.id, user_id: uid, name: i.name, amount: i.amount,
+              date: i.date, status: i.status, category: i.category,
+              expected_return: i.expectedReturn || 0, current_value: i.currentValue || 0,
+              purchase_price: i.purchasePrice || 0, quantity: i.quantity || 0,
             })),
             { onConflict: 'id' }
           );
@@ -479,7 +495,7 @@ const App: React.FC = () => {
     }, 3000);
 
     return () => { if (cloudSyncTimer.current) clearTimeout(cloudSyncTimer.current); };
-  }, [tasks, calendarEvents, expenses, goals, ideas, projects, trips, shoppingItems, debts, weightEntries, files, session, isDBReady]);
+  }, [tasks, calendarEvents, expenses, goals, ideas, projects, trips, shoppingItems, debts, investments, weightEntries, files, session, isDBReady]);
 
   // ═══ INITIAL FORCE PUSH — run once when session + data are both ready ═══
   const didInitialPush = useRef(false);
