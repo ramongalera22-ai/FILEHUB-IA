@@ -1053,7 +1053,8 @@ const App: React.FC = () => {
     setIdeas([i, ...ideas]);
     if (session) await supabase.from('ideas').insert({
       id: i.id, user_id: session?.user?.id, title: i.title, description: i.description,
-      category: i.category, priority: i.priority, status: i.status, created_at: i.createdAt
+      category: i.category, priority: i.priority, status: i.status, created_at: i.createdAt,
+      files: i.files ? JSON.stringify(i.files) : null
     });
   };
   const handleDeleteIdea = async (id: string) => {
@@ -1063,7 +1064,8 @@ const App: React.FC = () => {
   const handleUpdateIdea = async (i: Idea) => {
     setIdeas(prev => prev.map(ide => ide.id === i.id ? i : ide));
     if (session) await supabase.from('ideas').update({
-      title: i.title, description: i.description, category: i.category, priority: i.priority, status: i.status
+      title: i.title, description: i.description, category: i.category, priority: i.priority,
+      status: i.status, files: i.files ? JSON.stringify(i.files) : null
     }).eq('id', i.id);
   };
 

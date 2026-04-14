@@ -63,45 +63,36 @@ const EconomyView: React.FC<EconomyViewProps> = ({
    const handleAiChat = React.useCallback(async (overrideMsg?: string) => {
      const msg = overrideMsg || aiChatIn.trim();
      if (!msg || aiChatLoading) return;
-     if (!OPENROUTER_KEY_FIN) {
-       setAiChatMsgs(prev => [...prev, 
-         { id: `fm-${Date.now()}`, role: 'user' as const, content: msg, ts: new Date() },
-         { id: `fm-${Date.now()+1}`, role: 'assistant' as const, content: '⚠️ Configura la variable VITE_OPENROUTER_KEY en tus ajustes para usar el asesor IA. Puedes obtener una key gratuita en openrouter.ai', ts: new Date() }
-       ]);
-       return;
-     }
      const userMsg = { id: `fm-${Date.now()}`, role: 'user' as const, content: msg, ts: new Date() };
      setAiChatMsgs(prev => [...prev, userMsg]);
      setAiChatIn(''); setAiChatLoading(true);
      
-     const models = ['anthropic/claude-haiku-4.5', 'anthropic/claude-3-haiku', 'google/gemini-flash-1.5'];
-     let reply = '';
-     
-     for (const model of models) {
-       try {
-         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-           method: 'POST', 
-           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_KEY_FIN}`, 'HTTP-Referer': 'https://ramongalera22-ai.github.io/FILEHUB-IA' },
-           body: JSON.stringify({
-             model, max_tokens: 1500,
-             messages: [
-               { role: 'system', content: `Eres un asesor financiero IA en FILEHUB. El usuario es médico.\n\nDATOS FINANCIEROS:\n${finContext}\n\nINSTRUCCIONES:\n- Responde en español con emojis\n- Analiza riesgos de deuda, prioriza qué eliminar primero (avalancha vs bola de nieve)\n- Identifica puntos críticos (vencimientos, sobreendeudamiento, ratio deuda/ingreso)\n- Sé directo con alertas rojas si hay riesgo\n- Sugiere plan de acción concreto` },
-               ...[...aiChatMsgs.slice(-10), userMsg].map(m => ({ role: m.role, content: m.content }))
-             ]
-           })
-         });
-         const d = await res.json();
-         if (d.error) { reply = `⚠️ ${d.error.message || JSON.stringify(d.error)}`; continue; }
-         reply = d.choices?.[0]?.message?.content || '';
-         if (reply) break;
-       } catch (e: any) {
-         reply = `❌ Error de conexión: ${e.message}`;
-       }
+     try {
+       const history = [...aiChatMsgs.slice(-10), userMsg].map(m => ({ role: m.role, content: m.content }));
+       const reply = await callAI(history, {
+         system: `Eres un asesor financiero personal experto en FILEHUB. El usuario es Carlos, médico residente en Cartagena que se muda a Barcelona en septiembre 2026.
+
+DATOS FINANCIEROS ACTUALES:
+${finContext}
+
+INSTRUCCIONES:
+- Responde en español, claro y directo
+- Usa emojis para alertas (🔴 riesgo, 🟡 atención, 🟢 bien)
+- Analiza riesgos: ratio deuda/ingreso, vencimientos próximos, sobreendeudamiento
+- Prioriza deudas: método avalancha (mayor interés primero) vs bola de nieve (menor importe primero)
+- Considera su situación: sueldo de residente ahora, adjunto desde julio, mudanza septiembre
+- Da planes de acción concretos con fechas y cantidades
+- Si pregunta sobre inversiones, sé conservador y realista
+- Si pregunta sobre ahorro para mudanza, calcula meses y cantidades
+- Si no hay datos suficientes, pide que los introduzca`,
+         maxTokens: 1500
+       });
+       setAiChatMsgs(prev => [...prev, { id: `fm-${Date.now()+1}`, role: 'assistant', content: reply, ts: new Date() }]);
+     } catch (e: any) {
+       setAiChatMsgs(prev => [...prev, { id: `fm-${Date.now()+1}`, role: 'assistant', content: `❌ ${e.message}`, ts: new Date() }]);
      }
-     
-     setAiChatMsgs(prev => [...prev, { id: `fm-${Date.now()+1}`, role: 'assistant', content: reply || '⚠️ No se pudo obtener respuesta. Verifica tu API key de OpenRouter en Configuración.', ts: new Date() }]);
      setAiChatLoading(false);
-   }, [aiChatIn, aiChatMsgs, aiChatLoading, finContext, OPENROUTER_KEY_FIN]);
+   }, [aiChatIn, aiChatMsgs, aiChatLoading, finContext]);
 
    // --- EXPENSE STATE ---
    const [newExpenseLine, setNewExpenseLine] = useState({ vendor: '', amount: '', category: 'General', date: '' });
@@ -696,10 +687,13 @@ const EconomyView: React.FC<EconomyViewProps> = ({
                      {[
                         { emoji: '⚠️', text: 'Analiza mis riesgos financieros y puntos críticos' },
                         { emoji: '🎯', text: '¿Qué deuda debería eliminar primero y por qué?' },
-                        { emoji: '📊', text: 'Haz un plan para reducir mi deuda total' },
+                        { emoji: '📊', text: 'Haz un plan para reducir mi deuda total en 6 meses' },
                         { emoji: '💡', text: 'Sugiere cómo optimizar mis gastos mensuales' },
+                        { emoji: '🏠', text: '¿Cuánto necesito ahorrar para la mudanza a Barcelona?' },
+                        { emoji: '💰', text: 'Plan de ahorro jul-ago como médico adjunto' },
                         { emoji: '🏦', text: 'Analiza mi ratio deuda/patrimonio' },
                         { emoji: '📈', text: '¿Son rentables mis inversiones actuales?' },
+                        { emoji: '🔄', text: '¿Me conviene alquilar mi piso de Murcia? Simula ingresos' },
                      ].map((p, i) => (
                         <button key={i} onClick={() => handleAiChat(p.text)}
                            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-left hover:border-violet-300 hover:shadow-lg transition-all">
