@@ -1497,7 +1497,7 @@ const App: React.FC = () => {
       case 'whatsapp-pisos': return <WhatsAppPisosView />;
       case 'jobs': return <JobsView />;
       case 'whatsapp-bot': return <WhatsAppBotView />;
-      case 'car-mode': return <CarPlayView />;
+      case 'car-mode': return <CarPlayView session={session} onClose={() => setCurrentView('dashboard')} />;
       case 'news': return <NewsView />;
       case 'supermarkets': return <SupermarketsView />;
       case 'cron-jobs': return <CronJobsView />;

@@ -1,516 +1,471 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Mic, Square, Trash2, X, Save, Loader2, Sparkles, Brain, Play, Pause,
-  Search, Filter, Tag, Clock, FileText, ChevronDown, Plus, Volume2,
-  CheckCircle2, Lightbulb, AlertCircle, MessageCircle
+  Mic, Square, Trash2, X, Loader2, Sparkles, Play, Pause,
+  Search, Clock, FileText, ChevronDown, ChevronUp, Volume2,
+  Stethoscope, ClipboardList, Send, Copy, Check, RefreshCw, Activity
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { callAI } from '../services/aiProxy';
 
-const OR_KEY = 'sk-or-' + 'v1-d3af' + '7ab0484e031' + '67239dd3dde99da3d167' + '05380b01c8052c45acae0ac61ed6d';
-
-interface VoiceNote {
+// ─── Types ───
+interface Session {
   id: string;
   user_id?: string;
   title: string;
   transcription: string;
-  ai_summary?: string;
-  ai_category?: string;
-  ai_action_items?: string;
+  soap_note?: string;
+  summary?: string;
+  action_items?: string;
+  template?: string;
   duration_seconds: number;
-  status: 'new' | 'reviewed' | 'archived';
-  tags: string[];
+  status: 'recording' | 'transcribed' | 'processed' | 'reviewed';
   created_at: string;
 }
 
-// ─── AI Call ───
-async function callAI(prompt: string, system?: string): Promise<string> {
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OR_KEY}` },
-      body: JSON.stringify({
-        model: 'anthropic/claude-haiku-4.5', max_tokens: 1000,
-        messages: [
-          ...(system ? [{ role: 'system', content: system }] : []),
-          { role: 'user', content: prompt },
-        ],
-      }),
-    });
-    const data = await res.json();
-    return data?.choices?.[0]?.message?.content || '';
-  } catch { return ''; }
-}
+const TEMPLATES = [
+  { id: 'soap', label: 'SOAP', icon: '🩺', desc: 'Subjetivo, Objetivo, Análisis, Plan' },
+  { id: 'summary', label: 'Resumen', icon: '📋', desc: 'Resumen clínico estructurado' },
+  { id: 'referral', label: 'Derivación', icon: '📨', desc: 'Carta de derivación a especialista' },
+  { id: 'evolution', label: 'Evolución', icon: '📝', desc: 'Nota de evolución clínica' },
+  { id: 'freeform', label: 'Libre', icon: '✏️', desc: 'Transcripción sin formato' },
+];
 
-// ─── Storage ───
-const STORAGE_KEY = 'filehub_voice_notes';
+const STORAGE_KEY = 'filehub_voice_sessions';
 
-export default function VoiceNotesView({ session }: { session: any }) {
-  const [notes, setNotes] = useState<VoiceNote[]>([]);
+// ─── Component ───
+export default function VoiceNotesView({ session, carplayMode = false }: { session: any; carplayMode?: boolean }) {
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [isProcessingAI, setIsProcessingAI] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [expandedNote, setExpandedNote] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState<string | null>(null);
-  const [tempTitle, setTempTitle] = useState('');
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [processing, setProcessing] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState('soap');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [copied, setCopied] = useState('');
+  const [view, setView] = useState<'scribe' | 'history'>('scribe');
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<any>(null);
   const recognitionRef = useRef<any>(null);
+  const timerRef = useRef<any>(null);
+  const currentSessionRef = useRef<string | null>(null);
+  const fullTranscriptRef = useRef('');
 
-  // ─── Load from Supabase then localStorage ───
-  const loadNotes = useCallback(async () => {
+  // ─── Load ───
+  const load = useCallback(async () => {
     if (session?.user?.id) {
       try {
-        const { data, error } = await supabase
-          .from('voice_notes')
-          .select('*')
-          .eq('user_id', session?.user?.id)
-          .order('created_at', { ascending: false });
-        if (!error && data?.length) {
+        const { data } = await supabase.from('voice_notes').select('*')
+          .eq('user_id', session.user.id).order('created_at', { ascending: false });
+        if (data?.length) {
           const mapped = data.map((n: any) => ({
-            ...n,
-            tags: Array.isArray(n.tags) ? n.tags : (n.tags ? JSON.parse(n.tags) : []),
+            id: n.id, user_id: n.user_id, title: n.title, transcription: n.transcription,
+            soap_note: n.ai_summary, summary: n.ai_category, action_items: n.ai_action_items,
+            template: n.status === 'reviewed' ? 'soap' : 'freeform',
+            duration_seconds: n.duration_seconds || 0, status: n.status as any, created_at: n.created_at,
           }));
-          setNotes(mapped);
+          setSessions(mapped);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped));
           return;
         }
-      } catch (e) { console.warn('Voice notes Supabase load error:', e); }
+      } catch {}
     }
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setNotes(JSON.parse(saved));
-    } catch {}
+    try { const s = localStorage.getItem(STORAGE_KEY); if (s) setSessions(JSON.parse(s)); } catch {}
   }, [session]);
 
-  useEffect(() => { loadNotes(); }, [loadNotes]);
+  useEffect(() => { load(); }, [load]);
 
-  // ─── Save ───
-  const persist = (updated: VoiceNote[]) => {
-    setNotes(updated);
+  const persist = (updated: Session[]) => {
+    setSessions(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   };
 
-  const saveToSupabase = async (note: VoiceNote) => {
+  const saveToCloud = async (s: Session) => {
     if (!session?.user?.id) return;
     try {
       await supabase.from('voice_notes').upsert({
-        id: note.id,
-        user_id: session?.user?.id,
-        title: note.title,
-        transcription: note.transcription,
-        ai_summary: note.ai_summary || '',
-        ai_category: note.ai_category || '',
-        ai_action_items: note.ai_action_items || '',
-        duration_seconds: note.duration_seconds,
-        status: note.status,
-        tags: JSON.stringify(note.tags),
-        created_at: note.created_at,
-      });
-    } catch (e) { console.warn('Voice note save error:', e); }
-  };
-
-  // ─── Recording with Web Speech API ───
-  const startRecording = async () => {
-    try {
-      setLiveTranscript('');
-      setRecordingTime(0);
-
-      // Start speech recognition for live transcript
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'es-ES';
-        
-        let finalTranscript = '';
-        recognition.onresult = (event: any) => {
-          let interim = '';
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript + ' ';
-            } else {
-              interim += event.results[i][0].transcript;
-            }
-          }
-          setLiveTranscript(finalTranscript + interim);
-        };
-        recognition.onerror = (e: any) => console.warn('Speech recognition error:', e.error);
-        recognition.start();
-        recognitionRef.current = recognition;
-      }
-
-      // Start audio recording (for duration tracking)
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.start(1000);
-      setIsRecording(true);
-
-      timerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
-
-    } catch (err) {
-      alert('No se pudo acceder al micrófono. Verifica los permisos.');
-    }
-  };
-
-  const stopRecording = async () => {
-    setIsRecording(false);
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    // Stop speech recognition
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-
-    // Stop media recorder
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-    }
-
-    const transcript = liveTranscript.trim();
-    if (!transcript) {
-      alert('No se detectó audio. Intenta de nuevo.');
-      return;
-    }
-
-    setIsTranscribing(true);
-
-    // Create note with transcript
-    const note: VoiceNote = {
-      id: crypto.randomUUID(),
-      user_id: session?.user?.id,
-      title: transcript.substring(0, 60) + (transcript.length > 60 ? '...' : ''),
-      transcription: transcript,
-      duration_seconds: recordingTime,
-      status: 'new',
-      tags: [],
-      created_at: new Date().toISOString(),
-    };
-
-    // AI processing
-    try {
-      const aiResult = await callAI(
-        `Analiza esta nota de voz transcrita y responde en JSON:\n\n"${transcript}"\n\nResponde SOLO con JSON válido:\n{"summary":"resumen en 1-2 frases","category":"una de: idea|tarea|recordatorio|reflexión|médico|personal|trabajo","action_items":"acciones concretas separadas por ;","tags":["tag1","tag2"],"better_title":"título mejorado corto"}`,
-        'Eres un asistente que analiza transcripciones de notas de voz. Responde SOLO en JSON válido sin markdown.'
-      );
-      
-      try {
-        const clean = aiResult.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(clean);
-        note.ai_summary = parsed.summary || '';
-        note.ai_category = parsed.category || 'idea';
-        note.ai_action_items = parsed.action_items || '';
-        note.tags = parsed.tags || [];
-        if (parsed.better_title) note.title = parsed.better_title;
-      } catch { 
-        note.ai_summary = aiResult;
-        note.ai_category = 'idea';
-      }
+        id: s.id, user_id: session.user.id, title: s.title,
+        transcription: s.transcription, ai_summary: s.soap_note || s.summary,
+        ai_category: s.summary, ai_action_items: s.action_items,
+        duration_seconds: s.duration_seconds, status: s.status, created_at: s.created_at,
+      }, { onConflict: 'id' });
     } catch {}
+  };
 
-    const updated = [note, ...notes];
-    persist(updated);
-    await saveToSupabase(note);
-    
-    setIsTranscribing(false);
+  // ─── Recording ───
+  const startRecording = () => {
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    if (!SpeechRecognition) { alert('Tu navegador no soporta reconocimiento de voz. Usa Chrome o Safari.'); return; }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'es-ES';
+    recognition.maxAlternatives = 1;
+
+    fullTranscriptRef.current = '';
     setLiveTranscript('');
     setRecordingTime(0);
+
+    const sessionId = `vs_${Date.now()}`;
+    currentSessionRef.current = sessionId;
+
+    recognition.onresult = (event: any) => {
+      let interim = '', final = '';
+      for (let i = 0; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) final += t + ' ';
+        else interim += t;
+      }
+      if (final) fullTranscriptRef.current = final;
+      setLiveTranscript(fullTranscriptRef.current + interim);
+    };
+
+    recognition.onerror = (e: any) => { if (e.error !== 'no-speech') console.warn('Speech error:', e.error); };
+    recognition.onend = () => { if (isRecording) try { recognition.start(); } catch {} };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+
+    timerRef.current = setInterval(() => setRecordingTime(t => t + 1), 1000);
   };
 
-  // ─── Actions ───
-  const deleteNote = async (id: string) => {
-    if (!confirm('¿Eliminar esta nota de voz?')) return;
-    const updated = notes.filter(n => n.id !== id);
+  const stopRecording = () => {
+    if (recognitionRef.current) { recognitionRef.current.onend = null; recognitionRef.current.stop(); }
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsRecording(false);
+
+    const transcript = fullTranscriptRef.current.trim() || liveTranscript.trim();
+    if (!transcript) return;
+
+    const now = new Date();
+    const newSession: Session = {
+      id: currentSessionRef.current || `vs_${Date.now()}`,
+      title: `Consulta ${now.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} ${now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
+      transcription: transcript,
+      duration_seconds: recordingTime,
+      status: 'transcribed',
+      template: selectedTemplate,
+      created_at: now.toISOString(),
+    };
+
+    const updated = [newSession, ...sessions];
     persist(updated);
-    if (session?.user?.id) {
-      try { await supabase.from('voice_notes').delete().eq('id', id); } catch {}
-    }
+    saveToCloud(newSession);
+    setExpandedId(newSession.id);
+    setLiveTranscript('');
+    setRecordingTime(0);
+
+    // Auto-generate notes
+    generateNotes(newSession.id, transcript, selectedTemplate, updated);
   };
 
-  const reprocessAI = async (id: string) => {
-    const note = notes.find(n => n.id === id);
-    if (!note) return;
-    setIsProcessingAI(id);
+  // ─── AI Note Generation ───
+  const generateNotes = async (id: string, transcript: string, template: string, currentSessions?: Session[]) => {
+    setProcessing(id);
+    const systemPrompts: Record<string, string> = {
+      soap: `Eres un escriba médico experto. Genera una nota clínica SOAP completa en español a partir de la transcripción de consulta. Formato:
+## SUBJETIVO
+(Motivo de consulta, síntomas, antecedentes relevantes)
+## OBJETIVO
+(Exploración, signos vitales, hallazgos)
+## ANÁLISIS
+(Diagnóstico diferencial, valoración)
+## PLAN
+(Tratamiento, pruebas, seguimiento)
 
-    const aiResult = await callAI(
-      `Analiza esta nota de voz transcrita:\n\n"${note.transcription}"\n\nResponde SOLO con JSON:\n{"summary":"resumen 1-2 frases","category":"idea|tarea|recordatorio|reflexión|médico|personal|trabajo","action_items":"acciones separadas por ;","tags":["tag1","tag2"],"better_title":"título corto"}`,
-      'Responde SOLO en JSON válido sin markdown.'
-    );
+Si no hay datos suficientes para alguna sección, indica "Pendiente de exploración/datos". Sé conciso y clínico.`,
+      summary: `Genera un resumen clínico estructurado en español con: Motivo de consulta, Antecedentes relevantes, Hallazgos clave, Impresión diagnóstica, Plan. Conciso y profesional.`,
+      referral: `Genera una carta de derivación a especialista en español con: Datos del paciente (deducir de la transcripción), Motivo de derivación, Historia clínica relevante, Exploración, Juicio clínico, Solicitud concreta. Formato formal de carta médica.`,
+      evolution: `Genera una nota de evolución clínica en español con: Fecha, Motivo, Evolución desde última visita, Exploración actual, Plan actualizado. Conciso.`,
+      freeform: `Limpia y estructura la transcripción en español. Corrige errores de transcripción evidentes. Separa en párrafos lógicos. No inventes información.`,
+    };
 
     try {
-      const parsed = JSON.parse(aiResult.replace(/```json?\s*/g, '').replace(/```/g, '').trim());
-      const updated = notes.map(n => n.id === id ? {
-        ...n,
-        ai_summary: parsed.summary || '',
-        ai_category: parsed.category || 'idea',
-        ai_action_items: parsed.action_items || '',
-        tags: parsed.tags || n.tags,
-        title: parsed.better_title || n.title,
-      } : n);
+      const result = await callAI(
+        [{ role: 'user', content: `Transcripción de consulta:\n\n${transcript}` }],
+        { system: systemPrompts[template] || systemPrompts.soap, maxTokens: 1500 }
+      );
+
+      const all = currentSessions || sessions;
+      const updated = all.map(s => s.id === id ? { ...s, soap_note: result, status: 'processed' as const } : s);
       persist(updated);
-      const updatedNote = updated.find(n => n.id === id)!;
-      await saveToSupabase(updatedNote);
-    } catch {}
-
-    setIsProcessingAI(null);
+      const target = updated.find(s => s.id === id);
+      if (target) saveToCloud(target);
+    } catch (e: any) {
+      console.warn('AI generation failed:', e);
+    }
+    setProcessing(null);
   };
 
-  const updateStatus = async (id: string, status: VoiceNote['status']) => {
-    const updated = notes.map(n => n.id === id ? { ...n, status } : n);
+  const regenerate = (s: Session) => generateNotes(s.id, s.transcription, s.template || 'soap');
+
+  const deleteSession = (id: string) => {
+    const updated = sessions.filter(s => s.id !== id);
     persist(updated);
-    const note = updated.find(n => n.id === id);
-    if (note) await saveToSupabase(note);
+    if (session?.user?.id) supabase.from('voice_notes').delete().eq('id', id).then(() => {});
   };
 
-  const saveTitle = async (id: string) => {
-    const updated = notes.map(n => n.id === id ? { ...n, title: tempTitle } : n);
-    persist(updated);
-    const note = updated.find(n => n.id === id);
-    if (note) await saveToSupabase(note);
-    setEditingTitle(null);
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(id);
+    setTimeout(() => setCopied(''), 2000);
   };
 
-  // ─── Filters ───
-  const filtered = notes
-    .filter(n => filterStatus === 'all' || n.status === filterStatus)
-    .filter(n => !search || n.title.toLowerCase().includes(search.toLowerCase()) || n.transcription.toLowerCase().includes(search.toLowerCase()));
+  const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
-  const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  const filtered = sessions.filter(s =>
+    !search || s.title.toLowerCase().includes(search.toLowerCase()) || s.transcription.toLowerCase().includes(search.toLowerCase())
+  );
 
-  const catIcons: Record<string, string> = {
-    idea: '💡', tarea: '✅', recordatorio: '🔔', 'reflexión': '🤔',
-    'médico': '🏥', personal: '👤', trabajo: '💼',
-  };
-  const catColors: Record<string, string> = {
-    idea: 'bg-amber-500/15 text-amber-400', tarea: 'bg-blue-500/15 text-blue-400',
-    recordatorio: 'bg-red-500/15 text-red-400', 'reflexión': 'bg-purple-500/15 text-purple-400',
-    'médico': 'bg-emerald-500/15 text-emerald-400', personal: 'bg-pink-500/15 text-pink-400',
-    trabajo: 'bg-indigo-500/15 text-indigo-400',
-  };
-
-  // ═══════════════════════════════════════
-  return (
-    <div className="h-full overflow-y-auto bg-[#0a0e1a] text-white">
-      {/* Header */}
-      <div className="sticky top-0 z-20 bg-[#0a0e1a]/95 backdrop-blur-xl border-b border-white/5 px-4 md:px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-rose-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-rose-500/20">
-              <Mic size={20} />
-            </div>
-            <div>
-              <h1 className="text-lg font-black tracking-tight">Notas de Voz</h1>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Graba · Transcribe · Organiza con IA</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-1 bg-white/5 rounded-lg text-[10px] font-bold text-slate-400">
-              🎤 {notes.length} notas
-            </span>
-          </div>
+  // ════════════════════════ CARPLAY MODE ════════════════════════
+  if (carplayMode) {
+    return (
+      <div className="fixed inset-0 bg-slate-950 z-[100] flex flex-col items-center justify-center select-none">
+        <div className="text-center mb-12">
+          <Stethoscope size={48} className="text-emerald-400 mx-auto mb-4" />
+          <h1 className="text-3xl font-black text-white tracking-tight">Scribe Médico</h1>
+          <p className="text-slate-500 text-lg mt-2">
+            {isRecording ? `Grabando — ${fmt(recordingTime)}` : `${sessions.length} sesiones`}
+          </p>
         </div>
 
-        {/* Search + Filter */}
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar notas..."
-              className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-rose-500" />
-          </div>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs">
-            <option value="all">Todas</option>
-            <option value="new">Nuevas</option>
-            <option value="reviewed">Revisadas</option>
-            <option value="archived">Archivadas</option>
-          </select>
-        </div>
-      </div>
+        {/* Big Record Button */}
+        <button
+          onClick={isRecording ? stopRecording : startRecording}
+          className={`w-40 h-40 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+            isRecording
+              ? 'bg-red-500 shadow-[0_0_60px_rgba(239,68,68,0.5)] animate-pulse'
+              : 'bg-emerald-500 shadow-[0_0_40px_rgba(16,185,129,0.3)]'
+          }`}
+        >
+          {isRecording ? <Square size={48} className="text-white" /> : <Mic size={56} className="text-white" />}
+        </button>
 
-      {/* ═══ RECORDING BUTTON ═══ */}
-      <div className="px-4 md:px-6 py-6">
-        <div className={`relative rounded-2xl border p-6 text-center transition-all ${isRecording 
-          ? 'bg-red-500/10 border-red-500/30 animate-pulse' 
-          : isTranscribing ? 'bg-violet-500/10 border-violet-500/30' : 'bg-white/[0.03] border-white/10 hover:border-rose-500/30'}`}>
-          
-          {isRecording && (
-            <div className="mb-4">
-              <div className="text-4xl font-black text-red-400 tabular-nums">{formatTime(recordingTime)}</div>
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
-                <span className="text-xs font-bold text-red-400 uppercase tracking-widest">Grabando...</span>
-              </div>
-              {liveTranscript && (
-                <div className="mt-4 p-3 bg-black/30 rounded-xl max-h-32 overflow-y-auto text-left">
-                  <p className="text-xs text-slate-300 leading-relaxed">{liveTranscript}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {isTranscribing && (
-            <div className="mb-4">
-              <Loader2 size={32} className="mx-auto text-violet-400 animate-spin mb-2" />
-              <p className="text-xs font-bold text-violet-400">Procesando con IA...</p>
-            </div>
-          )}
-
-          <button
-            onClick={isRecording ? stopRecording : startRecording}
-            disabled={isTranscribing}
-            className={`w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center mx-auto transition-all ${isRecording
-              ? 'bg-red-500 hover:bg-red-400 shadow-lg shadow-red-500/30'
-              : isTranscribing ? 'bg-violet-500/50 cursor-not-allowed' : 'bg-gradient-to-br from-rose-500 to-orange-600 hover:from-rose-400 hover:to-orange-500 shadow-lg shadow-rose-500/20'
-            }`}
-          >
-            {isRecording ? <Square size={24} className="text-white" /> : isTranscribing ? <Loader2 size={24} className="text-white animate-spin" /> : <Mic size={28} className="text-white" />}
-          </button>
-
-          {!isRecording && !isTranscribing && (
-            <p className="text-xs text-slate-500 mt-3">Pulsa para grabar una nota de voz</p>
-          )}
-        </div>
-      </div>
-
-      {/* ═══ NOTES LIST ═══ */}
-      <div className="px-4 md:px-6 pb-20 space-y-3">
-        {filtered.length === 0 && !isRecording && (
-          <div className="text-center py-16">
-            <Volume2 size={40} className="mx-auto text-slate-700 mb-3" />
-            <p className="text-sm font-bold text-slate-500">No hay notas de voz</p>
-            <p className="text-xs text-slate-600 mt-1">Pulsa el botón rojo para grabar tu primera nota</p>
+        {isRecording && liveTranscript && (
+          <div className="mt-10 mx-8 max-h-40 overflow-y-auto bg-slate-900/80 rounded-2xl p-6 border border-slate-800">
+            <p className="text-slate-300 text-lg leading-relaxed">{liveTranscript.slice(-300)}</p>
           </div>
         )}
 
-        {filtered.map(note => {
-          const isExpanded = expandedNote === note.id;
-          return (
-            <div key={note.id} className="bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 rounded-2xl transition-all group">
-              {/* Header */}
-              <div className="p-4 cursor-pointer" onClick={() => setExpandedNote(isExpanded ? null : note.id)}>
-                <div className="flex items-start gap-3">
-                  <div className="shrink-0 mt-0.5">
-                    <span className="text-lg">{catIcons[note.ai_category || 'idea'] || '🎤'}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {editingTitle === note.id ? (
-                        <div className="flex gap-1 flex-1" onClick={e => e.stopPropagation()}>
-                          <input value={tempTitle} onChange={e => setTempTitle(e.target.value)} autoFocus
-                            className="flex-1 px-2 py-1 bg-white/10 border border-white/20 rounded-lg text-sm"
-                            onKeyDown={e => e.key === 'Enter' && saveTitle(note.id)} />
-                          <button onClick={() => saveTitle(note.id)} className="p-1 text-emerald-400"><CheckCircle2 size={16} /></button>
-                          <button onClick={() => setEditingTitle(null)} className="p-1 text-slate-500"><X size={16} /></button>
-                        </div>
-                      ) : (
-                        <h3 className="text-sm font-bold text-white truncate cursor-text"
-                          onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(note.id); setTempTitle(note.title); }}>
-                          {note.title}
-                        </h3>
-                      )}
-                      {note.ai_category && (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${catColors[note.ai_category] || 'bg-slate-500/15 text-slate-400'}`}>
-                          {note.ai_category}
-                        </span>
-                      )}
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${note.status === 'new' ? 'bg-amber-500/15 text-amber-400' : note.status === 'reviewed' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-500/15 text-slate-400'}`}>
-                        {note.status === 'new' ? '🆕' : note.status === 'reviewed' ? '✅' : '📦'} {note.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-[10px] text-slate-600 flex items-center gap-1"><Clock size={10} /> {formatTime(note.duration_seconds)}</span>
-                      <span className="text-[10px] text-slate-600">{new Date(note.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                      {note.tags?.length > 0 && note.tags.slice(0, 3).map(t => (
-                        <span key={t} className="text-[10px] px-1.5 py-0.5 bg-white/5 rounded-full text-slate-500">{t}</span>
-                      ))}
-                    </div>
-                    {note.ai_summary && !isExpanded && (
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-1">{note.ai_summary}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <ChevronDown size={16} className={`text-slate-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                  </div>
-                </div>
-              </div>
+        {!isRecording && sessions[0]?.soap_note && (
+          <div className="mt-8 mx-8 text-center">
+            <p className="text-emerald-400 font-bold text-lg">✅ Última nota generada</p>
+            <p className="text-slate-500 text-sm mt-1">{sessions[0].title}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
-              {/* Expanded content */}
-              {isExpanded && (
-                <div className="px-4 pb-4 border-t border-white/5 pt-3 space-y-3 animate-in slide-in-from-top-2 duration-200">
-                  {/* Transcription */}
-                  <div className="p-3 bg-white/[0.03] rounded-xl">
-                    <p className="text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-widest">📝 Transcripción</p>
-                    <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">{note.transcription}</p>
-                  </div>
+  // ════════════════════════ FULL UI ════════════════════════
+  return (
+    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center">
+            <Stethoscope size={24} className="text-emerald-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-tight">Scribe Médico</h1>
+            <p className="text-xs text-slate-500">Transcripción clínica con IA • Estilo Heidi</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setView('scribe')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${view === 'scribe' ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}>
+            <Mic size={14} className="inline mr-1" /> Grabar
+          </button>
+          <button onClick={() => setView('history')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${view === 'history' ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}>
+            <ClipboardList size={14} className="inline mr-1" /> Sesiones ({sessions.length})
+          </button>
+        </div>
+      </div>
 
-                  {/* AI Summary */}
-                  {note.ai_summary && (
-                    <div className="p-3 bg-violet-500/5 border border-violet-500/10 rounded-xl">
-                      <p className="text-[10px] font-bold text-violet-400 mb-1">✨ Resumen IA</p>
-                      <p className="text-xs text-slate-300 leading-relaxed">{note.ai_summary}</p>
-                    </div>
-                  )}
+      {view === 'scribe' && (
+        <>
+          {/* Template Selector */}
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {TEMPLATES.map(t => (
+              <button key={t.id} onClick={() => setSelectedTemplate(t.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                  selectedTemplate === t.id
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                    : 'bg-white/3 border-white/5 text-slate-500 hover:border-white/15'
+                }`}>
+                <span>{t.icon}</span> {t.label}
+              </button>
+            ))}
+          </div>
 
-                  {/* AI Action Items */}
-                  {note.ai_action_items && (
-                    <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl">
-                      <p className="text-[10px] font-bold text-blue-400 mb-1">🎯 Acciones</p>
-                      <div className="space-y-1">
-                        {note.ai_action_items.split(';').filter(Boolean).map((item, i) => (
-                          <p key={i} className="text-xs text-slate-300 flex items-start gap-2">
-                            <span className="text-blue-400 mt-0.5">•</span> {item.trim()}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex flex-wrap gap-2">
-                    <button onClick={() => reprocessAI(note.id)} disabled={isProcessingAI === note.id}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-violet-500/10 hover:bg-violet-500/20 rounded-lg text-[10px] font-bold text-violet-400 transition-all disabled:opacity-50">
-                      {isProcessingAI === note.id ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Reprocesar IA
-                    </button>
-                    {note.status === 'new' && (
-                      <button onClick={() => updateStatus(note.id, 'reviewed')}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400">
-                        <CheckCircle2 size={10} /> Marcar revisada
-                      </button>
-                    )}
-                    {note.status !== 'archived' && (
-                      <button onClick={() => updateStatus(note.id, 'archived')}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-slate-500/10 hover:bg-slate-500/20 rounded-lg text-[10px] font-bold text-slate-400">
-                        📦 Archivar
-                      </button>
-                    )}
-                    <button onClick={() => deleteNote(note.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-[10px] font-bold text-red-400 ml-auto">
-                      <Trash2 size={10} /> Eliminar
-                    </button>
-                  </div>
+          {/* Recording Zone */}
+          <div className={`relative rounded-3xl border-2 transition-all overflow-hidden ${
+            isRecording
+              ? 'border-emerald-500/50 bg-emerald-500/5 shadow-[0_0_40px_rgba(16,185,129,0.1)]'
+              : 'border-white/5 bg-white/[0.02]'
+          }`}>
+            <div className="flex flex-col items-center py-12 md:py-16">
+              {/* Status */}
+              {isRecording && (
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-red-400 text-sm font-bold uppercase tracking-widest">Grabando consulta</span>
+                  <span className="font-mono text-2xl font-black text-white">{fmt(recordingTime)}</span>
                 </div>
               )}
+
+              {!isRecording && !liveTranscript && (
+                <div className="mb-6 text-center">
+                  <p className="text-slate-400 text-sm">Plantilla: <strong className="text-emerald-400">{TEMPLATES.find(t => t.id === selectedTemplate)?.label}</strong></p>
+                  <p className="text-slate-600 text-xs mt-1">{TEMPLATES.find(t => t.id === selectedTemplate)?.desc}</p>
+                </div>
+              )}
+
+              {/* Big Button */}
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                className={`w-28 h-28 md:w-32 md:h-32 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                  isRecording
+                    ? 'bg-red-500 hover:bg-red-600 shadow-[0_0_50px_rgba(239,68,68,0.4)]'
+                    : 'bg-emerald-500 hover:bg-emerald-600 shadow-[0_0_30px_rgba(16,185,129,0.25)]'
+                }`}
+              >
+                {isRecording ? (
+                  <Square size={36} className="text-white" />
+                ) : (
+                  <Mic size={40} className="text-white" />
+                )}
+              </button>
+
+              <p className="text-slate-500 text-xs mt-4 font-bold">
+                {isRecording ? 'Pulsa para detener y generar nota' : 'Pulsa para iniciar consulta'}
+              </p>
             </div>
-          );
-        })}
-      </div>
+
+            {/* Live Transcript */}
+            {isRecording && liveTranscript && (
+              <div className="mx-6 mb-6 bg-slate-900/60 rounded-2xl p-4 max-h-48 overflow-y-auto border border-white/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <Activity size={12} className="text-emerald-400 animate-pulse" />
+                  <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Transcripción en vivo</span>
+                </div>
+                <p className="text-slate-300 text-sm leading-relaxed">{liveTranscript}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Last Session Quick View */}
+          {sessions[0] && !isRecording && (
+            <div className="bg-white/[0.02] rounded-2xl border border-white/5 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <FileText size={14} className="text-emerald-400" />
+                  <span className="text-xs font-bold text-slate-400">{sessions[0].title}</span>
+                  {processing === sessions[0].id && <Loader2 size={12} className="animate-spin text-emerald-400" />}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => regenerate(sessions[0])} className="text-[10px] px-2 py-1 rounded-lg bg-white/5 text-slate-500 hover:text-emerald-400">
+                    <RefreshCw size={10} className="inline mr-1" />Regenerar
+                  </button>
+                  <button onClick={() => copyToClipboard(sessions[0].soap_note || sessions[0].transcription, sessions[0].id)}
+                    className="text-[10px] px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400">
+                    {copied === sessions[0].id ? <><Check size={10} className="inline mr-1" />Copiado</> : <><Copy size={10} className="inline mr-1" />Copiar nota</>}
+                  </button>
+                </div>
+              </div>
+              <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto custom-scrollbar">
+                {processing === sessions[0].id ? (
+                  <div className="text-center py-8 text-emerald-400">
+                    <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+                    <p className="text-xs font-bold">Generando nota clínica con IA...</p>
+                  </div>
+                ) : (
+                  sessions[0].soap_note || sessions[0].transcription
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {view === 'history' && (
+        <>
+          {/* Search */}
+          <div className="relative">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/5 rounded-xl text-sm text-slate-300 outline-none focus:border-emerald-500/30"
+              placeholder="Buscar sesiones..." />
+          </div>
+
+          {/* Sessions List */}
+          <div className="space-y-3">
+            {filtered.length === 0 && <p className="text-slate-600 text-center py-12">Sin sesiones grabadas</p>}
+            {filtered.map(s => (
+              <div key={s.id} className="bg-white/[0.02] rounded-2xl border border-white/5 overflow-hidden transition-all hover:border-white/10">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 cursor-pointer" onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.soap_note ? 'bg-emerald-500/10' : 'bg-slate-800'}`}>
+                      {s.soap_note ? <FileText size={18} className="text-emerald-400" /> : <Mic size={18} className="text-slate-500" />}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">{s.title}</h3>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-[10px] text-slate-600"><Clock size={10} className="inline mr-1" />{fmt(s.duration_seconds)}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          s.soap_note ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                        }`}>{s.soap_note ? '✅ Procesada' : '⏳ Pendiente'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={e => { e.stopPropagation(); copyToClipboard(s.soap_note || s.transcription, s.id); }}
+                      className="p-2 rounded-lg hover:bg-white/5 text-slate-500 hover:text-emerald-400">
+                      {copied === s.id ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); deleteSession(s.id); }}
+                      className="p-2 rounded-lg hover:bg-red-500/10 text-slate-600 hover:text-red-400">
+                      <Trash2 size={14} />
+                    </button>
+                    {expandedId === s.id ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+                  </div>
+                </div>
+
+                {/* Expanded Content */}
+                {expandedId === s.id && (
+                  <div className="px-4 pb-4 space-y-3">
+                    {s.soap_note && (
+                      <div className="bg-emerald-500/5 rounded-xl p-4 border border-emerald-500/10">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">🩺 Nota Clínica</span>
+                          <button onClick={() => regenerate(s)} className="text-[10px] text-slate-500 hover:text-emerald-400 flex items-center gap-1">
+                            <RefreshCw size={10} /> Regenerar
+                          </button>
+                        </div>
+                        <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{s.soap_note}</div>
+                      </div>
+                    )}
+                    {!s.soap_note && (
+                      <button onClick={() => generateNotes(s.id, s.transcription, s.template || 'soap')}
+                        disabled={processing === s.id}
+                        className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-xs font-bold flex items-center justify-center gap-2">
+                        {processing === s.id ? <><Loader2 size={14} className="animate-spin" /> Generando...</> : <><Sparkles size={14} /> Generar nota clínica</>}
+                      </button>
+                    )}
+                    <details className="group">
+                      <summary className="text-[10px] text-slate-600 cursor-pointer hover:text-slate-400 font-bold uppercase tracking-widest">
+                        📝 Transcripción original
+                      </summary>
+                      <p className="mt-2 text-xs text-slate-500 leading-relaxed whitespace-pre-wrap">{s.transcription}</p>
+                    </details>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
