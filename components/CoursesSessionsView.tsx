@@ -153,6 +153,20 @@ export default function CoursesSessionsView() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadFile2, setUploadFile2] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [reuploadingId, setReuploadingId] = useState<string | null>(null);
+  const reuploadRef = useRef<HTMLInputElement>(null);
+  const reuploadTarget = useRef<{ sessionId: string; field: 'file1' | 'file2' }>({ sessionId: '', field: 'file1' });
+
+  const handleReupload = async (file: File, sessionId: string, field: 'file1' | 'file2') => {
+    setReuploadingId(sessionId);
+    const url = await uploadToStorage(file);
+    setSessions(prev => prev.map(s => {
+      if (s.id !== sessionId) return s;
+      if (field === 'file1') return { ...s, fileUrl: url, fileName: file.name };
+      return { ...s, file2Url: url, file2Name: file.name };
+    }));
+    setReuploadingId(null);
+  };
 
   // AI Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -594,22 +608,22 @@ export default function CoursesSessionsView() {
                           {s.fileType === 'pdf' ? <FileText size={10} className="text-red-400" /> : <Presentation size={10} className="text-orange-400" />}
                           {s.fileName}
                         </span>
-                        {(s.fileUrl || s.fileContent) && (
+                        {s.fileUrl ? (
                           <a
-                            href={s.fileUrl || '#'}
+                            href={s.fileUrl}
                             download={s.fileName}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={(e) => {
-                              if (!s.fileUrl) {
-                                e.preventDefault();
-                                alert('Archivo solo disponible como texto extraído. Vuelve a subirlo para descargarlo.');
-                              }
-                            }}
                             className="flex items-center gap-1 px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 transition-all"
                           >
                             <Download size={10} /> Descargar
                           </a>
+                        ) : (
+                          <label className="flex items-center gap-1 px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg text-[10px] font-bold text-amber-400 transition-all cursor-pointer">
+                            {reuploadingId === s.id ? <><Loader2 size={10} className="animate-spin" /> Subiendo...</> : <><Upload size={10} /> Re-subir para descargar</>}
+                            <input type="file" accept=".pdf,.pptx" className="hidden"
+                              onChange={e => { if (e.target.files?.[0]) handleReupload(e.target.files[0], s.id, 'file1'); }} />
+                          </label>
                         )}
                       </div>
                     )}
@@ -620,17 +634,22 @@ export default function CoursesSessionsView() {
                           📝 {s.file2Type === 'pdf' ? <FileText size={10} className="text-red-400" /> : <Presentation size={10} className="text-orange-400" />}
                           {s.file2Name}
                         </span>
-                        {(s.file2Url || s.file2Content) && (
+                        {s.file2Url ? (
                           <a
-                            href={s.file2Url || '#'}
+                            href={s.file2Url}
                             download={s.file2Name}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={(e) => { if (!s.file2Url) { e.preventDefault(); alert('Re-sube el archivo para descargarlo.'); } }}
                             className="flex items-center gap-1 px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 transition-all"
                           >
                             <Download size={10} /> Descargar
                           </a>
+                        ) : (
+                          <label className="flex items-center gap-1 px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg text-[10px] font-bold text-amber-400 transition-all cursor-pointer">
+                            {reuploadingId === s.id ? <><Loader2 size={10} className="animate-spin" /> Subiendo...</> : <><Upload size={10} /> Re-subir</>}
+                            <input type="file" accept=".pdf,.pptx" className="hidden"
+                              onChange={e => { if (e.target.files?.[0]) handleReupload(e.target.files[0], s.id, 'file2'); }} />
+                          </label>
                         )}
                       </div>
                     )}
